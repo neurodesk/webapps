@@ -28,7 +28,7 @@ export const modules = [
     // The date arithmetic only: the rest of app-versions.mjs drives Changesets on a workspace.
     id: 'date-versions',
     file: 'scripts/lib/app-versions.mjs',
-    mutate: 'scripts/lib/app-versions.mjs:58-87',
+    mutate: 'scripts/lib/app-versions.mjs:79-108',
     files: [
       'scripts/lib/apps-registry.mjs',
       'scripts/lib/embedded-version-sites.mjs',
@@ -83,7 +83,7 @@ export const modules = [
     // sums makes every run of the suite take seconds instead of 0.2 s.
     id: 'lcmodel-io',
     file: 'packages/lcmodel/src/lcmodel-io.js',
-    mutate: 'packages/lcmodel/src/lcmodel-io.js:1-321',
+    mutate: 'packages/lcmodel/src/lcmodel-io.js:1-337',
     files: [
       'packages/lcmodel/package.json',
       'packages/lcmodel/src/inputs.js',

@@ -7,7 +7,7 @@ import { dirname, join, relative as relativePath, resolve as resolvePath } from 
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
-import { AUTOMATION_CATALOG_READERS, changedPathsFromGit, CI_JOB_SCOPES, CLASSIFIED_ENTRY_FIELDS, createAppPlan, EASTER_EGG_INPUTS, EASTER_EGG_JOB, EASTER_EGG_OUTPUT, EASTER_EGG_PACKAGES, easterEggCannotRead, HANDOFF_CATALOG_READERS, WORKSPACE_MANIFESTS, INDEPENDENT_ROOT_DEV_DEPENDENCIES, packageTestsCanSkipOnDraft, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_DATA_KEYS, SITE_KEY_READERS, SITE_ONLY_FILES, SITE_THEME_CONSUMERS, SITE_THEME_FILES } from '../scripts/lib/app-plan.mjs';
+import { AUTOMATION_CATALOG_READERS, changedManifests, changedPathsFromGit, CI_JOB_SCOPES, CLASSIFIED_ENTRY_FIELDS, createAppPlan, e2eTestDataImpact, EASTER_EGG_INPUTS, EASTER_EGG_JOB, EASTER_EGG_OUTPUT, EASTER_EGG_PACKAGES, easterEggCannotRead, HANDOFF_CATALOG_READERS, WORKSPACE_MANIFESTS, INDEPENDENT_ROOT_DEV_DEPENDENCIES, packageTestsCanSkipOnDraft, RUNTIME_MANIFEST_READERS, UnreadableDiffError, SITE_DATA_KEYS, SITE_KEY_READERS, SITE_ONLY_FILES, SITE_THEME_CONSUMERS, SITE_THEME_FILES, workspaceConfigImpact } from '../scripts/lib/app-plan.mjs';
 import { siteCheckApps, smokeApps } from '../scripts/lib/smoke-apps.mjs';
 import { loadAppInformation } from '../scripts/lib/app-information.mjs';
 import { hostedThemeOptions } from '../scripts/lib/catalog-sites.mjs';
@@ -16,7 +16,7 @@ import { assertParity, parityPeers, segmentationsToRun } from '../test-utils/sha
 import { APP_JOBS, carriedApps, NIGHTLY_JOBS, RERUN_JOBS, SITE_JOBS, testedBase } from '../scripts/lib/tested-base.mjs';
 import { lockfileImpact } from '../scripts/lib/lockfile-impact.mjs';
 import { loadAppsRegistry, parseAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
-import { CATALOG, CATALOG_JOBS, loadConservativeWorkspaceGraph, reachableFrom, siteJobNames, WorkspaceGraphConfigurationError } from '../scripts/lib/workspace-graph.mjs';
+import { CATALOG, CATALOG_JOBS, loadConservativeWorkspaceGraph, reachableFrom, SITE, siteJobNames, WorkspaceGraphConfigurationError } from '../scripts/lib/workspace-graph.mjs';
 
 const graph = loadConservativeWorkspaceGraph(repoRoot);
 
@@ -405,8 +405,18 @@ test('ESLint stays out of every app build, unit test and browser test', async ()
     if (path.startsWith('test/') && !catalog.has(path)) continue;
     assert.doesNotMatch(await readFile(join(repoRoot, path), 'utf8'), imports, `${path} loads ESLint; revisit INDEPENDENT_ROOT_DEV_DEPENDENCIES`);
   }
-  // The per-app jobs run each app's build, test:e2e and release test script.
-  for (const path of loaders) assert.ok(!catalog.has(path), `ci.yml's per-app jobs run ${path}`);
+  // The per-app and site jobs never load ESLint, its runner, or scripts/quality/.
+  const siteNodes = reachableFrom(workspace, SITE);
+  for (const path of loaders) {
+    assert.ok(!catalog.has(path), `ci.yml's per-app jobs run ${path}`);
+    assert.ok(!siteNodes.has(path), `ci.yml's site jobs run ${path}`);
+  }
+  assert.ok(![...catalog].some((node) => node.startsWith('scripts/quality/')), "ci.yml's per-app jobs reach scripts/quality/");
+  assert.ok(![...siteNodes].some((node) => node.startsWith('scripts/quality/')), "ci.yml's site jobs reach scripts/quality/");
+  for (const path of sources) {
+    if (!/^(?:apps|packages|exes)\//.test(path) && !catalog.has(path) && !siteNodes.has(path)) continue;
+    assert.doesNotMatch(await readFile(join(repoRoot, path), 'utf8'), /@neurodesk\/code-quality/, `${path} imports @neurodesk/code-quality; revisit scripts/quality CI ownership`);
+  }
   const ci = parse(await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8'));
   for (const name of [...CATALOG_JOBS, ...siteJobNames(ci)]) {
     for (const step of ci.jobs[name].steps) assert.doesNotMatch(step.run ?? '', /\blint\b|eslint/, `${name} runs lint`);
@@ -416,7 +426,7 @@ test('ESLint stays out of every app build, unit test and browser test', async ()
   assert.ok(scriptsRun(packages, 'apps/syncro', ['build']).some(([dir, name]) => dir === 'packages/greedy' && name === 'build:wasm'));
   for (const app of await loadAppsRegistry().then(registry => registry.apps)) {
     for (const [dir, name, command] of scriptsRun(packages, `apps/${app.id}`, ['build', 'test:e2e', app.ci.release_test ?? 'test'])) {
-      assert.doesNotMatch(command, /\beslint\b|scripts\/lint\.mjs|eslint\.config/, `${app.id}'s CI scripts reach ${dir} ${name}, which runs ESLint or its runner`);
+      assert.doesNotMatch(command, /\beslint\b|scripts\/lint\.mjs|scripts\/quality\/|eslint\.config/, `${app.id}'s CI scripts reach ${dir} ${name}, which runs ESLint or its runner`);
     }
   }
 });
@@ -2459,8 +2469,8 @@ test('removing lint reason edges preserves the diffusion and Node driver consume
     ['packages/ants-denoise/src/index.js', ['ants-denoise', ...diffusion]],
     ['packages/node-drivers/src/niimath.js', [
       ...diffusion,
-      'brain-extraction', 'brain2print', 'browserqc', 'dcm2niix', 'deface',
-      'dicomview', 'edgereg', 'lcmodel', 'mri2vid', 'niimath', 'syncro',
+      'brain-extraction', 'brain2print', 'brainchomp', 'brainchop', 'browserqc', 'dcm2niix', 'deface',
+      'dicomview', 'edgereg', 'lcmodel', 'mri2vid', 'niimath', 'syncro', 'tumour-report',
     ]],
   ];
   for (const [path, consumers] of cases) {
@@ -2695,4 +2705,360 @@ test('an app runs its @heavy browser tests only when the change edits it, a fail
   assert.deepEqual(heavy(onlyBookkeeping), { synthseg: true });
   // The tag is measured in the CPU job; the macOS GPU job runs every test.
   assert.ok(createAppPlan(registry, ['apps/sdc/src/main.js'], workspace).gpuApps.include.every((entry) => !('heavy_tests' in entry)));
+});
+
+test('pnpm-workspace.yaml narrows only for valid exact-version minimumReleaseAgeExclude relaxations and unlocked removals', async () => {
+  const registry = await loadAppsRegistry();
+  const workspace = await graph;
+  const before = await readFile(new URL('../pnpm-workspace.yaml', import.meta.url), 'utf8');
+  const parsed = parse(before);
+  const existing = parsed.minimumReleaseAgeExclude ?? [];
+  const withExclusion = before.includes('minimumReleaseAgeExclude:\n')
+    ? before.replace('minimumReleaseAgeExclude:\n', "minimumReleaseAgeExclude:\n  - '@example/fresh@1.2.3'\n")
+    : `${before}minimumReleaseAgeExclude:\n  - '@example/fresh@1.2.3'\n`;
+  assert.notEqual(withExclusion, before);
+  const narrowed = createAppPlan(registry, ['pnpm-workspace.yaml'], workspace, new Map([['pnpm-workspace.yaml', { before, after: withExclusion }]]));
+  assert.deepEqual(narrowed.selected, []);
+  assert.equal(narrowed.site, false);
+  assert.equal(narrowed.reasons.fallback, null);
+
+  // Removing an exclusion whose package@version is still resolved in pnpm-lock.yaml
+  // (or without a head lockfile) falls back conservatively.
+  const removedEntry = existing[0] ?? '@example/old@1.0.0';
+  const baseWithEntry = stringify({ ...parsed, minimumReleaseAgeExclude: existing.length ? existing : [removedEntry] });
+  const withoutEntry = stringify({ ...parsed, minimumReleaseAgeExclude: existing.slice(1) });
+  const at = removedEntry.indexOf('@', 1);
+  const removedSpec = `${removedEntry.slice(0, at)}@${removedEntry.slice(at + 1).split('||')[0].trim()}`;
+  assert.match(workspaceConfigImpact({ before: baseWithEntry, after: withoutEntry }).shared, /without a head lockfile/);
+  const lockWithEntry = stringify({ lockfileVersion: '9.0', packages: { [removedSpec]: {} } });
+  assert.match(workspaceConfigImpact({ before: baseWithEntry, after: withoutEntry, lockAfter: lockWithEntry }).shared, /still resolved by pnpm-lock\.yaml/);
+  const lockWithoutEntry = stringify({ lockfileVersion: '9.0', packages: { 'other@1.0.0': {} } });
+  assert.deepEqual(workspaceConfigImpact({ before: baseWithEntry, after: withoutEntry, lockAfter: lockWithoutEntry }), { scoped: true });
+
+  // Invalid specs, duplicates, other settings, YAML merge/prototype keys, and anchors/aliases fall back.
+  for (const [label, edit] of [
+    ['packages', (doc) => ({ ...doc, packages: [...doc.packages, 'extra/*'] })],
+    ['allowBuilds', (doc) => ({ ...doc, allowBuilds: { ...doc.allowBuilds, esbuild: false } })],
+    ['overrides', (doc) => ({ ...doc, overrides: { ...doc.overrides, pako: '2.1.1' } })],
+    ['unknown key', (doc) => ({ ...doc, hoist: false })],
+    ['non-string exclusion', (doc) => ({ ...doc, minimumReleaseAgeExclude: [123] })],
+    ['non-exact latest tag', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...(doc.minimumReleaseAgeExclude ?? []), 'foo@latest'] })],
+    ['leading-zero semver', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...(doc.minimumReleaseAgeExclude ?? []), 'foo@01.0.0'] })],
+    ['leading-zero prerelease', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...(doc.minimumReleaseAgeExclude ?? []), 'foo@1.0.0-01'] })],
+    ['build metadata semver', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...(doc.minimumReleaseAgeExclude ?? []), 'foo@1.0.0+build'] })],
+    ['semver range', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...(doc.minimumReleaseAgeExclude ?? []), 'foo@^1.0.0'] })],
+    ['duplicate package name', (doc) => ({ ...doc, minimumReleaseAgeExclude: [...(doc.minimumReleaseAgeExclude ?? []), 'foo@1.0.0', 'foo@2.0.0'] })],
+  ]) {
+    const after = stringify(edit(parsed));
+    const fallback = createAppPlan(registry, ['pnpm-workspace.yaml'], workspace, new Map([['pnpm-workspace.yaml', { before: baseWithEntry, after }]]));
+    assert.equal(fallback.allApps, true, label);
+    assert.match(fallback.reasons.fallback, /^pnpm-workspace\.yaml:/, label);
+  }
+  const quotedMerge = 'packages:\n  - apps/*\n"<<":\n  recursiveInstall: false\n';
+  const unquotedMerge = 'packages:\n  - apps/*\n<<:\n  recursiveInstall: false\n';
+  assert.match(workspaceConfigImpact({ before: quotedMerge, after: unquotedMerge }).shared, /merge/);
+  const yaml11Directive = '%YAML 1.1\n---\npackages:\n  - apps/*\nallowBuilds:\n  esbuild: yes\n';
+  assert.match(workspaceConfigImpact({ before: 'packages:\n  - apps/*\nallowBuilds:\n  esbuild: true\n', after: yaml11Directive }).shared, /directives/);
+  const tagRedefDirective = '%TAG !! tag:example.com,2026:\n---\npackages:\n  - apps/*\nminimumReleaseAgeExclude:\n  - foo@1.0.0\n';
+  assert.match(workspaceConfigImpact({ before: 'packages:\n  - apps/*\n', after: tagRedefDirective }).shared, /directives/);
+  assert.match(workspaceConfigImpact({
+    before: "packages:\n  - apps/*\ncatalog:\n  foo: '2026-11-25'\n",
+    after: 'packages:\n  - apps/*\ncatalog:\n  foo: 2026-11-25\n',
+  }).shared, /outside minimumReleaseAgeExclude/);
+  const withAnchor = 'packages:\n  - apps/*\nminimumReleaseAgeExclude:\n  - &pkg foo@1.0.0\n';
+  assert.match(workspaceConfigImpact({ before, after: withAnchor }).shared, /anchors/);
+  assert.match(workspaceConfigImpact({ before, after: 'packages:\n  - !!str apps/*\n' }).shared, /tags/);
+  assert.match(workspaceConfigImpact({ before, after: ': bad: [yaml' }).shared, /does not parse/);
+  assert.match(workspaceConfigImpact({ before, after: '- list\n' }).shared, /not a YAML mapping/);
+  // Without before/after texts, pnpm-workspace.yaml falls back conservatively.
+  assert.equal(createAppPlan(registry, ['pnpm-workspace.yaml'], workspace).allApps, true);
+});
+
+test('scripts/lib/e2e-test-data.mjs narrows to apps whose pure provisioner entries changed', async () => {
+  const registry = await loadAppsRegistry();
+  const workspace = await graph;
+  const before = await readFile(new URL('../scripts/lib/e2e-test-data.mjs', import.meta.url), 'utf8');
+
+  // Modifying one app's provisioner selects only that app without forcing siteCode.
+  const editDenoise = before.replace(
+    'denoise: { env: [], provision: async () => ({}) },',
+    "denoise: { env: ['DENOISE_FLAG'], provision: async () => ({ DENOISE_FLAG: '1' }) },",
+  );
+  assert.notEqual(editDenoise, before);
+  const denoisePlan = createAppPlan(registry, ['scripts/lib/e2e-test-data.mjs'], workspace, new Map([['scripts/lib/e2e-test-data.mjs', { before, after: editDenoise }]]));
+  assert.deepEqual(denoisePlan.selected.map((app) => app.id), ['denoise']);
+  assert.equal(denoisePlan.siteCode, false);
+  assert.equal(denoisePlan.reasons.fallback, null);
+  assert.equal(denoisePlan.browserApps.include.every(({ heavy_tests: run }) => run), true, 'scoped provisioner edit runs @heavy tests');
+
+  // Changing NODDI's reference provisioner selects noddi with heavy_tests: true so @heavy reference.spec.js runs,
+  // including when combined with a shared fallback change in the same diff.
+  const editNoddi = before.replace("NODDI_BROWSER_REFERENCE: 'check'", "NODDI_BROWSER_REFERENCE: 'write'");
+  assert.notEqual(editNoddi, before);
+  const noddiPlan = createAppPlan(registry, ['scripts/lib/e2e-test-data.mjs'], workspace, new Map([['scripts/lib/e2e-test-data.mjs', { before, after: editNoddi }]]));
+  assert.deepEqual(noddiPlan.selected.map((app) => app.id), ['noddi']);
+  assert.equal(noddiPlan.browserApps.include.every(({ heavy_tests: run }) => run), true, 'noddi provisioner edit runs @heavy browser reference');
+  const wsBefore = await readFile(new URL('../pnpm-workspace.yaml', import.meta.url), 'utf8');
+  const combinedFallback = createAppPlan(
+    registry,
+    ['scripts/lib/e2e-test-data.mjs', 'pnpm-workspace.yaml'],
+    workspace,
+    new Map([
+      ['scripts/lib/e2e-test-data.mjs', { before, after: editNoddi }],
+      ['pnpm-workspace.yaml', { before: wsBefore, after: `${wsBefore}minimumReleaseAge: 2880\n` }],
+    ]),
+  );
+  assert.equal(combinedFallback.allApps, true);
+  assert.equal(
+    combinedFallback.browserApps.include.filter(({ app }) => app === 'noddi').every(({ heavy_tests: run }) => run),
+    true,
+    'noddi keeps heavy_tests: true even when another file triggers full-catalog fallback',
+  );
+
+  // Removing a provisioner entry selects only that app.
+  const removeDenoise = before.replace('  denoise: { env: [], provision: async () => ({}) },\n', '');
+  assert.deepEqual(e2eTestDataImpact({ before, after: removeDenoise }), { changed: ['denoise'] });
+
+  // Editing only plain-string unpublished reasons selects no apps (workspace-contracts tests it).
+  const editUnpublished = before.replace(
+    "TOPOFIT_SURFACE_REPLAY: 'OpenRecon validation surfaces, not licensed for release',",
+    "TOPOFIT_SURFACE_REPLAY: 'OpenRecon validation surfaces, not licensed for release',\n  NEW_UNPUBLISHED: 'not public',",
+  );
+  const unpublishedPlan = createAppPlan(registry, ['scripts/lib/e2e-test-data.mjs'], workspace, new Map([['scripts/lib/e2e-test-data.mjs', { before, after: editUnpublished }]]));
+  assert.deepEqual(unpublishedPlan.selected, []);
+  assert.equal(unpublishedPlan.site, false);
+
+  // Shared helper edits, load-time side effects, TDZ hazards, strict ESM errors, prototype setters, and syntax errors fall back.
+  for (const [label, after] of [
+    ['shared helper', before.replace('const flag = (name) => ({ env: [name], provision: async () => ({ [name]: \'1\' }) });', 'const flag = (name) => ({ env: [name], provision: async () => ({ [name]: \'2\' }) });')],
+    ['strict ESM duplicate params', before.replace('denoise: { env: [], provision: async () => ({}) },', 'denoise: { env: [], provision: (x, x) => x },')],
+    ['side-effectful provisioner initializer', before.replace('denoise: { env: [], provision: async () => ({}) },', 'denoise: (globalThis.fetch = undefined, { env: [], provision: async () => ({}) }),')],
+    ['side-effectful unpublished value', before.replace("TOPOFIT_SURFACE_REPLAY: 'OpenRecon validation surfaces, not licensed for release',", "TOPOFIT_SURFACE_REPLAY: (globalThis.fetch = undefined, 'reason'),")],
+    ['prototype setter in provisioners', before.replace('denoise: { env: [], provision: async () => ({}) },', 'denoise: { env: [], provision: async () => ({}) },\n  __proto__: { env: [], provision: async () => ({}) },')],
+    ['prototype setter in unpublished', before.replace("TOPOFIT_SURFACE_REPLAY: 'OpenRecon validation surfaces, not licensed for release',", "TOPOFIT_SURFACE_REPLAY: 'OpenRecon validation surfaces, not licensed for release',\n  __proto__: 'mutated',")],
+    ['arbitrary call in provisioners', before.replace('denoise: { env: [], provision: async () => ({}) },', "denoise: run('echo', ['hi']),")],
+    ['non-literal env element', before.replace('denoise: { env: [], provision: async () => ({}) },', 'denoise: { env: [root], provision: async () => ({}) },')],
+    ['spread element', before.replace('denoise: { env: [], provision: async () => ({}) },', '...extraProvisioners,')],
+    ['computed key', before.replace('denoise: { env: [], provision: async () => ({}) },', '[dynamicId]: { env: [], provision: async () => ({}) },')],
+    ['self-reference', before.replace('denoise: { env: [], provision: async () => ({}) },', 'denoise: { env: [], provision: async (c) => provisioners.sdc.provision(c) },')],
+    ['syntax error', `${before}\nexport const broken = (`],
+  ]) {
+    const fallback = createAppPlan(registry, ['scripts/lib/e2e-test-data.mjs'], workspace, new Map([['scripts/lib/e2e-test-data.mjs', { before, after }]]));
+    assert.equal(fallback.allApps, true, label);
+    assert.match(fallback.reasons.fallback, /^scripts\/lib\/e2e-test-data\.mjs:/, label);
+  }
+  // A const function declared after `export const provisioners` is a TDZ ReferenceError at import time.
+  const tdzBefore = 'export const provisioners = { denoise: { env: [], provision: async () => ({}) } };\nconst laterFn = async () => ({});\n';
+  const tdzAfter = 'export const provisioners = { denoise: { env: [], provision: laterFn } };\nconst laterFn = async () => ({});\n';
+  assert.match(e2eTestDataImpact({ before: tdzBefore, after: tdzAfter }).shared, /cannot be isolated safely/);
+});
+
+test('per-app CI scripts resolve exact .json data paths without dragging in whole workspace directories, while preserving package directory loads', async (t) => {
+  const registry = await loadAppsRegistry();
+  const workspace = await graph;
+  // scripts/lib/e2e-test-data.mjs reads exes/dwi/dmipy/validation/reference.manifest.json
+  // and packages/nesvor/src/masking/manifest.json; SCRIPT_REFERENCE must resolve those exact
+  // .json files instead of falling back to whole workspace directories.
+  const catalogNodes = reachableFrom(workspace, CATALOG);
+  assert.equal(catalogNodes.has('scripts/lib/mindgrab-asset-path-plugin.mjs'), false);
+  assert.equal(catalogNodes.has('scripts/make-test-data.mjs'), false);
+  const pluginPlan = createAppPlan(registry, ['scripts/lib/mindgrab-asset-path-plugin.mjs'], workspace);
+  assert.equal(pluginPlan.reasons.fallback, null);
+  assert.equal(pluginPlan.allApps, false);
+  assert.ok(pluginPlan.selected.some((app) => app.id === 'sdc'));
+  assert.ok(pluginPlan.selected.some((app) => app.id === 'brainchop'));
+  assert.ok(!pluginPlan.selected.some((app) => app.id === 'niimath'));
+  assert.ok(!pluginPlan.selected.some((app) => app.id === 'stardist'));
+
+  // Direct per-app CI helpers still belong to CATALOG and select the complete catalog.
+  for (const path of ['scripts/e2e-test-data.mjs', 'scripts/probe-hardware-gpu.mjs', 'test-utils/hardware-gpu.mjs', 'scripts/desktop/scientific-evidence.mjs', 'test-utils/dwi-tracking-crop.mjs']) {
+    assert.equal(catalogNodes.has(path), true, path);
+    assert.equal(createAppPlan(registry, [path], workspace).allApps, true, path);
+  }
+
+  // Real workspace graph fixture verifying exact .json data paths stay isolated while
+  // package directory references (require, destructured module.require, subprocess exec)
+  // still traverse into the package and its root helpers.
+  const root = await mkdtemp(join(tmpdir(), 'neurodesk-catalog-imports-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const files = {
+    'package.json': JSON.stringify({ name: 'root', scripts: {} }),
+    '.github/workflows/ci.yml': stringify({
+      jobs: {
+        'composite-site': { steps: [{ run: 'echo site' }] },
+        'app-tests': { steps: [{ run: 'node scripts/cli.mjs' }] },
+        'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+        'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+      },
+    }),
+    'scripts/cli.mjs': [
+      "const { require: load } = module;",
+      "load.call(module, '../packages/rel-req');",
+      "execFileSync(process.execPath, ['packages/subproc']);",
+      "const dataPath = 'exes/data-only/nested/reference.manifest.json';",
+    ].join('\n'),
+    'packages/rel-req/package.json': JSON.stringify({ name: '@nd/rel-req' }),
+    'packages/rel-req/index.js': "import '../../scripts/from-rel-req.mjs';\n",
+    'packages/subproc/package.json': JSON.stringify({ name: '@nd/subproc' }),
+    'packages/subproc/index.js': "import '../../scripts/from-subproc.mjs';\n",
+    'exes/data-only/nested/reference.manifest.json': '{}',
+    'exes/data-only/tool.js': "import '../../scripts/from-data-only.mjs';\n",
+    'scripts/from-rel-req.mjs': '',
+    'scripts/from-subproc.mjs': '',
+    'scripts/from-data-only.mjs': '',
+  };
+  for (const [path, text] of Object.entries(files)) {
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), text);
+  }
+  const fixtureGraph = await loadConservativeWorkspaceGraph(root);
+  const reached = reachableFrom(fixtureGraph, CATALOG);
+  assert.equal(reached.has('scripts/from-rel-req.mjs'), true, 'destructured module.require("../packages/rel-req")');
+  assert.equal(reached.has('scripts/from-subproc.mjs'), true, 'subprocess exec packages/subproc');
+  assert.equal(reached.has('exes/data-only/nested/reference.manifest.json'), true, 'exact .json manifest edge');
+  assert.equal(reached.has('scripts/from-data-only.mjs'), false, 'exact .json reference does not pull in exes/data-only code');
+
+  // Prefix collisions (.json.gz, spaces in quoted names), symlinks, and directories named *.json
+  // must retain the whole workspace-directory edge rather than narrowing to a misleading prefix or link.
+  const prefixRoot = await mkdtemp(join(tmpdir(), 'neurodesk-json-prefix-'));
+  t.after(() => rm(prefixRoot, { recursive: true, force: true }));
+  const prefixFiles = {
+    'package.json': JSON.stringify({ name: 'root', scripts: {} }),
+    '.github/workflows/ci.yml': stringify({
+      jobs: {
+        'composite-site': { steps: [{ run: 'node scripts/site.mjs' }] },
+        'app-tests': { steps: [{ run: 'node scripts/app-ci.mjs' }] },
+        'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+        'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+      },
+    }),
+    'scripts/site.mjs': [
+      "const archive = 'exes/data/reference.json.gz';",
+      "const spaced = 'exes/spaced/reference.json archive';",
+      "const computed = 'exes/computed/reference.json' + '.gz';",
+      "const linked = 'exes/linked/fixture.json';",
+    ].join('\n'),
+    'scripts/app-ci.mjs': "const mod = require('../packages/pkg/fixture.json');\n",
+    'exes/data/reference.json': '{}',
+    'exes/data/reference.json.gz': 'compressed',
+    'exes/spaced/reference.json': '{}',
+    'exes/spaced/reference.json archive': 'actual',
+    'exes/computed/reference.json': '{}',
+    'exes/computed/reference.json.gz': 'computed',
+    'exes/linked/target.json': '{"real":true}',
+    'packages/pkg/package.json': JSON.stringify({ name: '@nd/pkg' }),
+    'packages/pkg/fixture.json/index.js': "import '../../../scripts/from-dir-json.mjs';\n",
+    'scripts/from-dir-json.mjs': '',
+  };
+  for (const [path, text] of Object.entries(prefixFiles)) {
+    await mkdir(dirname(join(prefixRoot, path)), { recursive: true });
+    await writeFile(join(prefixRoot, path), text);
+  }
+  await symlink('target.json', join(prefixRoot, 'exes/linked/fixture.json'));
+  const prefixGraph = await loadConservativeWorkspaceGraph(prefixRoot);
+  assert.equal(createAppPlan(registry, ['exes/data/reference.json.gz'], prefixGraph).site, true, '.json.gz keeps exes/data edge');
+  assert.equal(createAppPlan(registry, ['exes/spaced/reference.json archive'], prefixGraph).site, true, 'quoted filename with space keeps exes/spaced edge');
+  assert.equal(createAppPlan(registry, ['exes/computed/reference.json.gz'], prefixGraph).site, true, 'computed path concatenation keeps exes/computed edge');
+  assert.equal(createAppPlan(registry, ['exes/linked/target.json'], prefixGraph).site, true, 'symlink keeps exes/linked edge');
+  assert.equal(reachableFrom(prefixGraph, CATALOG).has('scripts/from-dir-json.mjs'), true, 'directory named fixture.json keeps packages/pkg edge');
+});
+
+test('lint runner and scripts/quality files select nothing when unreached, and honor confirmed CI or app reachability', async (t) => {
+  const registry = await loadAppsRegistry();
+  const workspace = await graph;
+  const plan = createAppPlan(registry, [
+    'scripts/lint.mjs',
+    'scripts/quality/lint-inventory.mjs',
+    'scripts/quality/lint-baseline.json',
+    'scripts/quality/typed-projects.mjs',
+  ], workspace);
+  assert.deepEqual(plan.selected, []);
+  assert.equal(plan.site, false);
+  assert.equal(plan.reasons.fallback, null);
+  // Without a workspace graph, lint tooling cannot be proven unreached and falls back.
+  assert.equal(createAppPlan(registry, ['scripts/quality/lint-inventory.mjs']).allApps, true);
+
+  // If a CI job or an app directly reaches scripts/quality/*, the plan honors that edge.
+  const root = await mkdtemp(join(tmpdir(), 'neurodesk-quality-reach-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const files = {
+    'package.json': JSON.stringify({ name: 'root', scripts: {} }),
+    '.github/workflows/ci.yml': stringify({
+      jobs: {
+        'composite-site': { steps: [{ run: 'node scripts/site.mjs' }] },
+        'app-tests': { steps: [{ run: 'node scripts/ci.mjs' }] },
+        'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+        'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+      },
+    }),
+    'scripts/ci.mjs': "import './quality/catalog-helper.mjs';\n",
+    'scripts/site.mjs': "import './quality/site-helper.mjs';\n",
+    'scripts/quality/catalog-helper.mjs': 'export const a = 1;\n',
+    'scripts/quality/site-helper.mjs': 'export const b = 2;\n',
+    'scripts/quality/app-helper.mjs': 'export const c = 3;\n',
+    'apps/niimath/main.js': "import '../../scripts/quality/app-helper.mjs';\n",
+  };
+  for (const [path, text] of Object.entries(files)) {
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), text);
+  }
+  const fixtureGraph = await loadConservativeWorkspaceGraph(root);
+  assert.equal(createAppPlan(registry, ['scripts/quality/catalog-helper.mjs'], fixtureGraph).allApps, true, 'CATALOG reachability');
+  assert.equal(createAppPlan(registry, ['scripts/quality/site-helper.mjs'], fixtureGraph).site, true, 'SITE reachability');
+  assert.deepEqual(
+    createAppPlan(registry, ['scripts/quality/app-helper.mjs'], fixtureGraph).selected.map((app) => app.id),
+    ['niimath'],
+    'direct app reachability',
+  );
+});
+
+test('changedManifests loads pnpm-workspace.yaml, pnpm-lock.yaml, and scripts/lib/e2e-test-data.mjs from git', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'neurodesk-manifests-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=planner', '-c', 'user.email=planner@example.org', ...args], { cwd: root, encoding: 'utf8' }).trim();
+  git('init', '--quiet');
+  await mkdir(join(root, 'scripts/lib'), { recursive: true });
+  await writeFile(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - apps/*\nminimumReleaseAgeExclude:\n  - old@0.1.0\n');
+  await writeFile(join(root, 'pnpm-lock.yaml'), 'lockfileVersion: "9.0"\npackages:\n  old@0.1.0: {}\n');
+  await writeFile(join(root, 'scripts/lib/e2e-test-data.mjs'), 'export const provisioners = {};\n');
+  git('add', '.');
+  git('commit', '--quiet', '-m', 'base');
+  const base = git('rev-parse', 'HEAD');
+  await writeFile(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - apps/*\nminimumReleaseAgeExclude:\n  - foo@1.0.0\n');
+  await writeFile(join(root, 'pnpm-lock.yaml'), 'lockfileVersion: "9.0"\npackages:\n  foo@1.0.0: {}\n');
+  await writeFile(join(root, 'scripts/lib/e2e-test-data.mjs'), 'export const provisioners = { denoise: { env: [], provision: async () => ({}) } };\n');
+  git('add', '.');
+  git('commit', '--quiet', '-m', 'head');
+  const manifests = changedManifests({ base, head: 'HEAD', cwd: root, changedPaths: ['pnpm-workspace.yaml', 'scripts/lib/e2e-test-data.mjs'] });
+  assert.equal(manifests.has('pnpm-workspace.yaml'), true);
+  assert.equal(manifests.has('pnpm-lock.yaml'), true);
+  assert.equal(manifests.has('scripts/lib/e2e-test-data.mjs'), true);
+  assert.deepEqual(workspaceConfigImpact({ ...manifests.get('pnpm-workspace.yaml'), lockAfter: manifests.get('pnpm-lock.yaml').after }), { scoped: true });
+  assert.deepEqual(e2eTestDataImpact(manifests.get('scripts/lib/e2e-test-data.mjs')), { changed: ['denoise'] });
+});
+
+test('e2e-test-data.mjs provisioner narrowing matches its repository callers and ci.yml dispatch', async () => {
+  const sources = execFileSync('git', ['ls-files', '-z'], { cwd: repoRoot, encoding: 'utf8' })
+    .split('\0')
+    .filter((path) => /\.(?:[cm]?[jt]sx?)$/.test(path));
+  const importers = [];
+  for (const path of sources) {
+    if (path === 'scripts/lib/e2e-test-data.mjs') continue;
+    const text = await readFile(join(repoRoot, path), 'utf8');
+    if (/(?:from\s*|import\s*\(\s*|require\(\s*)['"][^'"]*e2e-test-data\.mjs['"]/.test(text)) importers.push(path);
+  }
+  assert.deepEqual(importers.sort(), ['scripts/e2e-test-data.mjs', 'test/e2e-test-data.test.mjs']);
+  const cli = await readFile(join(repoRoot, 'scripts/e2e-test-data.mjs'), 'utf8');
+  assert.match(cli, /provisionTestData\(app,\s*cache,\s*\{\s*cpu\s*\}\)/);
+  const lib = await readFile(join(repoRoot, 'scripts/lib/e2e-test-data.mjs'), 'utf8');
+  assert.match(lib, /const provisioner = cpu \? provisioners\[app\]\?\.cpu : provisioners\[app\];/);
+  const ci = parse(await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8'));
+  const invokingSteps = Object.entries(ci.jobs ?? {}).flatMap(([job, spec]) => (spec.steps ?? [])
+    .filter((step) => /e2e-test-data\.mjs/.test(step.run ?? ''))
+    .map((step) => ({ job, env: step.env ?? {}, run: step.run })));
+  assert.deepEqual(invokingSteps.map(({ job }) => job).sort(), ['browser-e2e', 'browser-e2e-gpu']);
+  for (const { job, env, run } of invokingSteps) {
+    assert.equal(env.APP, '${{ matrix.app }}', `${job} passes matrix.app via APP`);
+    assert.match(run, /^node scripts\/e2e-test-data\.mjs "\$APP" /, `${job} invokes e2e-test-data.mjs with "$APP"`);
+  }
 });

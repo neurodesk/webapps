@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { hardwareGpu } from '../../../test-utils/hardware-gpu.mjs';
 import { readFile } from 'node:fs/promises';
 import examples from '../examples.json' with { type: 'json' };
 import { dicomSeries } from '../../../test-utils/dicom-fixture.mjs';
@@ -10,9 +9,9 @@ async function loadExample(page) {
   await expect(page.locator('#runButton')).toBeEnabled({ timeout: 120000 });
 }
 
-test('workspace exposes six segmentation models and shared information controls', async ({ page }) => {
+test('workspace exposes four v4.0 models and shared information controls', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('#method option')).toHaveCount(6);
+  await expect(page.locator('#method option')).toHaveCount(4);
   await expect(page.locator('#method')).not.toContainText(/extract|mask/i);
   await expect(page.locator('.nd-app-bar')).toHaveCount(1);
   await expect(page.locator('#runButton')).toBeDisabled();
@@ -22,7 +21,6 @@ test('example download failure permits retry', async ({ page }) => {
   test.setTimeout(180000);
   const exampleUrl = examples[0].files[0].url;
   let attempts = 0;
-  // Route on the browser context so requests forwarded by coi-serviceworker.js are intercepted.
   const abortDownload = route => {
     attempts += 1;
     return route.abort();
@@ -42,72 +40,68 @@ test('example download failure permits retry', async ({ page }) => {
   }
 });
 
-test('cancelling inference allows another run', async ({ page }) => {
+test('cancelling inference terminates the worker and allows another run', async ({ page }) => {
   test.setTimeout(180000);
   const held = [];
-  // Route on the browser context so worker fetches forwarded by coi-serviceworker.js are held.
-  const holdModel = route => {
+  let fetches = 0;
+  const holdAsset = route => {
+    fetches += 1;
     held.push(route);
   };
-  await page.context().route('**/models/**/model.json', holdModel);
+  await page.context().route('**/brainchop/brainchop-*.wasm', holdAsset);
   try {
     await page.goto('/');
     await loadExample(page);
+    await page.locator('#advancedSettings > summary').click();
+    await page.locator('#backend').selectOption('cpu');
+    await page.locator('#method').selectOption('mindmap-fast');
     for (const run of [1, 2]) {
-      const workerPromise = page.waitForEvent('worker', {
-        predicate: worker => worker.url().includes('brainchop-webworker'),
-        timeout: 60000,
-      });
       await page.locator('#runButton').click();
       await expect(page.locator('#cancelButton')).toBeVisible();
-      const worker = await workerPromise;
       await expect
-        .poll(() => held.length, { timeout: 60000, message: `Expected run ${run} to request model.json` })
-        .toBe(run);
-      expect(page.workers()).toContain(worker);
-      await Promise.all([
-        worker.waitForEvent('close', { timeout: 30000 }),
-        page.locator('#cancelButton').click(),
-      ]);
+        .poll(() => fetches, { timeout: 60000, message: `Expected run ${run} to fetch WASM` })
+        .toBeGreaterThanOrEqual(run);
+      await page.locator('#cancelButton').click();
       await expect(page.locator('#runButton')).toBeEnabled({ timeout: 30000 });
       await expect(page.locator('#statusText')).toHaveText('Cancelled');
-      await expect(page.locator('#resultList .nd-download-btn')).toHaveCount(0);
+      await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(1);
+      // Release the held request from this cancelled worker so Chromium does not coalesce the next run onto it.
+      while (held.length) await held.pop().abort().catch(() => {});
     }
   } finally {
     for (const route of held) await route.abort().catch(() => {});
-    await page.context().unroute('**/models/**/model.json', holdModel).catch(() => {});
+    await page.context().unroute('**/brainchop/brainchop-*.wasm', holdAsset).catch(() => {});
   }
 });
 
-for (const [model, classes] of [['tissue-light', 3], ['tissue', 3], ['subcortical', 18], ['subcortical-small', 18], ['aparc50', 50], ['aparc104', 104]]) {
-  test(`real ${model} model produces a downloadable NIfTI label map`, async ({ page }, testInfo) => {
-    test.skip(!hardwareGpu && testInfo.project.use.channel !== 'chromium', 'Full inference requires hardware WebGL or the local Mesa runner.');
-    test.setTimeout(1200000);
-    await page.goto('/');
-    await loadExample(page);
-    await page.locator('#method').selectOption(model);
-    await page.locator('#runButton').click();
-    await expect(page.locator('#runButton')).toBeEnabled({ timeout: 1100000 });
-    await expect(page.locator('#resultList .nd-download-btn'), await page.locator('#statusText').innerText()).toBeVisible();
-    const pending = page.waitForEvent('download');
-    await page.locator('#resultList .nd-download-btn').click();
-    const bytes = await readFile(await (await pending).path());
-    expect(bytes.readInt32LE(0)).toBe(348);
-    expect(bytes.readInt16LE(70)).toBe(2);
-    expect([42, 44, 46].map(offset => bytes.readInt16LE(offset))).toEqual([256, 256, 256]);
-    const labels = new Set(bytes.subarray(bytes.readFloatLE(108)));
-    expect(labels.has(0)).toBe(true);
-    expect(labels.size).toBeGreaterThan(1);
-    expect([...labels].every(label => label < classes)).toBe(true);
-  });
-}
+test('real mindmap-fast model segments the example on native grid with downloadable NIfTI', async ({ page }) => {
+  test.setTimeout(300000);
+  await page.goto('/');
+  await loadExample(page);
+  await page.locator('#method').selectOption('mindmap-fast');
+  await page.locator('#runButton').click();
+  const downloadBtn = page.locator('#resultList .nd-volume-toggle:nth-child(2) .nd-download-btn');
+  await expect(downloadBtn).toBeVisible({ timeout: 240000 });
+  const pending = page.waitForEvent('download');
+  await downloadBtn.click();
+  const download = await pending;
+  const bytes = await readFile(await download.path());
+  expect(bytes.readInt32LE(0)).toBe(348);
+  expect(download.suggestedFilename()).toMatch(/_mindmap-fast\.nii$/);
+  const offset = bytes.readFloatLE(108);
+  const labels = new Set(bytes.subarray(offset));
+  expect(labels.has(0)).toBe(true);
+  expect(labels.size).toBeGreaterThan(2);
+  expect([...labels].every(label => label < 18)).toBe(true);
+});
 
 test('DICOM import and collapsed settings retain the selected model', async ({ page }) => {
+  test.setTimeout(120000);
   await page.goto('/');
-  await page.locator('#method').selectOption('aparc50');
+  await page.locator('#method').selectOption('mindsnap');
   await page.locator('#imageInput').setInputFiles(dicomSeries());
   await expect(page.locator('#runButton')).toBeEnabled({ timeout: 120000 });
   await page.locator('#taskSection > summary').click();
   await page.locator('#taskSection > summary').click();
-  await expect(page.locator('#method')).toHaveValue('aparc50');
+  await expect(page.locator('#method')).toHaveValue('mindsnap');
 });

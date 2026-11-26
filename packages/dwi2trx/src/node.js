@@ -9,7 +9,7 @@ import { MASK_OPTIONS, TENSOR_MAPS, assertMaskOnGrid, extractB0, fitTensor, mapF
 import { runNiimath as run } from './node-runner.js';
 import { NIIMATH_VERSION } from './niimath-version.js';
 
-const MINDGRAB_PACKAGE = import.meta.resolve('@brainchop/mindgrab/package.json');
+const MINDGRAB_PACKAGE = import.meta.resolve('@brainchop/core/package.json');
 const readVersion = async (url) => JSON.parse(await readFile(new URL(url), 'utf8')).version;
 export { NIIMATH_VERSION };
 export const MINDGRAB_VERSION = await readVersion(MINDGRAB_PACKAGE);

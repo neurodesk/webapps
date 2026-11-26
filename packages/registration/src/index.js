@@ -139,5 +139,9 @@ export async function createRegistration({createModule,wasmBinary,onLog=()=>{}})
       module.FS.rmdir(registration.dir);jobs.delete(registration.dir);
     },
     memoryBytes:()=>module.HEAPU8?.byteLength ?? null,
+    // The raw kernel for argv drivers (@neurodesk/pipeline-drivers antsDrivers): its antsRegistration argv or
+    // --apply, over its in-memory filesystem.
+    call,
+    FS:module.FS,
   };
 }

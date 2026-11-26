@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 2,
+  "app": "tumour-report",
+  "title": "Brain Tumour Report",
+  "description": "Segment contrast-enhancing brain tumours on a native-space T1c MRI with Raidionics v1.3 and compute native morphometry and MNI RADS anatomical reports.",
+  "defaultOperation": "analyze",
+  "operations": {
+    "analyze": {
+      "title": "Segment and characterize tumour",
+      "description": "Segment the brain and contrast-enhancing tumour core on a T1c MRI (or characterize an optional native-space binary mask) and return masks, per-lesion morphometry, and optional MNI ICBM152 RADS overlap, tract distances and glioblastoma resectability.",
+      "mode": "batch",
+      "inputs": {
+        "t1c": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "space": "native",
+          "description": "Native-space 3D post-contrast T1-weighted MRI (NIfTI or DICOM series)",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "mask": {
+          "source": "files",
+          "type": "neuro:label-map",
+          "formats": [
+            "nifti"
+          ],
+          "space": "native",
+          "description": "Optional binary tumour mask aligned to the T1c image; when provided, segmentation is skipped and the supplied mask is characterized directly",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "tumourType": {
+          "type": "string",
+          "enum": [
+            "glioblastoma",
+            "meningioma",
+            "metastasis"
+          ],
+          "default": "glioblastoma",
+          "description": "Tumour type context for reporting; Glioblastoma additionally reports the Kommers et al. (2021) resectability index."
+        },
+        "computeMniReport": {
+          "type": "boolean",
+          "default": true,
+          "description": "Register the brain-masked T1c to MNI ICBM152 2009a with Greedy and compute laterality, cortical overlap, subcortical tract distances and resectability."
+        },
+        "deformableMni": {
+          "type": "boolean",
+          "default": false,
+          "description": "Refine MNI registration with lesion-masked deformable Greedy SVF (NMI); slower than affine-only registration."
+        },
+        "skullStripped": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable when the input T1c is already skull-stripped; uses non-zero voxels as the brain mask instead of running MRI_Brain."
+        },
+        "backend": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "wasm"
+          ],
+          "default": "auto",
+          "description": "Requested ONNX inference backend; WebGPU falls back to WebAssembly CPU when unavailable or storage limits are too small."
+        }
+      },
+      "artifacts": {
+        "tumourMask": {
+          "type": "neuro:label-map",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "maximum": 1,
+          "space": "native"
+        },
+        "brainMask": {
+          "type": "neuro:label-map",
+          "mediaType": "application/gzip",
+          "minimum": 0,
+          "maximum": 1,
+          "space": "native"
+        },
+        "tumourMaskMni": {
+          "type": "neuro:label-map",
+          "mediaType": "application/gzip",
+          "minimum": 0,
+          "maximum": 1,
+          "space": "atlas"
+        },
+        "reportJson": {
+          "type": "neuro:report",
+          "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "lesionsTsv": {
+          "type": "neuro:table",
+          "mediaType": "text/tab-separated-values",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "summaryTsv": {
+          "type": "neuro:table",
+          "mediaType": "text/tab-separated-values",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

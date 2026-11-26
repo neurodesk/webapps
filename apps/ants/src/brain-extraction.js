@@ -1,4 +1,4 @@
-import * as mindgrab from "@brainchop/mindgrab";
+import * as mindgrab from "@brainchop/core";
 import { withBackendChoice } from "@neurodesk/runtime-support/mindgrab/backend";
 
 const { segment } = withBackendChoice(mindgrab);

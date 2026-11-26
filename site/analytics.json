@@ -37,6 +37,13 @@
         "pageViews": 0
       },
       "countries": []
+    },
+    "dermatology": {
+      "totals": {
+        "users": 0,
+        "pageViews": 0
+      },
+      "countries": []
     }
   },
   "apps": [
@@ -441,6 +448,14 @@
       "countries": []
     },
     {
+      "id": "lightsheet-atlas",
+      "path": "lightsheet-atlas",
+      "title": "Light-sheet atlas",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
       "id": "calcium-imaging",
       "path": "calcium-imaging",
       "title": "Calcium imaging",
@@ -508,6 +523,110 @@
       "id": "cryo-em",
       "path": "cryo-em",
       "title": "Cryo-EM",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "deconvolution",
+      "path": "deconvolution",
+      "title": "Deconvolution",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "omezarr-convert",
+      "path": "omezarr-convert",
+      "title": "OME-Zarr Converter",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "histo2mri",
+      "path": "histo2mri",
+      "title": "Histology to MRI",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "tumour-report",
+      "path": "tumour-report",
+      "title": "Brain Tumour Report",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "denoise",
+      "path": "denoise",
+      "title": "Denoise",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "totalsegmentator",
+      "path": "totalsegmentator",
+      "title": "TotalSegmentator",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "cellpose",
+      "path": "cellpose",
+      "title": "Cellpose",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "medsam2",
+      "path": "medsam2",
+      "title": "MedSAM2",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "dermoscope",
+      "path": "dermoscope",
+      "title": "Dermoscope ABCD",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "skin-chromophore",
+      "path": "skin-chromophore",
+      "title": "Skin Chromophore",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "wound-planimetry",
+      "path": "wound-planimetry",
+      "title": "Wound Planimetry",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "derm-compare",
+      "path": "derm-compare",
+      "title": "DermCompare",
+      "users": 0,
+      "pageViews": 0,
+      "countries": []
+    },
+    {
+      "id": "dermvit",
+      "path": "dermvit",
+      "title": "DermViT",
       "users": 0,
       "pageViews": 0,
       "countries": []

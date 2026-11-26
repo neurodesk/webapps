@@ -136,15 +136,16 @@ test('MindGrab binaries are shared per release while each app keeps its model mo
   const registry = await loadAppsRegistry();
   const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
   const families = manifest.families.filter(family => family.id.startsWith('mindgrab-wasm-'));
-  assert.ok(families.length >= 2, 'expected a shared MindGrab family per release');
+  assert.ok(families.length >= 1, 'expected a shared MindGrab family per release');
   const digest = async path => createHash('sha256').update(await readFile(path)).digest('hex');
   for (const family of families) {
     assert.equal(family.target, `mindgrab/${family.version}`, `${family.id}: one release per directory, so two releases never share a file name`);
     assert.equal(family.match_by, 'sha256');
-    const release = join(repoRoot, 'node_modules/.pnpm', `@brainchop+mindgrab@${family.version}`, 'node_modules/@brainchop/mindgrab/dist');
+    const pkgName = family.package ?? '@brainchop/mindgrab';
+    const release = join(repoRoot, 'node_modules/.pnpm', `${pkgName.replace('/', '+')}@${family.version}`, 'node_modules', pkgName, 'dist');
     for (const file of family.files) {
       const shared = `_runtime/${family.target}/${file.name}`;
-      assert.equal(await digest(join(release, file.name)), file.sha256, `${family.id}/${file.name}: not the binary of @brainchop/mindgrab ${family.version}`);
+      assert.equal(await digest(join(release, file.name)), file.sha256, `${family.id}/${file.name}: not the binary of ${pkgName} ${family.version}`);
       assert.equal(await digest(join(dist, shared)), file.sha256, shared);
       const consumers = file.consumers ?? family.consumers;
       assert.ok(consumers?.length > 1, `${family.id}/${file.name}: a shared binary lists the apps that load it`);
@@ -333,16 +334,13 @@ test('every content-matched family names the apps that share it', async () => {
     const named = family.files.every(file => family.target.includes(family.version) || family.target.includes(file.sha256.slice(0, 8)));
     assert.ok(named, `${family.id}: the target must carry the version or a hash prefix, or a rebuild replaces bytes a cached worker still requests`);
   }
-  const bsd = manifest.families.find(({ id }) => id === 'niimath-wasm-bsd');
-  // The vendored build has no release version of its own, so its content names the path.
-  assert.ok(bsd.target.endsWith(`-${bsd.files[0].sha256.slice(0, 8)}`), 'niimath-wasm-bsd: the target must end with the binary hash prefix');
 });
 
 test('apps on the same niimath build load one binary from the shared store', async () => {
   const registry = await loadAppsRegistry();
   const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
   const families = manifest.families.filter(({ id }) => id.startsWith('niimath-wasm-'));
-  assert.equal(families.length, 4);
+  assert.equal(families.length, 3);
   for (const family of families) {
     assert.equal(family.deduplicate, true, family.id);
     assert.equal(family.match_by, 'sha256', `${family.id}: Vite names differ between apps, so the checksum identifies the build`);

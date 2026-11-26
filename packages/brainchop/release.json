@@ -1,0 +1,39 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "brainchop-v",
+  "displayName": "Brainchop",
+  "app": "brainchop",
+  "run": "t1.nii.gz results",
+  "readme": {
+    "run": "Segment a 3D T1-weighted brain MRI into labels or tissue fraction maps",
+    "notes": [
+      "Model weights for MindMap-24 (mindmap), MindMap-16 (mindmap-fast), MindSnap-104 (mindsnap)",
+      "and GM/WM/CSF tissue fractions are compiled into the bundled @brainchop/core WebAssembly modules.",
+      "No network connection or previously populated cache is required.",
+      "Choose --model mindmap (default), mindmap-fast, mindsnap, or tissue-fractions.",
+      "Add --save-conform for conformed 256^3 1 mm output, --threads N for CPU threads, or --help.",
+      "DICOM import and interactive 3D slice viewing use the web app.",
+      "",
+      "Brainchop is research software; inspect segmentations before quantitative analysis.",
+      "Please cite Masoud et al. (JOSS 2023) and Fani et al. (arXiv 2025)."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "brainchop"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "brainchop.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "brainchop"
+    }
+  }
+}

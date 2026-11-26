@@ -9,6 +9,7 @@
 // entry for every workflow file and every job of ci.yml.
 import { percentile } from './ci-minutes.mjs';
 import { LARGE_RUN_JOBS, ofPullRequest } from './ci-usage.mjs';
+import { isDispatcher } from './workflow-gate.mjs';
 
 // What a job spends its runner on.
 //   plan: decides what to run (planner, gate, plan marker); tests nothing
@@ -71,15 +72,23 @@ export const WORKFLOWS = Object.freeze({
   'bison-native': TEST,
   'brain-extraction-native': TEST,
   'brain2print-native': TEST,
+  'brainchomp-native': TEST,
+  'brainchop-native': TEST,
   'browserqc-native': TEST,
+  'calcium-imaging-native': TEST,
   'calmar-native': TEST,
   'carotid-flow-native': TEST,
+  'cellpose-native': TEST,
   'code-quality': TEST,
   'compute-server-native': TEST,
   'deconvolution-native': TEST,
   'deface-native': TEST,
   'degibbs-native': TEST,
+  'denoise-native': TEST,
   'dependency-quality': TEST,
+  'derm-compare-native': TEST,
+  'dermoscope-native': TEST,
+  'dermvit-native': TEST,
   'desktop-source-approval': TEST,
   'dicompare-native': TEST,
   'disconnectome-native': TEST,
@@ -91,9 +100,12 @@ export const WORKFLOWS = Object.freeze({
   'elastix-native': TEST,
   'fireants-native': TEST,
   'greedy-native': TEST,
+  'histo2mri-native': TEST,
   'hmc-native': TEST,
   'hmc-registration': TEST,
   'lcmodel-native': TEST,
+  'lightsheet-atlas-native': TEST,
+  'microscope-qc-native': TEST,
   'mri2vid-native': TEST,
   'musclemap-native': TEST,
   'musclemap-parity': TEST,
@@ -105,10 +117,12 @@ export const WORKFLOWS = Object.freeze({
   'native-publish': TEST,
   'nesvor-real-validation': TEST,
   neuroflow: TEST,
+  'neuromorph-native': TEST,
   'niimath-native': TEST,
   'noddi-native': TEST,
   'node-cli': TEST,
   'node-drivers': TEST,
+  'omezarr-convert-native': TEST,
   'qsmbly-native': TEST,
   quality: TEST,
   'samsrf-native': TEST,
@@ -116,18 +130,26 @@ export const WORKFLOWS = Object.freeze({
   'sdc-native': TEST,
   'sdc-registration-gate': TEST,
   'seedseg-native': TEST,
+  'skin-chromophore-native': TEST,
   'spinalcordtoolbox-native': TEST,
+  'spot-detection-native': TEST,
+  'stardist-native': TEST,
+  'structure-tensor-native': TEST,
   standalone: TEST,
   'standalone-links': TEST,
+  'stitching-native': TEST,
   'syncro-native': TEST,
   'synthseg-native': TEST,
   'synthseg-portable': TEST,
   'synthsr-native': TEST,
   'topofit-native': TEST,
+  'totalsegmentator-native': TEST,
+  'tumour-report-native': TEST,
   'unused-code': TEST,
   'vesselboost-native': TEST,
   'white-matter-lesions-native': TEST,
   'windows-signing-policy': TEST,
+  'wound-planimetry-native': TEST,
   'deploy-github-pages': 'deliver',
   'deploy-vessel-surfer-leaderboard': 'deliver',
   'release-apps': 'deliver',
@@ -146,8 +168,14 @@ const GATE_JOB = /(?:^| \/ )gate( \/ |$)/;
 // A job's name without its matrix values: `app-tests (calmar, calmar)` is `app-tests`.
 const jobKind = (name) => name.replace(/ \(.*$/, '');
 
+export function workflowRole(workflow) {
+  if (Object.hasOwn(WORKFLOWS, workflow)) return WORKFLOWS[workflow];
+  if (isDispatcher(workflow)) return TEST;
+  return undefined;
+}
+
 export function jobRole(workflow, jobName) {
-  const entry = Object.hasOwn(WORKFLOWS, workflow) ? WORKFLOWS[workflow] : undefined;
+  const entry = workflowRole(workflow);
   if (entry === undefined) return 'unclassified';
   if (typeof entry === 'object') return Object.hasOwn(entry, jobKind(jobName)) ? entry[jobKind(jobName)] : 'unclassified';
   if (entry === TEST && GATE_JOB.test(jobName)) return 'plan';
@@ -291,12 +319,13 @@ export function minutesByRole(runs, jobs, now) {
   const unclassified = new Map();
   for (const run of runs) {
     // A workflow the table does not name shows even when it started no job.
-    if (!Object.hasOwn(WORKFLOWS, run.name)) unclassified.set(run.name, unclassified.get(run.name) ?? 0);
+    const known = workflowRole(run.name) !== undefined;
+    if (!known) unclassified.set(run.name, unclassified.get(run.name) ?? 0);
     for (const job of ran(jobs.get(run.id))) {
       const role = jobRole(run.name, job.name);
       roles[role] += jobMinutes(job, now);
       if (role !== 'unclassified') continue;
-      const key = Object.hasOwn(WORKFLOWS, run.name) ? `${run.name}: ${jobKind(job.name)}` : run.name;
+      const key = known ? `${run.name}: ${jobKind(job.name)}` : run.name;
       unclassified.set(key, (unclassified.get(key) ?? 0) + jobMinutes(job, now));
     }
   }

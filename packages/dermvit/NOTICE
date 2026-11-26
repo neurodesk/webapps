@@ -1,0 +1,37 @@
+DermViT web app
+===============
+
+This app is MIT-licensed (LICENSE). It runs a quantized Vision Transformer model and uses
+resampling logic derived from the projects below.
+
+The model: Skin Mole ViT ONNX (MIT) & Skin_Cancer-Image_Classification (Apache-2.0)
+-----------------------------------------------------------------------------------
+The app downloads model_quantized.onnx (models/dermvit.manifest.json) from:
+  https://huggingface.co/sazio/skin-mole-vit-onnx (commit 25be9e61a71125de9502648c1f6adceb7a882637)
+
+Modifications relative to upstream weights: exported to ONNX and dynamically quantized to
+8-bit weights (model_quantized.onnx, 86,993,703 bytes) by sazio under the MIT License from
+Anwarkh1/Skin_Cancer-Image_Classification (https://huggingface.co/Anwarkh1/Skin_Cancer-Image_Classification),
+licensed under the Apache License, Version 2.0, which fine-tunes google/vit-base-patch16-224-in21k
+(Apache License, Version 2.0) on the HAM10000 dataset (Tschandl et al., Scientific Data 2018).
+The full text of the Apache License, Version 2.0 ships in LICENSE-APACHE-2.0 beside this file.
+
+Strictly for research and educational use only; uncalibrated softmax scores are not a medical
+device or clinical diagnosis.
+
+Pillow bilinear resampling (MIT-CMU)
+------------------------------------
+resizeRgbaPillowBilinear in src/core/vit.js follows the scale-dependent separable triangular
+(bilinear) resampling of Pillow's src/libImaging/Resample.c (https://github.com/python-pillow/Pillow).
+
+  The Python Imaging Library (PIL) is
+      Copyright (c) 1997-2011 by Secret Labs AB
+      Copyright (c) 1995-2011 by Fredrik Lundh and contributors
+  Pillow is
+      Copyright (c) 2010 by Jeffrey 'Alex' Clark and contributors
+
+Example data (CC0 1.0)
+----------------------
+The example images (ISIC_0000000, ISIC_0000013, ISIC_0001115) are public-domain (CC-0)
+dermoscopic photographs from the International Skin Imaging Collaboration (ISIC) Archive
+(https://www.isic-archive.com/), mirrored and commit-pinned on neurodeskorg/webapps.

@@ -171,3 +171,30 @@ pub unsafe extern "C" fn mrs_process(ptr: *const u8, len: usize) {
         Err(e) => reply(serde_json::json!({ "error": e })),
     }
 }
+
+/// Preprocess one loaded dataset for functional MRS (window/condition binning,
+/// transient QC trace, optional BOLD linewidth matching and dynamic export).
+/// Request: {"dataset": i, "options": {...}}.
+///
+/// # Safety
+/// `ptr`/`len` must describe a readable byte range.
+#[no_mangle]
+pub unsafe extern "C" fn mrs_process_fmrs(ptr: *const u8, len: usize) {
+    let req: serde_json::Value = match serde_json::from_slice(std::slice::from_raw_parts(ptr, len)) {
+        Ok(v) => v,
+        Err(e) => return reply(serde_json::json!({ "error": format!("Invalid fMRS request: {e}") })),
+    };
+    let index = match req["dataset"].as_u64().and_then(|n| usize::try_from(n).ok()) {
+        Some(i) => i,
+        None => return reply(serde_json::json!({ "error": "Invalid dataset index." })),
+    };
+    let result = DATASETS.with(|d| {
+        let d = d.borrow();
+        let ds = d.get(index).ok_or_else(|| "No such dataset; load the files again.".to_string())?;
+        session::process_fmrs(ds, &req["options"], &mut report_progress, &|| false)
+    });
+    match result {
+        Ok(value) => reply(value),
+        Err(e) => reply(serde_json::json!({ "error": e })),
+    }
+}

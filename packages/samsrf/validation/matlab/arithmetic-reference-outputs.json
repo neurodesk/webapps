@@ -1,5 +1,5 @@
 {
- "description": "Literal output hashes from the independently reviewed main, AMD and Intel builds; Intel double runs only. No tolerance comparison. The double CF hull runs' maps.f64 under every reference follow the anchored hull default (#732), which changes 16 y0 values of each, all to MATLAB's. The six double reverse-correlation hull entries (rc_hull_lh_double and rc_custom_hrf_lh_double under current, matlab-amd, and matlab-intel) follow production's adoption of MATLAB's symmetric pixel grid, stored Delaunay boundary centroid and convexHull area (#732), making both runs bit-exact against MATLAB on AMD (current/matlab-amd) and Intel (matlab-intel).",
+ "description": "Literal output hashes from the independently reviewed main, AMD and Intel builds; all 24 runs for current, matlab-amd, and matlab-intel (including the 12 Intel single-precision runs added under #731: 10 runnable, 9 bit-exact against Intel Xeon 8573C, 2 universal refusals). No tolerance comparison. The double CF hull runs' maps.f64 under every reference follow the anchored hull default (#732), which changes 16 y0 values of each, all to MATLAB's. The six double reverse-correlation hull entries (rc_hull_lh_double and rc_custom_hrf_lh_double under current, matlab-amd, and matlab-intel) follow production's adoption of MATLAB's symmetric pixel grid, stored Delaunay boundary centroid and convexHull area (#732), making both runs bit-exact against MATLAB on AMD (current/matlab-amd) and Intel (matlab-intel).",
  "baselines": {
   "current": "abbd6625e895a1ec7eee6bcd3eb03ae93b7b79a45ebdf16a42a90208a6908daa",
   "matlab-amd": "cc528cf6ec172367ee845296f197a686e671629386a595eaba5432ccfe0436b6",
@@ -736,6 +736,10 @@
      "maps.f64": "1693ddecb86fcca7e0f6d73a6731bb7bf808b27aac65ad3d5deb034dc546dd25"
     }
    },
+   "cf_gaussian_lh_single": {
+    "status": "refused",
+    "message": "Data_Precision=single with Fit_pRF=1 is not supported by this port"
+   },
    "cf_hull_lh_double": {
     "status": "succeeded",
     "files": {
@@ -752,6 +756,24 @@
      "lh_cf_hull_lh_double_x0.gii": "a3348ff5799caf9757b675ba312453e6509f88eb75ae8e95598829a516e6aede",
      "lh_cf_hull_lh_double_y0.gii": "591ef4397785a02a5af924991b9c109193ac61c436485037b8133a4e5dde5969",
      "maps.f64": "b411a6b0fb9c892f9dbe8961668386f8baafe9954a06f6ff1a30f3b2a33f20ef"
+    }
+   },
+   "cf_hull_lh_single": {
+    "status": "succeeded",
+    "files": {
+     "lh_cf_hull_lh_single_beta.gii": "a077646982cb9ed90ecba71dccb02bc337d107f89ccefd98692953c25ce3078c",
+     "lh_cf_hull_lh_single_centre.gii": "b27c79530a96ec1fd608d3ed7397594525a0cebffe5a4eef3c28ef4193c5b7a6",
+     "lh_cf_hull_lh_single_ecc.gii": "622f38682ff67a230797566129911b810d2b2c03efa0747083cb59b32694326c",
+     "lh_cf_hull_lh_single_fwhm.gii": "f1cd87b7171d69f729ee3b89247d42f50e6e0f7cf3288fd38e7b907aa64945fd",
+     "lh_cf_hull_lh_single_noise_ceiling.gii": "1d0906285e1bd68826094b9478d89df5fc73d37c49343ea96052f3b80824523c",
+     "lh_cf_hull_lh_single_pol.gii": "cb362dfcd17e7ae46a931f14d383f40261a20506617763fec7aa812372a60a31",
+     "lh_cf_hull_lh_single_r^2.gii": "4a4d91a5953538f7960abbf7f0fe0e2dabf414492c6125ba6ff26b101995e7c7",
+     "lh_cf_hull_lh_single_suppression.gii": "044d8e3700f448f814dff3d7bba05af2da0c17e3ff364f24b5ad977cafdc2ffa",
+     "lh_cf_hull_lh_single_surround.gii": "f1638a35c49cd3ebc556963a6e23a3f0a7a7a539fc44ab452f03e03e0a5d629d",
+     "lh_cf_hull_lh_single_vx.gii": "14c1000f8fd9635bd97a8133865d1e5b169cc462324294269410e85420c5824d",
+     "lh_cf_hull_lh_single_x0.gii": "a3348ff5799caf9757b675ba312453e6509f88eb75ae8e95598829a516e6aede",
+     "lh_cf_hull_lh_single_y0.gii": "591ef4397785a02a5af924991b9c109193ac61c436485037b8133a4e5dde5969",
+     "maps.f64": "56debeea25e235e3f01e51dbb10c58cc7cb0deed52dc4f07933bc20f78ae0a6d"
     }
    },
    "cf_hull_smooth_global_lh_double": {
@@ -772,6 +794,24 @@
      "maps.f64": "4a2fc3326ba6b02bfd52332b8a52344ef6338fdf5b24b4e94057e58b97981e13"
     }
    },
+   "cf_hull_smooth_global_lh_single": {
+    "status": "succeeded",
+    "files": {
+     "lh_cf_hull_smooth_global_lh_single_beta.gii": "34005c3b08b81e72423b3c202f6527469c719863eb6932a247c3696e9bb52da3",
+     "lh_cf_hull_smooth_global_lh_single_centre.gii": "0280fe32385653a16efafe13e84378668b2c45c91e64394ffa073fe8f6190d2f",
+     "lh_cf_hull_smooth_global_lh_single_ecc.gii": "ba3ca5eca9094a53d31e83ebecba978ba8906619e01820b9f0ca9c1c3b6e0d1a",
+     "lh_cf_hull_smooth_global_lh_single_fwhm.gii": "9f775b85a6ea2df72085b4225bf93f4cb027e1bbe8db87cebdc8afc6540168ea",
+     "lh_cf_hull_smooth_global_lh_single_noise_ceiling.gii": "1d0906285e1bd68826094b9478d89df5fc73d37c49343ea96052f3b80824523c",
+     "lh_cf_hull_smooth_global_lh_single_pol.gii": "4ad0e62bd96c6d9739bab8cf06cb592ac8ac18c81c90d70ddc675203e6c5e273",
+     "lh_cf_hull_smooth_global_lh_single_r^2.gii": "22ad43616b2ca24e20063db05f834f53e7a92d211d00789149bd29660a6ab634",
+     "lh_cf_hull_smooth_global_lh_single_suppression.gii": "06cb645a6bfd4a382d49e21eda85c6b2bf8ed26c794716461e29656e15bc3b6f",
+     "lh_cf_hull_smooth_global_lh_single_surround.gii": "bd1491559d70df97696afce12c45b238ffa70809f7bd76d0d1a55e4583cded1b",
+     "lh_cf_hull_smooth_global_lh_single_vx.gii": "d9e4449e6d0d695c21ba912ad421d3e4847e797a7b958555d8753359ff9923b2",
+     "lh_cf_hull_smooth_global_lh_single_x0.gii": "504e3b158070ab1603b55be633b567fa962c75b1a63661fe26a00f8298178161",
+     "lh_cf_hull_smooth_global_lh_single_y0.gii": "908ae56e3cff053a9147631512efd987c7d6ce0d2845f25382c83d67f2d9b523",
+     "maps.f64": "b506ad2f07f3c210701fa42d907aac150e8cfde02a16d8eef67eded9a20e989c"
+    }
+   },
    "cf_summary_lh_double": {
     "status": "succeeded",
     "files": {
@@ -785,6 +825,21 @@
      "lh_cf_summary_lh_double_x0.gii": "638824894897eeb186cad8c8c3b765a48ee7299458982a1d0777a53e0d44ee7d",
      "lh_cf_summary_lh_double_y0.gii": "382f4ddf9a8f84e915d51ff65faee115c85f81cf5f4553ce3531b163c43db91b",
      "maps.f64": "dc40071cb4160cebf82a8e13de93a7670a31b9702b5b7ac5fdc8ca7487b4354d"
+    }
+   },
+   "cf_summary_lh_single": {
+    "status": "succeeded",
+    "files": {
+     "lh_cf_summary_lh_single_ecc.gii": "69ada23be3900c61b6c22167a9119a519b2a54e08d93f5de04b2e8d05159dca9",
+     "lh_cf_summary_lh_single_fwhm.gii": "f1cd87b7171d69f729ee3b89247d42f50e6e0f7cf3288fd38e7b907aa64945fd",
+     "lh_cf_summary_lh_single_noise_ceiling.gii": "1d0906285e1bd68826094b9478d89df5fc73d37c49343ea96052f3b80824523c",
+     "lh_cf_summary_lh_single_pol.gii": "c6a6e078e458d486a1e2ab58dd5092c382846c5a0f1ca9eb3521a5f362fff7d7",
+     "lh_cf_summary_lh_single_r^2.gii": "4a4d91a5953538f7960abbf7f0fe0e2dabf414492c6125ba6ff26b101995e7c7",
+     "lh_cf_summary_lh_single_sigma.gii": "b40e6eb545aae34e8c02f575c09946f77e371e8cb2fa76675da467694c2c3a3b",
+     "lh_cf_summary_lh_single_vx.gii": "14c1000f8fd9635bd97a8133865d1e5b169cc462324294269410e85420c5824d",
+     "lh_cf_summary_lh_single_x0.gii": "638824894897eeb186cad8c8c3b765a48ee7299458982a1d0777a53e0d44ee7d",
+     "lh_cf_summary_lh_single_y0.gii": "382f4ddf9a8f84e915d51ff65faee115c85f81cf5f4553ce3531b163c43db91b",
+     "maps.f64": "697c40b460465357d2c5880737d70ea106b9b3975adfd1f6ff2ec67c983b5ff8"
     }
    },
    "prf_css_lh_double": {
@@ -805,6 +860,24 @@
      "maps.imag.f64": "2c2be29ec2f73f8f2092b241ac73b02b1b4ae9978675340d1f12cf27ef5962cc"
     }
    },
+   "prf_css_lh_single": {
+    "status": "succeeded",
+    "files": {
+     "lh_prf_css_lh_single_Css_baseline.gii": "d55e61d175967df8fb1582eaf1341e2e35ab4743f082fd45675de74964fadc92",
+     "lh_prf_css_lh_single_Css_beta.gii": "e34e571bb18751c29bb219c0974cce283664851f561a2be7a76a89d5ac198ec2",
+     "lh_prf_css_lh_single_Css_ecc.gii": "c91162a1bb08e06f0c2a378f6f701a9dd81b35efe118749d08b70071ad314ea8",
+     "lh_prf_css_lh_single_Css_exponent.gii": "fca08c1764600d567ec924c2b8ca24830c78aca5c13ac395512bddb72af4419c",
+     "lh_prf_css_lh_single_Css_noise_ceiling.gii": "1d0906285e1bd68826094b9478d89df5fc73d37c49343ea96052f3b80824523c",
+     "lh_prf_css_lh_single_Css_nr^2.gii": "70385f4b72866193e9c785b79e299797b9e98cd728ebe1574cdea98f0524419a",
+     "lh_prf_css_lh_single_Css_pol.gii": "e3fb1ff735fec0fdede41137859a359ed6dbb874670297810e9820521b067bdf",
+     "lh_prf_css_lh_single_Css_r^2.gii": "ca1ca3a7e51c782621274cbf657d145356db1bb05edfddf2b67a16d7ff61100c",
+     "lh_prf_css_lh_single_Css_sigma.gii": "44b629cc0cf8101eb29f47c091fd8d50180de20734d6ee794b09e72e65c85f63",
+     "lh_prf_css_lh_single_Css_x0.gii": "8ffe2f24cc37d41c7133deab4d7617efe481459872dfe4f6cd73abf0dc7b5f2c",
+     "lh_prf_css_lh_single_Css_y0.gii": "1f010983a975459dac327bb57a54e2a9d2829947efbfce04e204aa523ccfaaa4",
+     "maps.f64": "19debb327180da522c0f8a9a31bc5341609ac184ab02e3c584d2a3bb68c4026a",
+     "maps.imag.f64": "d97309597b9ee6aa452684946c0376263071e6cde2284fd5647eff17d7162a5c"
+    }
+   },
    "prf_custom_hrf_lh_double": {
     "status": "succeeded",
     "files": {
@@ -819,6 +892,22 @@
      "lh_prf_custom_hrf_lh_double_x0.gii": "e8e12397bf2995f65c1edf32d0b6beb43ab6a9367b5aafdea27f927e77139fe1",
      "lh_prf_custom_hrf_lh_double_y0.gii": "29cba72797d255b3c3a9456791f1fe6b53982c73c54c1f1b2d56541cedbe413e",
      "maps.f64": "93ee9758fce71233cdb278f8b9e15e5a5d95775b913800ef6cd0d022f786fbcd"
+    }
+   },
+   "prf_custom_hrf_lh_single": {
+    "status": "succeeded",
+    "files": {
+     "lh_prf_custom_hrf_lh_single_baseline.gii": "ac07089997c375e3daf6dd3d3a0c00c239b46010053584b9c62134b913006999",
+     "lh_prf_custom_hrf_lh_single_beta.gii": "cfd48896a2559340afad1a93b91b28bdc95dd129d68c9483dedc75f0c13e2d2c",
+     "lh_prf_custom_hrf_lh_single_ecc.gii": "3ff8c9e501e4db4ab5d753b00dfd94ce23c44ce7ac34f54e2d01a16c6dc71f57",
+     "lh_prf_custom_hrf_lh_single_noise_ceiling.gii": "1d0906285e1bd68826094b9478d89df5fc73d37c49343ea96052f3b80824523c",
+     "lh_prf_custom_hrf_lh_single_nr^2.gii": "fb7ffd3143a4abc3f970c89f0be076ff844fbd83cd29f0c4edeb9b439ccb47ee",
+     "lh_prf_custom_hrf_lh_single_pol.gii": "2c908c3f9518240a0bf9fc931797ddec017831aaab92fa9d7b6f81aa1dd05a90",
+     "lh_prf_custom_hrf_lh_single_r^2.gii": "361cef5e39092e20b3affbea7c9d0ea65759c6395a7241d9c54da2b7fc960123",
+     "lh_prf_custom_hrf_lh_single_sigma.gii": "f42071117e70e9691488c12c447b437811fe8202d31475de240f4d4bf66f87a7",
+     "lh_prf_custom_hrf_lh_single_x0.gii": "8543ddd0d0722dffe46b80a814e22f5df84252b200746b65fda44c9763a0ec43",
+     "lh_prf_custom_hrf_lh_single_y0.gii": "735dfa5816f71543a633b77599b414168dbfbc6c1c1ae2b8369a3953f7278991",
+     "maps.f64": "536a986c103c7bd793865b36e3e5c931f5bffca9068270004bb9514f7186d9d2"
     }
    },
    "prf_gaussian_lh_average_double": {
@@ -837,6 +926,22 @@
      "maps.f64": "835e9efdf83cb8e5343c9b1750bd1104b26219a97b9949edf543ca4c9237558a"
     }
    },
+   "prf_gaussian_lh_average_single": {
+    "status": "succeeded",
+    "files": {
+     "lh_prf_gaussian_lh_average_single_baseline.gii": "f781f9b3a72059fd7f092da33daa36a2d241e6d670251949ee1e285919b4a09e",
+     "lh_prf_gaussian_lh_average_single_beta.gii": "32a0a62cd58a3853173c06d1e296ab25d3ae73aa9bc27a9e4b9917e0b348a4be",
+     "lh_prf_gaussian_lh_average_single_ecc.gii": "b03cef2cf2a16ee380b230e8ed4a5221fe86733ee25afe6afc1708aa72b022b7",
+     "lh_prf_gaussian_lh_average_single_noise_ceiling.gii": "1d0906285e1bd68826094b9478d89df5fc73d37c49343ea96052f3b80824523c",
+     "lh_prf_gaussian_lh_average_single_nr^2.gii": "dd4d9accd040a3b92882b3c0087fdaf1a5f42c67f961d530c9739b3ef09f71c9",
+     "lh_prf_gaussian_lh_average_single_pol.gii": "96b10bd6454a523cc282b1709ba04b67087673132fe51f1b2070f7515d8555ba",
+     "lh_prf_gaussian_lh_average_single_r^2.gii": "312d4e4c2baa0af7179492089515eca9bd8f236ab01023077a75d9edb589f73f",
+     "lh_prf_gaussian_lh_average_single_sigma.gii": "816108c2a604f62573de5d1bfa70c1ee48a828e2e282a555d288c84d7b9d3b97",
+     "lh_prf_gaussian_lh_average_single_x0.gii": "5fbb04ff6fec9420f5b47c598a14950ee43a07e53a303d5c25c47bdc6913800b",
+     "lh_prf_gaussian_lh_average_single_y0.gii": "35ebd0f510e10fafaeb6708f7149bac9de1d64858b70c230fb401b32b643bd71",
+     "maps.f64": "248021357fc875b283082db3ce279fceb7740ad953c6d6b11f72bc2bebdac357"
+    }
+   },
    "prf_gaussian_lh_concatenate_double": {
     "status": "succeeded",
     "files": {
@@ -849,6 +954,20 @@
      "lh_prf_gaussian_lh_concatenate_double_x0.gii": "3b50ef369a743be7391b0e252c236972f238871909f9c66b58c31c8de0a959fe",
      "lh_prf_gaussian_lh_concatenate_double_y0.gii": "66a0b888fad36eadc9c47797f44124042c26b528a74ee49f1a97394d9c1b245a",
      "maps.f64": "93d7f9b79af83a8bdf5e9587cb9e69c41408c8c8e26272f2c698aec15bfe77c7"
+    }
+   },
+   "prf_gaussian_lh_concatenate_single": {
+    "status": "succeeded",
+    "files": {
+     "lh_prf_gaussian_lh_concatenate_single_baseline.gii": "95edfb54ba838067daa40d9d5cebd54d386d2f768770a46d808e3973e2cda928",
+     "lh_prf_gaussian_lh_concatenate_single_beta.gii": "cb9672ede0c56dd246124bc207409339297c5b0cc4385f1ea3cca46f500f735f",
+     "lh_prf_gaussian_lh_concatenate_single_ecc.gii": "4e1ea19162cd698b2e860a8ca339cfc549d08d318eaa8719bac51339f210a5a8",
+     "lh_prf_gaussian_lh_concatenate_single_pol.gii": "6d34a18bc72049b86c8643408e20670f287eac6f48cc96474151f9884e3bc52e",
+     "lh_prf_gaussian_lh_concatenate_single_r^2.gii": "635c2a860db0b42dc141d43d9383db38229c53294b236563d00b4a780995c8c2",
+     "lh_prf_gaussian_lh_concatenate_single_sigma.gii": "53c1c83a214fcb974a5fc92b8f451759b933467b85d8d7b56aa0bdaac799e0c5",
+     "lh_prf_gaussian_lh_concatenate_single_x0.gii": "0ecb7909ad51ad4037035c8afa7c6665c5e708c2f1db159b8859db07b83b61e4",
+     "lh_prf_gaussian_lh_concatenate_single_y0.gii": "93881021fc79f7bbe0fbaafb9db2e1fd4876ad23c322e18038c773bf7ebcdf28",
+     "maps.f64": "c8d6c183015b85a86d42f57837ab495fe012e772ff8c5e1faf89f22eb6b02bc3"
     }
    },
    "prf_gaussian_rh_double": {
@@ -865,6 +984,20 @@
      "rh_prf_gaussian_rh_double_y0.gii": "796144765b63ab09cab51f9cdd2e5a4c643104abc6e42dadd3ee8d8d349ccdc8"
     }
    },
+   "prf_gaussian_rh_single": {
+    "status": "succeeded",
+    "files": {
+     "maps.f64": "1788b6367b43907a1b835401e811870b387c9656f535afd5c03137f42d023317",
+     "rh_prf_gaussian_rh_single_baseline.gii": "0ba8bab560f3b0681b3d97385f3e8ff793e5ead43680ac566b70abfb0165ac57",
+     "rh_prf_gaussian_rh_single_beta.gii": "cf332f95cfe3f1c2fa5b29c6833997a7d2ed0446c04c14818ec13795e768a383",
+     "rh_prf_gaussian_rh_single_ecc.gii": "bf43077f2cd0c73d3409aeeb39ec41a9ab82b8a16dfd57e579d8c84d6939eb3e",
+     "rh_prf_gaussian_rh_single_pol.gii": "da59101d666e7850f1efb35960d064401e49e1f3ede0711dd42032cb38b37dbd",
+     "rh_prf_gaussian_rh_single_r^2.gii": "dbbac45e7ac579778748aa8ed0e65fbeabbce9aa65f41381f34ab6b4a5988682",
+     "rh_prf_gaussian_rh_single_sigma.gii": "dbc4a2483ebca8c7f170553a08b3dc954485b578e785d1126c37893d7b0cca96",
+     "rh_prf_gaussian_rh_single_x0.gii": "2aa34f4860a00154f3350e1cd7896df8f952dd9186bf02394ab3794595e72f13",
+     "rh_prf_gaussian_rh_single_y0.gii": "db0eb64ff73d0141f2a2210fedff5dfd29d5cf3d3109a038f656ad93347cca2c"
+    }
+   },
    "rc_custom_hrf_lh_double": {
     "status": "succeeded",
     "files": {
@@ -877,6 +1010,20 @@
      "lh_rc_custom_hrf_lh_double_Rcp_x0.gii": "51ab52873ea4620ab83360820a8d951a269b99647dbec10a5a57c04af4121aed",
      "lh_rc_custom_hrf_lh_double_Rcp_y0.gii": "092ea79d40962c387b5633174d3fc3849613a86eefaf96422e94af79b7884c09",
      "maps.f64": "8720856feb1e06ed1d58c7168f9e52f5bb3d809c458d066819897ccc82015e21"
+    }
+   },
+   "rc_custom_hrf_lh_single": {
+    "status": "succeeded",
+    "files": {
+     "lh_rc_custom_hrf_lh_single_Rcp_beta.gii": "e6f24406580cf8df113b78f3f3734746458ed8a249f2c41cdd0788d8ef155eff",
+     "lh_rc_custom_hrf_lh_single_Rcp_ecc.gii": "a8fce1050ca66fdab37d3e75553a8dcdd0d75816658c844357e7a44530d88eb0",
+     "lh_rc_custom_hrf_lh_single_Rcp_fwhm.gii": "7152d37465649b47f5032bbfe3214a7d30f6034d6c6ef752721241d0b6e6ca3a",
+     "lh_rc_custom_hrf_lh_single_Rcp_noise_ceiling.gii": "1d0906285e1bd68826094b9478d89df5fc73d37c49343ea96052f3b80824523c",
+     "lh_rc_custom_hrf_lh_single_Rcp_pol.gii": "e9c0b6fc41a5c0efe0a2ed69d9b44b127c24c32d07c327c372fea431a442780b",
+     "lh_rc_custom_hrf_lh_single_Rcp_r^2.gii": "5c089a811aeb37835ae0fdbf402caff65b1aba47e1bc3d26fe29a1986826a8f3",
+     "lh_rc_custom_hrf_lh_single_Rcp_x0.gii": "51ab52873ea4620ab83360820a8d951a269b99647dbec10a5a57c04af4121aed",
+     "lh_rc_custom_hrf_lh_single_Rcp_y0.gii": "092ea79d40962c387b5633174d3fc3849613a86eefaf96422e94af79b7884c09",
+     "maps.f64": "49af8003a2886d6e876f330d3ae228c0cd794007f8d1d73950ba5eb5e155bf35"
     }
    },
    "rc_gaussian_lh_double": {
@@ -894,6 +1041,10 @@
      "maps.f64": "4018b08960ce740b5dbc3f0a3bd05ccf042822050b96fd45f1cebb457c729648"
     }
    },
+   "rc_gaussian_lh_single": {
+    "status": "refused",
+    "message": "Data_Precision=single with a Prf_Function fit is not supported by this port"
+   },
    "rc_hull_lh_double": {
     "status": "succeeded",
     "files": {
@@ -906,6 +1057,20 @@
      "lh_rc_hull_lh_double_Rcp_x0.gii": "5538814f5951c9266fe85ff9e31b18204311628b1bb817cda3aa693397f8af7f",
      "lh_rc_hull_lh_double_Rcp_y0.gii": "cc985a84fed736daa49923e538674ab497bc048fc2406a0e63f4a564e7831a4f",
      "maps.f64": "f0016f19c6ffaac16da24509440ed1d52d6973ebcec7241cc49ef1978865c2d2"
+    }
+   },
+   "rc_hull_lh_single": {
+    "status": "succeeded",
+    "files": {
+     "lh_rc_hull_lh_single_Rcp_beta.gii": "13e9c56251077673deeab122c4c0e92940f86cae7c664c4a24ee762edbb1a14a",
+     "lh_rc_hull_lh_single_Rcp_ecc.gii": "72e52fe1cbc0dfdfaf7a20d7307b5a6aefb628d8262379a639555cfbfdda20e4",
+     "lh_rc_hull_lh_single_Rcp_fwhm.gii": "18060eb7a96375c40b4f22ce94bd2e9dfb61c50a7d942b6dc7f507bd800c7d4b",
+     "lh_rc_hull_lh_single_Rcp_noise_ceiling.gii": "1d0906285e1bd68826094b9478d89df5fc73d37c49343ea96052f3b80824523c",
+     "lh_rc_hull_lh_single_Rcp_pol.gii": "af0541e82312a7a51fcd69a87ac3b271fc1d8be236b811dabaa5a5646005467b",
+     "lh_rc_hull_lh_single_Rcp_r^2.gii": "a823e186f901d61114daffa0f102433c84a3297663c3b99dae88d3c215c8a164",
+     "lh_rc_hull_lh_single_Rcp_x0.gii": "5538814f5951c9266fe85ff9e31b18204311628b1bb817cda3aa693397f8af7f",
+     "lh_rc_hull_lh_single_Rcp_y0.gii": "cc985a84fed736daa49923e538674ab497bc048fc2406a0e63f4a564e7831a4f",
+     "maps.f64": "64cfcc808dda0721970429c02a1d63d1c5d8aaef0beb12ce0c34ba5dd98d104e"
     }
    }
   }

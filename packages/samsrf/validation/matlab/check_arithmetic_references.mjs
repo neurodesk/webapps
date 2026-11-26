@@ -14,7 +14,7 @@ const plan = JSON.parse(readFileSync(join(recording, 'plan.json')));
 const expected = JSON.parse(readFileSync(new URL('./arithmetic-reference-outputs.json', import.meta.url)));
 assert.equal(plan.runs.length, 24);
 for (const [reference, cases] of Object.entries(expected.references)) {
-  assert.equal(Object.keys(cases).length, reference === 'matlab-intel' ? 12 : 24);
+  assert.equal(Object.keys(cases).length, 24);
   for (const [id, wanted] of Object.entries(cases)) {
     const run = plan.runs.find((run) => run.id === id);
     assert.ok(run, id);

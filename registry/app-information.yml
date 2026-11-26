@@ -49,7 +49,7 @@ apps:
     packages:
       - { name: NiFreeze, url: https://github.com/nipreps/nifreeze, role: Gaussian-process and b0-template estimator reference at commit 3bcfb00 }
       - { name: ANTs WebAssembly, url: https://github.com/ANTsX/ANTs, role: float rigid registration and B-spline resampling }
-      - { name: MindGrab, url: https://www.npmjs.com/package/@brainchop/mindgrab, role: CPU brain mask of the mean b0 }
+      - { name: MindGrab, url: https://www.npmjs.com/package/@brainchop/core, role: CPU brain mask of the mean b0 }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
     citations:
       - group: Motion correction
@@ -827,9 +827,9 @@ apps:
 
   syncro:
     packages:
-      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: SynthSR and SynthStrip inference on the CPU }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: SynthSR inference on the CPU }
       - { name: WebGPU FP32 kernels, url: https://github.com/neurodesk/webapps/tree/main/packages/synthsr, role: SynthSR inference on the GPU }
-      - { name: MindGrab (brainchop), url: https://github.com/neuroneural/brainchop, role: default brain extraction }
+      - { name: MindGrab (brainchop), url: https://github.com/neuroneural/brainchop, role: brain extraction }
       - { name: greedy-rs (Rust/WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/exes/greedy, role: default Greedy-compatible affine and deformable registration }
       - { name: ANTs SyN (WebAssembly), url: https://github.com/ANTsX/ANTs, role: optional deformable registration to MNI space }
       - { name: niimath (WebAssembly), url: https://github.com/rordenlab/niimath, role: lesion preparation, thresholding and brain masking }
@@ -850,11 +850,6 @@ apps:
         reference: "Masoud M, Hu F, Plis S. Brainchop: in-browser MRI volumetric segmentation and rendering. Journal of Open Source Software. 2023;8(83):5098."
         doi: 10.21105/joss.05098
         code: https://github.com/neuroneural/brainchop
-      - group: Brain extraction
-        title: SynthStrip
-        reference: "Hoopes A, Mora JS, Dalca AV, Fischl B, Hoffmann M. SynthStrip: skull-stripping for any brain image. NeuroImage. 2022;260:119474."
-        doi: 10.1016/j.neuroimage.2022.119474
-        code: https://surfer.nmr.mgh.harvard.edu/docs/synthstrip/
       - group: Registration
         title: Greedy
         reference: "Greedy was created by Paul Yushkevich at the Penn Image Computing and Science Lab and is maintained by contributors to the Greedy C++ project [Computer software]."
@@ -1024,7 +1019,7 @@ apps:
       - Greedy performs affine or affine followed by deformable MRI registration locally in the browser. Custom inputs can be brain extracted with MindGrab before registration.
     packages:
       - { name: greedy-rs (Rust → WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/exes/greedy, role: affine and stationary-velocity deformable registration }
-      - { name: MindGrab (brainchop), url: https://github.com/neuroneural/brainchopC, role: brain extraction for custom inputs }
+      - { name: MindGrab (brainchop), url: https://github.com/neuroneural/brainchop-core, role: brain extraction for custom inputs }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
     citations:
@@ -1062,7 +1057,7 @@ apps:
   brain2print:
     packages:
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
-      - { name: MindGrab, url: https://www.npmjs.com/package/@brainchop/mindgrab, role: brain segmentation }
+      - { name: MindGrab, url: https://www.npmjs.com/package/@brainchop/core, role: brain segmentation }
       - { name: niimath, url: https://github.com/rordenlab/niimath, role: mesh generation }
       - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
     citations:
@@ -1143,7 +1138,7 @@ apps:
       - ANTs registers a moving image to a stationary image locally in the browser with an affine stage followed by SyN symmetric diffeomorphic registration. Custom inputs can be brain extracted with MindGrab before registration.
     packages:
       - { name: ANTs SyN (WebAssembly), url: https://github.com/ANTsX/ANTs, role: affine and diffeomorphic registration }
-      - { name: MindGrab (brainchop), url: https://github.com/neuroneural/brainchopC, role: brain extraction for custom inputs }
+      - { name: MindGrab (brainchop), url: https://github.com/neuroneural/brainchop-core, role: brain extraction for custom inputs }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
     citations:
@@ -1190,7 +1185,7 @@ apps:
       - FireANTs performs diffeomorphic brain-image registration locally in the browser with CPU or WebGPU execution and Greedy or SyN transform presets.
     packages:
       - { name: "@fireants/fireants (C/WebAssembly)", url: https://www.npmjs.com/package/@fireants/fireants, role: CPU and WebGPU image registration }
-      - { name: MindGrab (brainchop), url: https://github.com/neuroneural/brainchopC, role: brain extraction for custom inputs }
+      - { name: MindGrab (brainchop), url: https://github.com/neuroneural/brainchop-core, role: brain extraction for custom inputs }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
     citations:
@@ -1338,10 +1333,11 @@ apps:
       - Unedited fits widen LCModel's line-broadening prior (DESDT2 2, RFWBAS 80). With the narrow-line simulated basis sets, LCModel's defaults scale water-referenced concentrations 8-15 % low; the widened prior recovers synthetic spectra of known concentration and agrees with an independent fitter (spant). LCModel's own priors stay one setting away.
       - In GABA-edited MEGA-PRESS the fit separates GABA from co-edited macromolecules (MM3co) with a soft constraint to the macromolecule peak at 0.915 ppm, following Zöllner et al. (2022). GABA+ (GABA + MM3co) is robust; the split between GABA and MM3co rests on the model's assumptions.
       - With a T1 image from the same session, MindMap segments it in the browser, the voxel is placed from the spectroscopy header and drawn on the T1, and concentrations are corrected for the voxel's grey matter, white matter and CSF as in Gasparovic et al. 2006, with Osprey's constants.
+      - For functional MRS (fMRS), unaveraged multi-transient unedited acquisitions can be binned into sliding windows, event blocks or condition-pooled spectra from a BIDS events.tsv or CSV schedule while preserving transient timestamps and sharing a single compatible water reference (including Siemens OnlyRFoff scans). Optional BOLD linewidth matching equalises bin linewidths via exponential broadening before fitting, LCModel settings expose empirical macromolecule fitting (nsimul=0) and baseline stiffness (dkntmn), and the Time course view reports QC trajectories, windowed temporal GLMs and a two-stage fixed-template dynamic spectral projection GLM across all kept complex transients (inspired by Clarke et al. 2024, with Newey-West HAC standard errors conditional on the grand-mean templates).
     packages:
       - { name: LCModel 6.3-1N (Rust port), url: https://github.com/schorschinho/LCModel, role: linear-combination model fitting }
       - { name: FID-A (Rust port), url: https://github.com/CIC-methods/FID-A, role: preprocessing, file readers and basis-set simulation }
-      - { name: MindMap (@brainchop/mindgrab), url: https://www.npmjs.com/package/@brainchop/mindgrab, role: grey matter, white matter and CSF partial-volume maps of the T1 }
+      - { name: MindMap (@brainchop/core), url: https://www.npmjs.com/package/@brainchop/core, role: grey matter, white matter and CSF partial-volume maps of the T1 }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: T1 viewer with the voxel overlay }
       - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: T1 DICOM to NIfTI conversion }
     citations:
@@ -1400,6 +1396,14 @@ apps:
         reference: "Clarke WT, Bell TK, Emir UE, Mikkelsen M, Oeltzschner G, Shamaei A, Soher BJ, Wilson M. NIfTI-MRS: A standard data format for magnetic resonance spectroscopy. Magn Reson Med. 2022;88(6):2358-2370."
         doi: 10.1002/mrm.29418
         code: https://github.com/wtclarke/spec2nii
+      - group: Functional spectroscopy
+        title: 7 T fMRS and BOLD linewidth matching
+        reference: "Bednařík P, Tkáč I, Giove F, DiNuzzo M, Deelchand DK, Emir UE, Eberly LE, Mangia S. Neurochemical and BOLD responses during neuronal activation measured in the human visual cortex at 7 Tesla. J Cereb Blood Flow Metab. 2015;35(4):601-610."
+        doi: 10.1038/jcbfm.2014.233
+      - group: Functional spectroscopy
+        title: Dynamic (2D) spectral fitting
+        reference: "Clarke WT, Ligneul C, Cottaar M, Ip IB, Jbabdi S. Universal dynamic fitting of magnetic resonance spectroscopy. Magn Reson Med. 2024;91(6):2229-2246."
+        doi: 10.1002/mrm.30001
       - group: DICOM conversion
         title: dcm2niix
         reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47-56."
@@ -2305,14 +2309,24 @@ apps:
 
   brainchop:
     packages:
+      - { name: "@brainchop/core", url: https://www.npmjs.com/package/@brainchop/core, role: "MindMap-24, MindMap-16, MindSnap-104 and CAT-lite tissue fraction inference on WebGPU, WebGL2 and CPU WASM" }
+      - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
-      - { name: Brainchop, url: https://brainchop.org/, role: whole brain segmentation }
-      - { name: TensorFlow.js, url: https://www.tensorflow.org/js, role: WebGL inference }
     citations:
       - group: Segmentation
         title: Brainchop
         reference: "Masoud M, Hu F, Plis S. Brainchop: in-browser MRI volumetric segmentation and rendering. JOSS. 2023;8(83):5098."
-        url: https://doi.org/10.21105/joss.05098
+        doi: 10.21105/joss.05098
+      - group: Segmentation
+        title: Brainchop v4 / MindGrab MeshNet
+        reference: "Fani N, Masoud M, Hu F, Plis S, Rorden C. Brainchop: fast, compact in-browser 3D neuroimaging segmentation. NeuroImage. 2026;122074."
+        doi: 10.1016/j.neuroimage.2026.122074
+        code: https://github.com/neuroneural/brainchop-core
+      - group: Conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+        code: https://github.com/rordenlab/dcm2niix
       - group: Visualization
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
@@ -2320,17 +2334,22 @@ apps:
 
   stardist:
     packages:
-      - { name: StarDist, url: https://github.com/stardist/stardist, role: "pretrained 2D_versatile_fluo model (BSD-3-Clause); tiling, non-maximum suppression and label drawing ported from stardist 0.9.1 and csbdeep 0.8.1" }
+      - { name: StarDist, url: https://github.com/stardist/stardist, role: "pretrained 2D_versatile_fluo, 2D_versatile_he, 2D_paper_dsb2018 and 3D_demo models (BSD-3-Clause); 2D and 3D tiling, non-maximum suppression and label drawing ported from stardist 0.9.1 and csbdeep 0.8.1" }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on the CPU (WebAssembly) }
-      - { name: Clipper, url: https://www.angusj.com/clipper2/Docs/Overview.htm, role: "polygon intersection for non-maximum suppression (clipper-lib 6.4.2, the JavaScript port of the Clipper 6.4.2 that StarDist uses)" }
-      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
+      - { name: Clipper, url: https://www.angusj.com/clipper2/Docs/Overview.htm, role: "polygon intersection for 2D non-maximum suppression (clipper-lib 6.4.2, the JavaScript port of the Clipper 6.4.2 that StarDist uses)" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "2D and 3D TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
       - { name: fast-png, url: https://github.com/image-js/fast-png, role: PNG reading }
-      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: 2D and 3D image viewer }
     citations:
       - group: Nucleus segmentation
-        title: StarDist
+        title: StarDist (2D)
         reference: "Schmidt U, Weigert M, Broaddus C, Myers G. Cell detection with star-convex polygons. Medical Image Computing and Computer Assisted Intervention (MICCAI 2018). Lecture Notes in Computer Science 11071. 2018:265–273."
         doi: 10.1007/978-3-030-00934-2_30
+        code: https://github.com/stardist/stardist
+      - group: Nucleus segmentation
+        title: StarDist 3D
+        reference: "Weigert M, Schmidt U, Haase R, Sugawara K, Myers G. Star-convex polyhedra for 3D object detection and segmentation in microscopy. IEEE Winter Conference on Applications of Computer Vision (WACV 2020). 2020:3666–3673."
+        doi: 10.1109/WACV45572.2020.9093435
         code: https://github.com/stardist/stardist
       - group: Nucleus segmentation
         title: CSBDeep (normalization and tiled prediction)
@@ -2341,6 +2360,11 @@ apps:
         title: 2018 Data Science Bowl (BBBC038)
         reference: "Caicedo JC, Goodman A, Karhohs KW, et al. Nucleus segmentation across imaging experiments: the 2018 Data Science Bowl. Nature Methods. 2019;16(12):1247–1253."
         doi: 10.1038/s41592-019-0612-7
+      - group: Example data
+        title: Human skin H&E histology (scikit-image skin, Public Domain)
+        reference: "van der Walt S, Schönberger JL, Nunez-Iglesias J, et al. scikit-image: image processing in Python. PeerJ. 2014;2:e453. Includes human epidermis and dermis H&E histology by Kilbad (Wikimedia Commons, public domain / CC0-1.0)."
+        doi: 10.7717/peerj.453
+        url: https://en.wikipedia.org/wiki/File:Normal_Epidermis_and_Dermis_with_Intradermal_Nevus_10x.JPG
       - group: Browser inference
         title: ONNX Runtime Web
         reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
@@ -2609,7 +2633,7 @@ apps:
 
   microsam:
     packages:
-      - { name: micro-sam, url: https://github.com/computational-cell-analytics/micro-sam, role: "light-microscopy generalist ViT-T model (vit_t_lm, CC BY 4.0); preprocessing and prompt handling ported from micro-sam 1.8.14 (MIT)" }
+      - { name: micro-sam, url: https://github.com/computational-cell-analytics/micro-sam, role: "light-microscopy (vit_t_lm) and EM organelle (vit_t_em_organelles) ViT-T models (CC BY 4.0); 2D/3D preprocessing, prompting and Z-stack propagation ported from micro-sam (MIT)" }
       - { name: MobileSAM, url: https://github.com/ChaoningZhang/MobileSAM, role: "TinyViT image encoder and the ONNX prompt decoder graph (Apache-2.0)" }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on WebGPU or the CPU (WebAssembly) }
       - { name: Pillow, url: https://github.com/python-pillow/Pillow, role: "bilinear resampling ported from Pillow 13.0.0 (MIT-CMU), as micro-sam resizes images" }
@@ -2843,6 +2867,439 @@ apps:
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
 
+  cellpose:
+    packages:
+      - { name: Cellpose, url: https://github.com/MouseLand/cellpose, role: "pretrained cyto3 and nuclei models (BSD-3-Clause; cyto3 and nuclei training sets include CC-BY-NC datasets); 2D/3D tiling, gradient flow tracking, flow-error filtering and hole filling ported from cellpose 3.1.1.1" }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on the CPU (WebAssembly) }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "2D and 3D TIFF and OME-TIFF reading (@neurodesk/webapp-components/file-io/tiff)" }
+      - { name: fast-png, url: https://github.com/image-js/fast-png, role: PNG reading }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: 2D and 3D image viewer }
+    citations:
+      - group: Cell segmentation
+        title: Cellpose
+        reference: "Stringer C, Wang T, Michaelos M, Pachitariu M. Cellpose: a generalist algorithm for cellular segmentation. Nature Methods. 2021;18(1):100–106."
+        doi: 10.1038/s41592-020-01018-x
+        code: https://github.com/MouseLand/cellpose
+      - group: Cell segmentation
+        title: Cellpose3 (cyto3)
+        reference: "Stringer C, Pachitariu M. Cellpose3: one-click image restoration for improved cellular segmentation. Nature Methods. 2025;22(3):592–599."
+        doi: 10.1038/s41592-025-02595-5
+        code: https://github.com/MouseLand/cellpose
+      - group: Example data
+        title: Allen Institute for Cell Science (cells3d via scikit-image)
+        reference: "van der Walt S, Schönberger JL, Nunez-Iglesias J, et al. scikit-image: image processing in Python (cells3d fluorescence volume from the Allen Institute for Cell Science, CC0 1.0). PeerJ. 2014;2:e453."
+        doi: 10.7717/peerj.453
+        url: https://scikit-image.org/docs/stable/api/skimage.data.html#skimage.data.cells3d
+      - group: Browser inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  tumour-report:
+    about:
+      - "Segment contrast-enhancing brain tumours (glioblastoma, meningioma and brain metastases) on a single native-space post-contrast T1-weighted MRI (T1c) using the Raidionics v1.3 brain and tumour-core 3D AGU-Net models, or characterise an existing native-space binary tumour mask."
+      - "Native-space morphometry reports 26-connected per-lesion volume, physical RAS centroid, exact IBSI mesh 3D diameter, IBSI Marching Cubes surface area and sphericity, mask-supported axial bidimensional diameters (with a ≥10 × 10 mm measurability flag) and native minimum-surface-distance multifocality (distinct from Raidionics' MNI 6-CC HD95 multifocality). Optional MNI ICBM152 2009a alignment via Greedy WebAssembly adds hemispheric laterality, midline crossing, cortical lobe and Schaefer 7/17 network overlap, exact 3D EDT voxel-centre distance and overlap across 64 BCB subcortical white-matter tracts (distinct from Raidionics' tract HD95), and the Kommers et al. (2021) resectability index for glioblastoma."
+      - "On the BEAMSTER native T1c example, the native tumour mask matches the pinned dbouget/raidionics-rads:v1.3.2-py39-cpu container with Dice 1.00000 in Node (0 differing voxels) and Dice 0.99971 in Chromium WASM (3 differing boundary voxels out of 65.5M); packages/tumour-report/README.md lists the validation measurements."
+      - "Outputs are research estimates, not for clinical diagnosis or surgical planning. Verify all masks and atlas locations against the source MRI."
+    packages:
+      - { name: Raidionics, url: https://github.com/raidionics/Raidionics-models, role: brain and contrast-enhancing tumour-core 3D AGU-Net models (v1.3) and RADS atlases }
+      - { name: Greedy, url: https://github.com/pyushkevich/greedy, role: MNI ICBM152 2009a affine and deformable image registration in WebAssembly }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: neural network inference on WebGPU or WebAssembly CPU }
+      - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Tumour segmentation and RADS reporting
+        title: Raidionics
+        reference: "Bouget D, Alsinan D, Gaitan V, Helland RH, Pedersen A, Solheim O, Reinertsen I. Raidionics: an open software for pre- and postoperative central nervous system tumor segmentation and standardized reporting. Scientific Reports. 2023;13:15570."
+        doi: 10.1038/s41598-023-42048-7
+        code: https://github.com/raidionics/Raidionics
+      - group: Tumour segmentation and RADS reporting
+        title: Preoperative glioma segmentation and standardized reporting
+        reference: "Bouget D, Pedersen A, Jakola AS, Kavouridis V, Emblem KE, Eijgelaar RS, Kommers I, Ardon H, Barkhof F, Bello L, Berger MS, Conti Nibali M, Furtner J, Hervey-Jumper S, Idema AJS, Kiesel B, Kloet A, Mandonnet E, Müller DMJ, Robe PA, Rossi M, Sciortino T, van den Brink WA, Wagemakers M, Widhalm G, Witte MG, Zwinderman AH, De Witt Hamer PC, Solheim O, Reinertsen I. Preoperative brain tumor imaging: models and software for segmentation and standardized reporting. Frontiers in Neurology. 2022;13:932219."
+        doi: 10.3389/fneur.2022.932219
+        code: https://github.com/raidionics/raidionics_rads_lib
+      - group: Tumour segmentation and RADS reporting
+        title: Glioblastoma resectability atlas
+        reference: "Kommers I, Bouget D, Pedersen A, Eijgelaar RS, Ardon H, Barkhof F, Bello L, Berger MS, Conti Nibali M, Furtner J, Hervey-Jumper S, Idema AJS, Kiesel B, Kloet A, Mandonnet E, Müller DMJ, Robe PA, Rossi M, Sagberg LM, Sciortino T, van den Brink WA, Wagemakers M, Widhalm G, Witte MG, Zwinderman AH, Reinertsen I, Solheim O, De Witt Hamer PC. Glioblastoma surgery imaging-reporting and data system: standardized reporting of tumor volume, location, and resectability based on automated segmentations. Neuro-Oncology. 2021;23(11):1945–1955."
+        doi: 10.1093/neuonc/noab026
+      - group: Anatomical atlases and registration
+        title: MNI ICBM152 2009a template
+        reference: "Fonov V, Evans AC, Botteron K, Almli CR, McKinstry RC, Collins DL. Unbiased average age-appropriate atlases for pediatric studies. NeuroImage. 2011;54(1):313–327."
+        doi: 10.1016/j.neuroimage.2010.07.033
+      - group: Anatomical atlases and registration
+        title: Schaefer cortical parcellation
+        reference: "Schaefer A, Kong R, Gordon EM, Laumann TO, Zuo XN, Holmes AJ, Eickhoff SB, Yeo BTT. Local-global parcellation of the human cerebral cortex from intrinsic functional connectivity MRI. Cerebral Cortex. 2018;28(9):3095–3114."
+        doi: 10.1093/cercor/bhx179
+      - group: Anatomical atlases and registration
+        title: BCBtoolkit white-matter tract atlas
+        reference: "Foulon C, Cerliani L, Kinkingnéhun S, Levy R, Rosso C, Urbanski M, Volle E, Thiebaut de Schotten M. Advanced lesion symptom mapping analyses and implementation as BCBtoolkit. GigaScience. 2018;7(3):giy004."
+        doi: 10.1093/gigascience/giy004
+      - group: Anatomical atlases and registration
+        title: Greedy registration
+        reference: "Yushkevich PA, Pluta J, Wang H, Wisse LEM, Das S, Wolk D. Fast automatic segmentation of hippocampal subfields and medial temporal lobe subregions in 3 Tesla and 7 Tesla T2-weighted MRI. Alzheimer's & Dementia. 2016;12(7):P126–P127."
+        url: https://sites.google.com/view/greedyreg/about
+        code: https://github.com/pyushkevich/greedy
+      - group: Inference and conversion
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
+      - group: Inference and conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+        code: https://github.com/rordenlab/dcm2niix
+      - group: Example data
+        title: BEAMSTER brain metastases cohort
+        reference: "BEAMSTER: Brain Metastases Stereotactic Radiosurgery MRI dataset. Figshare. 2025."
+        doi: 10.6084/m9.figshare.29365844.v1
+      - group: Example data
+        title: UPENN-GBM
+        reference: "Bakas S, Sako C, Akbari H, et al. The University of Pennsylvania glioblastoma (UPenn-GBM) cohort: advanced MRI, clinical, genomics, & radiomics. Scientific Data. 2022;9:453."
+        doi: 10.1038/s41597-022-01560-7
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  denoise:
+    about:
+      - "Aydin FGR implements Noise2Self (Batson & Royer, ICML 2019) using strictly blind-spot (J-invariant) multiscale features — directional pairs, 8-neighbour statistics, cancellation-free hollow donut rings and off-plane 3D/2D+T neighbours — so for fixed normalization and a fixed fitted model f, f(F(x))_i never reads voxel x_i. As in Aydin, global normalization and histogram gradient-boosted trees or cross-validated Ridge regression are fit directly on the image with an in-image holdout split for early stopping and regularisation selection, requiring no external training data or pretrained weights."
+      - "Zero-Shot Noise2Noise (Mansour & Heckel, CVPR 2023) is a browser adaptation using the paper's 2-layer residual CNN and symmetric residual plus consistency objective on diagonal 2×2 downsampled sub-image pairs. When a hardware WebGPU adapter is available, training and tiled inference run on WGSL compute shaders with automatic CPU fallback; defaults are 16 channels, 48×48 random crops and 200 Adam steps (up to 48 channels and 1500 steps configurable in Advanced settings)."
+      - "Anscombe VST + Non-Local Means provides a classical Poisson-Gaussian baseline: it estimates shot-noise gain and Gaussian readout noise from smooth-region diagonal Haar wavelet details (Foi et al. 2008), stabilizes intensity-dependent variance with the Generalized Anscombe Transform (Makitalo & Foi 2013), applies fast integral-image Non-Local Means with mirror-padded patches (Buades et al. 2005; Darbon et al. 2008) and maps back via a continuous, monotone closed-form approximation to the unbiased inverse (Makitalo & Foi Eq. 21 with a continuous low-count quadratic ramp below the asymptotic branch)."
+      - "Every run writes the denoised image (float32 calibrated TIFF and NIfTI) and the noise residual map (input minus denoised), and reports estimated Haar noise-floor reduction and per-axis residual lag-1 autocorrelation in the Analysis console to help screen for over-smoothing."
+    packages:
+      - { name: "@neurodesk/denoise", url: https://github.com/neurodesk/webapps/tree/main/packages/denoise, role: "Aydin FGR (J-invariant features, histogram GBDT and Ridge), Zero-Shot Noise2Noise CNN (CPU and WebGPU), Generalized Anscombe VST, fast integral-image Non-Local Means, and portable Node command line" }
+      - { name: geotiff.js, url: https://github.com/geotiffjs/geotiff.js, role: "TIFF and OME-TIFF decoding through @neurodesk/webapp-components/file-io/tiff" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Self-supervised denoising
+        title: Noise2Self (J-invariant self-supervised denoising)
+        reference: "Batson J, Royer L. Noise2Self: blind denoising by self-supervision. Proceedings of the 36th International Conference on Machine Learning (ICML). 2019;PMLR 97:524–533."
+        url: https://proceedings.mlr.press/v97/batson19a.html
+      - group: Self-supervised denoising
+        title: Aydin (Feature Generation & Regression)
+        reference: "Royer Lab. Aydin: user-friendly, feature-rich, and fast image denoising [Computer software]."
+        url: https://github.com/royerlab/aydin
+      - group: Self-supervised denoising
+        title: Zero-Shot Noise2Noise (ZS-N2N)
+        reference: "Mansour Y, Heckel R. Zero-Shot Noise2Noise: efficient image denoising without any data. Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). 2023:14018–14027."
+        doi: 10.1109/CVPR52729.2023.01347
+      - group: Classical Poisson-Gaussian denoising
+        title: Non-Local Means
+        reference: "Buades A, Coll B, Morel JM. A non-local algorithm for image denoising. Proceedings of the IEEE Computer Society Conference on Computer Vision and Pattern Recognition (CVPR). 2005;2:60–65."
+        doi: 10.1109/CVPR.2005.38
+      - group: Classical Poisson-Gaussian denoising
+        title: Fast integral-image Non-Local Means
+        reference: "Darbon J, Cunha A, Chan TF, Osher S, Jensen GJ. Fast nonlocal filtering applied to electron cryomicroscopy. 5th IEEE International Symposium on Biomedical Imaging (ISBI). 2008:1331–1334."
+        doi: 10.1109/ISBI.2008.4541250
+      - group: Classical Poisson-Gaussian denoising
+        title: Generalized Anscombe variance-stabilizing transform
+        reference: "Makitalo M, Foi A. Optimal inversion of the generalized Anscombe transformation for Poisson-Gaussian noise. IEEE Transactions on Image Processing. 2013;22(1):91–103."
+        doi: 10.1109/TIP.2012.2202675
+      - group: Classical Poisson-Gaussian denoising
+        title: Poisson-Gaussian noise estimation
+        reference: "Foi A, Trimeche M, Katkovnik V, Egiazarian K. Practical Poissonian-Gaussian noise modeling and fitting for single-image raw-data. IEEE Transactions on Image Processing. 2008;17(10):1737–1754."
+        doi: 10.1109/TIP.2008.2001399
+      - group: Example data
+        title: 2018 Data Science Bowl (BBBC038)
+        reference: "Caicedo JC, Goodman A, Karhohs KW, et al. Nucleus segmentation across imaging experiments: the 2018 Data Science Bowl. Nature Methods. 2019;16(12):1247–1253."
+        doi: 10.1038/s41592-019-0612-7
+      - group: Example data
+        title: Deconvolution Test Dataset (HeLa phalloidin-488 confocal)
+        reference: "Guiet R. Deconvolution Test Dataset. Zenodo. 2021. CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)."
+        doi: 10.5281/zenodo.5101351
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  totalsegmentator:
+    about:
+      - "Segment major organs, bones, vertebrae and muscles in 3D CT and MRI scans with TotalSegmentator v2, running nnU-Net v2 models directly in your browser on WebGPU or WebAssembly. Scans are automatically reoriented to canonical RAS for inference, resampled to the model's spacing, and restored to the input scan's exact orientation and voxel grid on output."
+      - "Includes openly licensed Apache-2.0 models from wasserth/TotalSegmentator: whole-body CT (117 structures, 3 mm fast or 1.5 mm 5-part full resolution with selectable anatomical subsets), whole-body MRI (50 structures, 3 mm fast or 1.5 mm 2-part full resolution), MRI vertebrae (25 structures), and CT abdominal muscles (22 T4–L4 muscles, automatically cropped to the trunk using the 6 mm body model). License-gated commercial TotalSegmentator tasks (appendicular_bones, tissue_types, thigh_shoulder_muscles) are not mirrored here."
+      - "The Results view and downloadable TSV report each detected structure's volume in mL along with mean and standard deviation Hounsfield units (CT) or signal intensity (MRI). Outputs are research estimates, not a clinical diagnosis."
+    packages:
+      - { name: TotalSegmentator, url: https://github.com/wasserth/TotalSegmentator, role: "whole-body CT, whole-body MRI, MRI vertebrae and CT abdominal muscle models (Apache-2.0, v2.0.0-weights and v2.5.0-weights)" }
+      - { name: nnU-Net, url: https://github.com/MIC-DKFZ/nnUNet, role: "preprocessing, CT/MR normalization and sliding-window prediction ported to JavaScript" }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: "3D U-Net inference on WebGPU or WebAssembly" }
+      - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: "local DICOM to NIfTI conversion" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: "multiplanar image and label viewer" }
+    citations:
+      - group: Whole-body CT segmentation
+        title: TotalSegmentator
+        reference: "Wasserthal J, Breit HC, Meyer MT, Pradella M, Hinck D, Sauter AW, Heye T, Boll DT, Cyriac J, Yang S, Bach M, Segeroth M. TotalSegmentator: Robust Segmentation of 104 Anatomic Structures in CT Images. Radiology: Artificial Intelligence. 2023;5(5):e230024."
+        doi: 10.1148/ryai.230024
+        code: https://github.com/wasserth/TotalSegmentator
+      - group: Whole-body MRI segmentation
+        title: TotalSegmentator MRI
+        reference: "D'Antonoli TA, Berger LK, Indrakanti AK, Vishwanathan N, Weiss J, Jung M, Berkarda Z, Rau A, Reisert M, Küstner T, Walter A, Segeroth M, Sperl JI, Wasserthal J. TotalSegmentator MRI: Robust Sequence-Independent Segmentation of Multiple Anatomic Structures in MRI. Radiology. 2025;314(2):e241613."
+        doi: 10.1148/radiol.241613
+        code: https://github.com/wasserth/TotalSegmentator
+      - group: Abdominal and trunk muscles
+        title: Trunk musculature segmentation (abdominal_muscles)
+        reference: "Hong V, Pieper S, James J, Anderson DE, Pinter C, Chang YS, Aslan B, Kozono D, Doyle PF, Caplan S, Kang H, Balboni T, Spektor A, Huynh MA, Keko M, Kikinis R, Hackney DB, Alkalay RN. Automated Segmentation of Trunk Musculature with a Deep CNN Trained from Sparse Annotations in Radiation Therapy Patients with Metastatic Spine Disease. medRxiv. 2025."
+        doi: 10.1101/2025.01.13.25319967
+        code: https://github.com/wasserth/TotalSegmentator
+      - group: Segmentation framework
+        title: nnU-Net
+        reference: "Isensee F, Jaeger PF, Kohl SAA, Petersen J, Maier-Hein KH. nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature Methods. 2021;18(2):203–211."
+        doi: 10.1038/s41592-020-01008-z
+        code: https://github.com/MIC-DKFZ/nnUNet
+      - group: Browser inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+        code: https://github.com/rordenlab/dcm2niix
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  medsam2:
+    packages:
+      - { name: MedSAM2, url: https://github.com/bowang-lab/MedSAM2, role: "3D medical image interactive segmentation model (sam2.1_hiera_t512, MedSAM2_latest.pt, CC BY-SA 4.0)" }
+      - { name: SAM 2, url: https://github.com/facebookresearch/sam2, role: "Hiera-Tiny image encoder, prompt decoder, memory encoder and memory attention architecture (Apache-2.0)" }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: model inference on WebGPU or the CPU (WebAssembly) }
+      - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion in WebAssembly }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: 3D medical image viewer and mask editor host }
+    citations:
+      - group: Interactive 3D segmentation
+        title: MedSAM2
+        reference: "Ma J, Yang Z, Kim S, et al. MedSAM2: Segment Anything in 3D Medical Images and Videos. arXiv:2504.03600. 2025."
+        doi: 10.48550/arXiv.2504.03600
+        code: https://github.com/bowang-lab/MedSAM2
+      - group: Interactive 3D segmentation
+        title: SAM 2
+        reference: "Ravi N, Gabeur V, Hu Y-T, et al. SAM 2: Segment Anything in Images and Videos. arXiv:2408.00714. 2024."
+        doi: 10.48550/arXiv.2408.00714
+        code: https://github.com/facebookresearch/sam2
+      - group: Conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Browser inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  brainchomp:
+    packages:
+      - { name: Brainchomp (brainchomp-lib), url: https://github.com/neuroneural/brainchomp, role: rodent skull stripping on WebGPU, WebGL2 and threaded CPU WASM }
+      - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Rodent brain extraction
+        title: Brainchomp
+        reference: "NeuroNeural Contributors. Brainchomp: browser-based rodent brain extraction with WebGPU and WebGL2 [Computer software]."
+        url: https://brainchomp.org/
+        code: https://github.com/neuroneural/brainchomp
+      - group: Rodent brain extraction
+        title: Brainchop
+        reference: "Masoud M, Hu F, Plis S. Brainchop: in-browser MRI volumetric segmentation and rendering. JOSS. 2023;8(83):5098."
+        doi: 10.21105/joss.05098
+      - group: Conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+        code: https://github.com/rordenlab/dcm2niix
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  dermoscope:
+    about:
+      - "Dermoscope ABCD preprocesses dermoscopic skin-lesion photographs, segments the lesion border, and computes quantitative ABCD dermoscopy morphometrics locally in your browser. Preprocessing removes dark hair artifacts with DullRazor directional morphological closing and inpainting, estimates illuminant color constancy with Shades of Gray (Minkowski p-norm), and masks dark circular dermoscope rims before multi-channel Otsu segmentation."
+      - "Quantitative metrics follow the ABCD rule of dermatoscopy (Nachbar & Stolz 1994; Kasmi & Mokrani 2016): principal-axis shape and CIELAB color asymmetry (A), 8-sector radial border abruptness and compactness (B), 6-color dermoscopic palette proportions in CIELAB (C), and equivalent diameter plus differential-structure count for an educational Total Dermoscopy Score (TDS). Research and educational tool only; not a medical device or clinical diagnosis."
+    packages:
+      - { name: "Canvas 2D Viewer & Web Worker pipeline", url: https://github.com/neurodesk/webapps/tree/main/apps/dermoscope, role: "DullRazor hair removal, Shades of Gray color constancy, Otsu segmentation, ABCD morphometry and interactive 2D viewer" }
+      - { name: fast-png, url: https://github.com/image-js/fast-png, role: "PNG encoding and decoding" }
+    citations:
+      - group: Hair removal
+        title: DullRazor
+        reference: "Lee T, Ng V, Gallagher R, Coldman A, McLean D. DullRazor: A software approach to hair removal from images. Computers in Biology and Medicine. 1997;27(6):533–543."
+        doi: 10.1016/s0010-4825(97)00020-6
+      - group: Color constancy
+        title: Shades of Gray color constancy
+        reference: "Finlayson GD, Trezzi E. Shades of gray and colour constancy. Color and Imaging Conference. 2004;12(1):37–41."
+        doi: 10.2352/CIC.2004.12.1.art00008
+      - group: Color constancy
+        title: Color constancy in dermoscopy
+        reference: "Barata C, Celebi ME, Marques JS. Improving dermoscopy image classification using color constancy. IEEE Journal of Biomedical and Health Informatics. 2015;19(3):1146–1152."
+        doi: 10.1109/JBHI.2014.2336473
+      - group: Segmentation
+        title: Otsu thresholding
+        reference: "Otsu N. A threshold selection method from gray-level histograms. IEEE Transactions on Systems, Man, and Cybernetics. 1979;9(1):62–66."
+        doi: 10.1109/TSMC.1979.4310076
+      - group: Dermoscopy scoring
+        title: ABCD rule of dermatoscopy
+        reference: "Nachbar F, Stolz W, Merkle T, et al. The ABCD rule of dermatoscopy: high prospective value in the diagnosis of doubtful melanocytic skin lesions. Journal of the American Academy of Dermatology. 1994;30(4):551–559."
+        doi: 10.1016/s0190-9622(94)70061-3
+      - group: Dermoscopy scoring
+        title: Automated ABCD rule implementation
+        reference: "Kasmi R, Mokrani K. Classification of malignant melanoma and benign skin lesions: implementation of automatic ABCD rule. IET Image Processing. 2016;10(6):448–455."
+        doi: 10.1049/iet-ipr.2015.0385
+      - group: Example data
+        title: ISIC Archive (CC-0)
+        reference: "International Skin Imaging Collaboration (ISIC). ISIC Archive public domain (CC-0) dermoscopic images (ISIC_0000000, ISIC_0000002, ISIC_0000022)."
+        url: https://www.isic-archive.com/
+
+  skin-chromophore:
+    about:
+      - "Skin Chromophore computes quantitative skin colorimetry and uncalibrated RGB optical-density chromophore proxies from clinical or dermoscopic photographs locally in your browser. It converts sRGB to CIE L*a*b* (D65), computes the Individual Typology Angle (ITA°) with 6-band Chardon/Del Bino skin typology classification for valid yellow-positive skin pixels (b* > 1), RGB proxies for Erythema Index (EI) and Melanin Index (MI), and fixed-basis melanin and hemoglobin optical-density projections inspired by Tsumura et al. (1999)."
+      - "Compare a target lesion or erythema region against perilesional reference skin with mean, standard deviation and median colorimetry plus exact CIEDE2000 (ΔE2000) perceptual color difference. Optional Shades of Gray white-balance normalization helps standardize clinical lighting. Research and educational tool only; not a medical device or calibrated spectrophotometer."
+    packages:
+      - { name: "Canvas 2D Viewer & Web Worker pipeline", url: https://github.com/neurodesk/webapps/tree/main/apps/skin-chromophore, role: "CIELAB, ITA°, RGB EI/MI proxies, fixed-basis melanin/hemoglobin optical-density projection, CIEDE2000 and interactive heatmap viewer" }
+      - { name: fast-png, url: https://github.com/image-js/fast-png, role: "PNG encoding" }
+    citations:
+      - group: Skin typology
+        title: Individual Typology Angle (ITA°)
+        reference: "Chardon A, Cretois I, Hourseau C. Skin colour typology and suntanning pathways. International Journal of Cosmetic Science. 1991;13(4):191–208."
+        doi: 10.1111/j.1467-2494.1991.tb00561.x
+      - group: Skin typology
+        title: ITA° classification and pigmentation
+        reference: "Del Bino S, Bernerd F. Variations in skin colour and the biological consequences of ultraviolet radiation exposure. British Journal of Dermatology. 2013;169(Suppl 3):33–40."
+        doi: 10.1111/bjd.12529
+      - group: Erythema and melanin indices (clinical background)
+        title: Erythema and melanin optical indices
+        reference: "Diffey BL, Oliver RJ, Farr PM. A portable instrument for quantifying erythema induced by ultraviolet radiation. British Journal of Dermatology. 1984;111(6):663–672 (spectrophotometric background; this app computes uncalibrated camera RGB proxies)."
+        doi: 10.1111/j.1365-2133.1984.tb14149.x
+      - group: Erythema and melanin indices (clinical background)
+        title: Narrow-band skin reflectance spectrophotometry
+        reference: "Takiwaki H, Overgaard L, Serup J. Comparison of narrow-band reflectance spectrophotometric and tristimulus colorimetric measurements of skin color. Skin Pharmacology. 1994;7(4):217–225."
+        doi: 10.1159/000211297
+      - group: Chromophore separation (optical-density background)
+        title: Melanin and hemoglobin optical-density model
+        reference: "Tsumura N, Haneishi H, Miyake Y. Independent-component analysis of skin color image. Journal of the Optical Society of America A. 1999;16(9):2169–2176 (optical-density framework; this app uses a fixed 3×3 physiological RGB basis rather than per-image ICA)."
+        doi: 10.1364/josaa.16.002169
+      - group: Color constancy
+        title: Shades of Gray white balance
+        reference: "Finlayson GD, Trezzi E. Shades of gray and colour constancy. Color and Imaging Conference. 2004;12(1):37–41."
+        doi: 10.2352/CIC.2004.12.1.art00008
+      - group: Color difference
+        title: CIEDE2000 color-difference formula
+        reference: "Sharma G, Wu W, Dalal EN. The CIEDE2000 color-difference formula: Implementation notes, supplementary test data, and mathematical observations. Color Research & Application. 2005;30(1):21–30."
+        doi: 10.1002/col.20070
+      - group: Example data
+        title: ISIC Archive (CC-0)
+        reference: "International Skin Imaging Collaboration (ISIC). ISIC Archive public domain (CC-0) dermoscopic images (ISIC_0001115, ISIC_0000013, ISIC_0000004)."
+        url: https://www.isic-archive.com/
+
+  wound-planimetry:
+    about:
+      - "Wound Planimetry measures calibrated wound or skin-lesion geometry and color-based Red–Yellow–Black (RYB) tissue estimates locally in your browser. Set physical scale with an interactive two-point ruler or direct pixels-per-millimetre calibration, segment the wound bed with CIELAB chromaticity scoring and optional seed placement, and measure physical area (cm²), perimeter (mm), major length, perpendicular width, and Kundin ellipsoid area."
+      - "Inside the segmented mask, fixed CIELAB/HSV color rules estimate Red (granulation-like), Yellow (slough-like), Black (eschar-like), and Unclassified shares. These are heuristic color-based estimates inspired by clinical RYB wound assessment rather than a trained tissue classifier. Research and educational tool only; not a medical device."
+    packages:
+      - { name: "Canvas 2D Viewer & Web Worker pipeline", url: https://github.com/neurodesk/webapps/tree/main/apps/wound-planimetry, role: "calibrated digital planimetry, CIELAB wound segmentation, color-based RYB tissue estimation and interactive ruler viewer" }
+      - { name: fast-png, url: https://github.com/image-js/fast-png, role: "PNG encoding and decoding" }
+    citations:
+      - group: Digital planimetry
+        title: Kundin ellipsoid wound area approximation
+        reference: "Kundin JI. A new way to size up a wound. American Journal of Nursing. 1989;89(2):206–207."
+        url: https://pubmed.ncbi.nlm.nih.gov/2916597/
+      - group: Thresholding
+        title: Otsu thresholding
+        reference: "Otsu N. A threshold selection method from gray-level histograms. IEEE Transactions on Systems, Man, and Cybernetics. 1979;9(1):62–66."
+        doi: 10.1109/TSMC.1979.4310076
+      - group: Clinical background (RYB wound assessment)
+        title: Chronic wound tissue classification background
+        reference: "Mukherjee R, Manohar DD, Das DK, Achar A, Mitra A, Chakraborty C. Automated tissue classification framework for reproducible chronic wound assessment. BioMed Research International. 2014;2014:851582 (clinical background for RYB tissue categories; this app uses explicit color thresholds rather than trained classifiers)."
+        doi: 10.1155/2014/851582
+      - group: Example data
+        title: Diabetic neuropathic heel ulcer (CC BY 3.0)
+        reference: "Moore J. Creating the ideal microcosm for rapid incorporation of bioengineered alternative tissues using an advanced hydrogel impregnated gauze dressing: a case series. The Foot and Ankle Online Journal. 2008;1(9):2 (Wikimedia Commons, CC BY 3.0: https://creativecommons.org/licenses/by/3.0/)."
+        url: https://commons.wikimedia.org/wiki/File:Neuropathic_heel_ulcer_diabetic.jpg
+      - group: Example data
+        title: Venous dorsal leg ulcer (CC BY 3.0)
+        reference: "Moore J. Creating the ideal microcosm for rapid incorporation of bioengineered alternative tissues using an advanced hydrogel impregnated gauze dressing: a case series. The Foot and Ankle Online Journal. 2008;1(9):2 (Wikimedia Commons, CC BY 3.0: https://creativecommons.org/licenses/by/3.0/)."
+        url: https://commons.wikimedia.org/wiki/File:Venous_ulcer_dorsal_leg.jpg
+
+  derm-compare:
+    about:
+      - "DermCompare aligns a baseline and follow-up dermoscopic photograph and highlights structural and chromatic change locally in your browser. Optional DullRazor hair removal and Shades of Gray normalization reduce lighting and hair differences before multi-scale rigid (translation and rotation) registration aligns the follow-up to the baseline frame."
+      - "Inspect aligned pairs with clinical blink/flicker toggle, swipe curtain, checkerboard, or a quantitative CIEDE2000 (ΔE2000) change heatmap and baseline-vs-follow-up lesion contour overlay reporting area change, Dice overlap, and chromatic shift. Research and educational tool only; not a medical device."
+    packages:
+      - { name: "Canvas 2D Viewer & Web Worker pipeline", url: https://github.com/neurodesk/webapps/tree/main/apps/derm-compare, role: "rigid multi-scale dermoscopy registration, flicker/curtain/checkerboard comparator and CIEDE2000 change mapping" }
+      - { name: fast-png, url: https://github.com/image-js/fast-png, role: "PNG encoding and decoding" }
+    citations:
+      - group: Sequential dermoscopy
+        title: Sequential digital dermoscopy for incipient melanoma
+        reference: "Kittler H, Guitera P, Riedl E, et al. Identification of clinically featureless incipient melanoma using sequential dermoscopy imaging. Archives of Dermatology. 2006;142(9):1113–1119."
+        doi: 10.1001/archderm.142.9.1113
+      - group: Sequential dermoscopy
+        title: Follow-up of melanocytic skin lesions
+        reference: "Kittler H, Pehamberger H, Wolff K, Binder M. Follow-up of melanocytic skin lesions with digital epiluminescence microscopy: patterns of modifications observed in early melanoma, atypical nevi, and common nevi. Journal of the American Academy of Dermatology. 2000;43(3):467–476."
+        doi: 10.1067/mjd.2000.107504
+      - group: Dermoscopy image analysis
+        title: Automated analysis of pigmented skin lesions
+        reference: "Korotkov K, Garcia R. Computerized analysis of pigmented skin lesions: a review. Artificial Intelligence in Medicine. 2012;56(2):69–90."
+        doi: 10.1016/j.artmed.2012.08.002
+      - group: Color difference
+        title: CIEDE2000 color-difference formula
+        reference: "Sharma G, Wu W, Dalal EN. The CIEDE2000 color-difference formula: Implementation notes, supplementary test data, and mathematical observations. Color Research & Application. 2005;30(1):21–30."
+        doi: 10.1002/col.20070
+      - group: Preprocessing
+        title: DullRazor hair suppression
+        reference: "Lee T, Ng V, Gallagher R, Coldman A, McLean D. DullRazor: A software approach to hair removal from images. Computers in Biology and Medicine. 1997;27(6):533–543."
+        doi: 10.1016/s0010-4825(97)00020-6
+      - group: Preprocessing
+        title: Shades of Gray color constancy
+        reference: "Finlayson GD, Trezzi E. Shades of gray and colour constancy. Color and Imaging Conference. 2004;12(1):37–41."
+        doi: 10.2352/CIC.2004.12.1.art00008
+      - group: Segmentation
+        title: Otsu thresholding
+        reference: "Otsu N. A threshold selection method from gray-level histograms. IEEE Transactions on Systems, Man, and Cybernetics. 1979;9(1):62–66."
+        doi: 10.1109/TSMC.1979.4310076
+      - group: Example data
+        title: ISIC Archive multi-capture lesion IL_7114869 (CC-0)
+        reference: "International Skin Imaging Collaboration (ISIC). ISIC Archive public domain (CC-0) paired dermoscopic captures of lesion IL_7114869 (ISIC_0011414, ISIC_0011415; capture interval unspecified)."
+        url: https://www.isic-archive.com/
+
+  dermvit:
+    about:
+      - "DermViT runs a quantized Vision Transformer (ViT-Base-Patch16-224) fine-tuned on the 7-class HAM10000 dermoscopy dataset locally in your browser with ONNX Runtime Web (WebGPU or threaded WebAssembly CPU). It reports uncalibrated softmax scores across melanocytic nevi (NV), melanoma (MEL), benign keratosis-like lesions (BKL), basal cell carcinoma (BCC), actinic keratoses (AKIEC), vascular lesions (VASC), and dermatofibroma (DF)."
+      - "Optional Shades of Gray color constancy and occlusion sensitivity mapping (5 × 5 patch perturbation) let researchers inspect which lesion regions drive the uncalibrated softmax scores and how illumination preprocessing shifts predictions. The first run downloads the 87 MB MIT-licensed quantized ONNX model and caches it locally. Strictly for research and educational exploration — not validated for clinical diagnosis or triage."
+    packages:
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: "ViT-Base quantized ONNX inference on WebGPU or CPU (WebAssembly)" }
+      - { name: Skin Mole ViT ONNX, url: https://huggingface.co/sazio/skin-mole-vit-onnx, role: "MIT-licensed 8-bit quantized ONNX export of Anwarkh1/Skin_Cancer-Image_Classification (Apache-2.0)" }
+      - { name: fast-png, url: https://github.com/image-js/fast-png, role: "PNG encoding" }
+    citations:
+      - group: Architecture
+        title: Vision Transformer (ViT)
+        reference: "Dosovitskiy A, Beyer L, Kolesnikov A, et al. An image is worth 16x16 words: Transformers for image recognition at scale. International Conference on Learning Representations (ICLR). 2021."
+        doi: 10.48550/arXiv.2010.11929
+      - group: Training dataset
+        title: HAM10000 dataset
+        reference: "Tschandl P, Rosendahl C, Kittler H. The HAM10000 dataset, a large collection of multi-source dermatoscopic images of common pigmented skin lesions. Scientific Data. 2018;5:180161."
+        doi: 10.1038/sdata.2018.161
+      - group: Color constancy
+        title: Shades of Gray color constancy
+        reference: "Finlayson GD, Trezzi E. Shades of gray and colour constancy. Color and Imaging Conference. 2004;12(1):37–41."
+        doi: 10.2352/CIC.2004.12.1.art00008
+      - group: Interpretability
+        title: Occlusion sensitivity visualization
+        reference: "Zeiler MD, Fergus R. Visualizing and understanding convolutional networks. European Conference on Computer Vision (ECCV). 2014:818–833."
+        doi: 10.1007/978-3-319-10590-1_53
+      - group: Browser inference
+        title: ONNX Runtime Web
+        reference: "Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software]."
+        url: https://onnxruntime.ai
+      - group: Example data
+        title: ISIC Archive (CC-0)
+        reference: "International Skin Imaging Collaboration (ISIC). ISIC Archive public domain (CC-0) dermoscopic images (ISIC_0000000, ISIC_0000013, ISIC_0001115)."
+        url: https://www.isic-archive.com/
   openads:
     builders: "Built in collaboration with Andreia V. Faria and the Faria Lab (Johns Hopkins University, https://strokefair.org) and the Neurodesk team, integrating ADSWeb (OpenADS) and StrokeView."
     about:

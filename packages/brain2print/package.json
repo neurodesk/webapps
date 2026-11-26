@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/brain2print",
-  "version": "0.5.20261119",
+  "version": "0.6.20261124",
   "private": true,
   "description": "MindGrab segmentation to printable brain meshes for browsers and the command line",
   "type": "module",
@@ -29,7 +29,7 @@
     "lint": "node --check src/*.js && node --check bin/brain2print.js"
   },
   "dependencies": {
-    "@brainchop/mindgrab": "0.1.20260925",
+    "@brainchop/core": "1.0.0",
     "@neurodesk/node-drivers": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/niimath": "1.4.20260909"

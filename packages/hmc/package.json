@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/hmc",
-  "version": "0.4.20261119",
+  "version": "0.5.20261124",
   "description": "DWI head-motion correction for browsers and the command line: a pool of ANTs registration workers, one resampling and BIDS-derivative outputs",
   "type": "module",
   "private": true,
@@ -35,7 +35,7 @@
   "dependencies": {
     "@neurodesk/hmc-registration": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
-    "@brainchop/mindgrab": "0.1.20260925",
+    "@brainchop/core": "1.0.0",
     "@neurodesk/dwi2trx": "workspace:*",
     "@neurodesk/node-drivers": "workspace:*"
   },

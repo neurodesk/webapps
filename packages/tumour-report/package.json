@@ -1,0 +1,47 @@
+{
+  "name": "@neurodesk/tumour-report",
+  "version": "0.1.20261124",
+  "description": "Raidionics brain tumour segmentation and standardized anatomical characterization for browsers and Node.js",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "tumour-report": "./bin/tumour-report.js"
+  },
+  "exports": {
+    ".": "./src/pipeline.js",
+    "./node": "./src/node.js",
+    "./preprocess": "./src/preprocess.js",
+    "./morphometry": "./src/morphometry.js",
+    "./rads": "./src/rads.js",
+    "./results": "./src/results.js",
+    "./models": "./src/models.js",
+    "./manifest": "./model.manifest.json"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/*.js && node --check bin/tumour-report.js && node --check validation/*.mjs"
+  },
+  "dependencies": {
+    "@neurodesk/greedy": "workspace:*",
+    "@neurodesk/node-drivers": "workspace:*",
+    "@neurodesk/synthsr": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*",
+    "onnxruntime-node": "1.29.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/tumour-report"
+  },
+  "files": [
+    "src",
+    "bin",
+    "model.manifest.json",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ]
+}

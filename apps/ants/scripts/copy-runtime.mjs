@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const publicRoot = new URL("../public/", import.meta.url);
 const registrationSource = new URL("../../../packages/registration/wasm/", import.meta.url);
 const registrationTarget = new URL("registration/", publicRoot);
-const mindgrabRoot = dirname(require.resolve("@brainchop/mindgrab/package.json"));
+const mindgrabRoot = dirname(require.resolve("@brainchop/core/package.json"));
 const mindgrabTarget = new URL("brainchop/", publicRoot);
 
 await rm(registrationTarget, { recursive: true, force: true });
@@ -18,11 +18,10 @@ await mkdir(registrationTarget, { recursive: true });
 for (const name of ["syncro-registration.mjs", "syncro-registration.wasm"]) {
   await cp(new URL(name, registrationSource), new URL(name, registrationTarget));
 }
-await mkdir(mindgrabTarget, { recursive: true });
+await mkdir(new URL("models/", mindgrabTarget), { recursive: true });
 for (const name of [
   "worker.js",
-  "brainchop-mindgrab-gpu.js",
-  "brainchop-mindgrab-gpu.wasm",
+  "models/mindgrab.bin",
   "brainchop-mindgrab-gl.js",
   "brainchop-mindgrab-gl.wasm",
   "brainchop-mindgrab.js",

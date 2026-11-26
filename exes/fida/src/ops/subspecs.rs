@@ -2,7 +2,7 @@
 
 use num_complex::Complex64 as C;
 
-use super::util::{dims_without, select_axis, squeeze, strides, sum_axis, with_axis};
+use super::util::{dims_without, select_axis, squeeze, squeeze_axis, strides, sum_axis, with_axis};
 use crate::spectra::Spectra;
 
 /// How op_combinesubspecs combines. FID-A's names are swapped relative to
@@ -47,10 +47,21 @@ pub fn op_combinesubspecs(input: &Spectra, mode: CombineMode) -> Result<Spectra,
     let fids: Vec<C> = fids.into_iter().map(|v| v / ns as f64).collect();
     let mut out = input.clone();
     out.fids = fids;
-    out.sz = squeeze(&sz);
-    out.dims = dims_without(input.dims, s);
+    if matches!(mode, CombineMode::Diff) || ns <= 2 {
+        let (out_sz, dims) = squeeze_axis(&input.sz, input.dims, s);
+        out.sz = out_sz;
+        out.dims = dims;
+    } else {
+        out.sz = squeeze(&sz);
+        out.dims = dims_without(input.dims, s);
+    }
     out.subspecs = 1;
-    out.averages = input.averages / 2;
+    if input.dims.averages > 0 && out.dims.averages == 0 {
+        out.averages = 1;
+        out.flags.averaged = true;
+    } else {
+        out.averages = input.averages / 2;
+    }
     out.flags.writtentostruct = true;
     out.flags.subtracted = true;
     Ok(out)

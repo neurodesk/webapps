@@ -1,0 +1,5 @@
+/* The chromophore canvas handles live inspection and circular ROI drags, including touch. */
+.chromophore-canvas {
+  cursor: crosshair;
+  touch-action: none;
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "t1-head",
+    "label": "T1-weighted head MRI",
+    "description": "A 166 × 210 × 160 structural T1-weighted head MRI (1 mm isotropic) for interactive 3D segmentation.",
+    "expectedResult": "Click or drag a box on a brain structure in one slice, then propagate in 3D to produce a NIfTI label mask and volume table.",
+    "files": [
+      {
+        "role": "image",
+        "name": "T1_head.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
+        "sha256": "58220b40d179b7a93dd3ce231dd7afaa39989c75658b2b8e4c2f34abf8f16416",
+        "bytes": 5176902
+      }
+    ],
+    "automation": {
+      "parameters": {
+        "prompts": "[{\"axis\":\"axial\",\"slice\":80,\"box\":[58,73,107,136],\"propagate\":true,\"range\":[78,82]}]"
+      }
+    }
+  }
+]

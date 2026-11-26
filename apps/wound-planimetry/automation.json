@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 2,
+  "app": "wound-planimetry",
+  "title": "Wound Planimetry",
+  "description": "Calibrated wound and ulcer digital planimetry with color-based Red-Yellow-Black (RYB) tissue estimation in CIE L*a*b* and HSV colour space.",
+  "defaultOperation": "measure",
+  "operations": {
+    "measure": {
+      "title": "Measure wound",
+      "description": "Segment the wound bed, compute calibrated or pixel planimetry geometry, and estimate Red (granulation), Yellow (slough/fibrin), Black (eschar/necrosis), and Unclassified color-based RYB tissue fractions.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "file:image",
+          "formats": [
+            "jpg",
+            "jpeg",
+            "png"
+          ],
+          "description": "One clinical wound photograph (JPEG or PNG).",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "pixelsPerMm": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000,
+          "default": 0,
+          "description": "Spatial calibration in pixels per millimetre; 0 reports pixel units."
+        },
+        "sensitivity": {
+          "type": "number",
+          "minimum": -0.3,
+          "maximum": 0.3,
+          "default": 0,
+          "description": "Threshold bias subtracted from Otsu wound-bed segmentation (threshold = otsu - sensitivity; negative values tighten, positive values expand the mask)."
+        },
+        "escharL": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 60,
+          "default": 28,
+          "description": "CIE L* lightness upper bound for black necrotic eschar tissue."
+        },
+        "granulationA": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 80,
+          "default": 22,
+          "description": "CIE a* redness lower bound for red granulation tissue."
+        },
+        "sloughB": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 80,
+          "default": 18,
+          "description": "CIE b* yellowness lower bound for yellow slough and fibrin tissue."
+        }
+      },
+      "artifacts": {
+        "rybOverlay": {
+          "type": "file:image",
+          "mediaType": "image/png",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "mask": {
+          "type": "file:image",
+          "mediaType": "image/png",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "planimetry": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "provenance": {
+          "type": "neuro:provenance",
+          "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

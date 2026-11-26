@@ -26,11 +26,13 @@ import manifest from "@neurodesk/lcmodel/manifest" with { type: "json" };
 import examples from "../examples.json" with { type: "json" };
 import { APP } from "./config.js";
 import { basisLibrary } from "@neurodesk/lcmodel/library";
-import { rankBases, assessBasis } from "@neurodesk/lcmodel/basis-select";
+import { rankBases, assessBasis, hasBasisMacromolecules } from "@neurodesk/lcmodel/basis-select";
 import { sortInputs, textHead, parseControl } from "@neurodesk/lcmodel/inputs";
 import { spectrumSvg, fitSeries, metaboliteSeries } from "@neurodesk/lcmodel/spectrum-plot";
-import { STATUS, fileStem, groupCsvLong, groupCsvWide } from "@neurodesk/lcmodel/group";
-import { formatConc } from "@neurodesk/lcmodel/report";
+import { STATUS, fileStem, groupCsvLong, groupCsvWide, metaboliteNames } from "@neurodesk/lcmodel/group";
+import { parseEventsText } from "@neurodesk/lcmodel/fmrs";
+import { qcTimeCourseSvg, timeCourseSvg, transientDriftSvg } from "@neurodesk/lcmodel/fmrs-plot";
+import { formatConc, SD_LIMIT } from "@neurodesk/lcmodel/report";
 import {
   CUSTOM,
   acquisitionMessage,
@@ -43,8 +45,10 @@ import {
   failedEntry,
   fidaInput,
   fitDataset as fitInput,
+  fitFmrsDataset,
   fitPlanned,
   fitSummary,
+  fmrsResultTexts,
   groupMeasurements,
   groupRecords as recordsOf,
   headerFor as headerOf,
@@ -60,6 +64,7 @@ import {
   settingsFrom,
   summarizeReport,
 } from "@neurodesk/lcmodel/pipeline";
+import { renderFmrsTables } from "./fmrs-view.js";
 import { renderGroupTable } from "./group-view.js";
 import { createTissuePanel } from "./tissue-panel.js";
 import { createWorkerSession } from "./worker-session.js";
@@ -80,6 +85,7 @@ const VIEWS = [
   { id: "fit", label: "Fit" },
   { id: "metabolites", label: "Metabolites" },
   { id: "preprocessing", label: "Preprocessing" },
+  { id: "fmrs", label: "Time course" },
   { id: "voxel", label: "Voxel" },
   { id: "group", label: "Group" },
 ];
@@ -89,6 +95,20 @@ groupShow.id = "groupShow";
 groupShow.setAttribute("aria-label", "Group table values");
 groupShow.hidden = true;
 groupShow.append(new Option("Concentrations", "concentration"), new Option("Ratios", "ratio"), new Option("Tissue-corrected", "tissue"));
+const fmrsPanelSelect = document.createElement("select");
+fmrsPanelSelect.id = "fmrsPanel";
+fmrsPanelSelect.setAttribute("aria-label", "Time course view");
+fmrsPanelSelect.hidden = true;
+fmrsPanelSelect.append(
+  new Option("Metabolite time course", "metabolite"),
+  new Option("QC time courses", "qc"),
+  new Option("Transient drift", "transients"),
+  new Option("Contrasts & windows", "stats"),
+);
+const fmrsMetabSelect = document.createElement("select");
+fmrsMetabSelect.id = "fmrsMetabolite";
+fmrsMetabSelect.setAttribute("aria-label", "Metabolite to plot");
+fmrsMetabSelect.hidden = true;
 const toolbar = createViewerToolbar({
   views: VIEWS.map((v) => ({ ...v, disabled: true, onClick: () => showView(v.id) })),
   viewsLabel: "Plot",
@@ -97,7 +117,7 @@ const toolbar = createViewerToolbar({
   colormap: false,
   download: false,
   screenshot: false,
-  actions: [groupShow],
+  actions: [groupShow, fmrsPanelSelect, fmrsMetabSelect],
 });
 $("viewer").prepend(toolbar);
 const log = createConsole({ id: "technicalLog" });
@@ -117,6 +137,49 @@ const tissue = createTissuePanel({
     $("outputSection").open = true;
     showView("voxel");
   },
+  onT1Replace: () => {
+    if (syncQueuedImport) {
+      syncQueuedImport.t1 = { clear: true };
+      return;
+    }
+    if (syncImportController) {
+      pendingDroppedT1 = { controller: syncImportController, clear: true };
+      return;
+    }
+    if (busy && !importAbort) return;
+    const entry = { clear: true };
+    syncDroppedT1 = entry;
+    queueMicrotask(() => {
+      if (syncDroppedT1 !== entry) return;
+      syncDroppedT1 = null;
+      if (!syncQueuedImport && !syncImportController && !busy) tissue.reset();
+    });
+  },
+  onT1Input: (files) => {
+    if (syncQueuedImport) {
+      syncQueuedImport.t1 = { files };
+      return true;
+    }
+    if (syncImportController) {
+      pendingDroppedT1 = { controller: syncImportController, files };
+      return true;
+    }
+    if (busy) {
+      if (importAbort) {
+        const entry = { files };
+        syncDroppedT1 = entry;
+        queueMicrotask(() => {
+          if (syncDroppedT1 === entry) syncDroppedT1 = null;
+        });
+        return true;
+      }
+      // Allow a new standalone T1 selection to supersede an in-flight T1 import
+      // (for example, while NiiVue is still finishing its first anatomy render).
+      if (tissue.isImportingT1) return false;
+      return true;
+    }
+    return false;
+  },
 });
 toolbar.actions.append(...tissue.viewControls);
 $("resultList").before(...tissue.outputControls);
@@ -129,7 +192,8 @@ const library = basisLibrary(manifest);
 const results = createResultList({
   element: $("resultList"),
   onView: (stage, result) => {
-    if (stage === "fitReport") openReport(result);
+    if (stage === "fitReport" || stage === "fmrsReport") openReport(result);
+    else if (stage.startsWith("fmrs")) showView("fmrs");
     else if (stage.startsWith("group")) showView("group");
     else if (["gmMap", "wmMap", "csfMap"].includes(stage)) {
       showView("voxel");
@@ -145,11 +209,36 @@ const results = createResultList({
 
 /** The loaded input: FID-A datasets or an LCModel .RAW (direct). */
 let input = null;
-let customBasis = null; // { name, text, header, sha256? }
+let spectraSessionId = 0; // increments only on spectroscopy replacement, not water-reference updates
+let customBasis = null; // { name, text, header, sha256?, file? }
+let basisGeneration = 0;
+let activeBasisReadGen = null; // basisGeneration of the current in-flight loadBasisFile read
+let pendingDeferredBasis = null; // { gen, basis, file } finished reading while an import was busy
 /** Each dataset's last fit, fitted, failed or cancelled, by dataset index. */
 const fits = new Map();
 let processed = null; // FID-A result shown in the viewer
 let fit = null; // parsed LCModel output shown in the viewer
+let activeEntry = null; // entry currently shown in the viewer (conventional, grand mean, or fMRS window)
+let fmrsEvents = null; // { name, events, file }
+let eventsGeneration = 0;
+let activeEventsReadGen = null; // eventsGeneration of the current in-flight loadEventsFile read
+let pendingDeferredEvents = null; // { gen, name, events, file, ownerSession } finished reading while busy on same spectrum
+let syncDroppedEvents = null; // { files, clear } delivered to #eventsInput earlier in the same synchronous drop turn
+let syncImportController = null; // AbortController started in the current synchronous drop/Undo turn
+let pendingDroppedEvents = null; // { controller, files, clear } delivered in the same synchronous turn as loadFiles
+let syncDroppedBasis = null; // { file, clear } delivered to #basisInput earlier in the same synchronous turn
+let pendingDroppedBasis = null; // { controller, file, clear } delivered in the same synchronous turn as loadFiles
+let syncDroppedT1 = null; // { files, clear } delivered to #t1Input earlier in the same synchronous turn
+let pendingDroppedT1 = null; // { controller, files, clear } delivered in the same synchronous turn as loadFiles
+const waterTargetByFile = new WeakMap(); // File -> targetPath[] committed for Undo restoration
+let undoWaterSnapshot = null; // { files, groups } committed water assignments before the last input commit
+let undoSessionState = null; // { files, mode, selectedPath, editOverrides } for Undo restoration
+let syncDroppedWater = null; // File[] delivered to #waterInput for a queued Undo import
+let pendingDroppedWater = null; // { controller, files } delivered to #waterInput in the same synchronous turn as loadFiles
+let queuedImport = null; // { files, options, events, waterFiles, basis, t1 } queued to supersede an in-flight import (e.g. Undo)
+let syncQueuedImport = null; // queuedImport created in the current synchronous drop/Undo turn
+let fmrsResult = null; // completed fMRS run
+let fmrsWindowIndex = -1;
 let view = "fit";
 let busy = false;
 let runAbort = null; // a group run's stop signal (the footer ×)
@@ -189,6 +278,10 @@ const engine = {
     await ensureLoaded();
     return runJob({ type: "process", dataset: k, options });
   },
+  async processFmrs(k, options) {
+    await ensureLoaded();
+    return runJob({ type: "processFmrs", dataset: k, options });
+  },
   fit: (request) => runJob({ type: "fit", ...request }),
 };
 
@@ -215,15 +308,77 @@ async function ensureLoaded() {
 // Loading
 // ---------------------------------------------------------------------------
 
+function flushDeferredReads() {
+  if (busy) return;
+  if (pendingDeferredBasis && pendingDeferredBasis.gen === basisGeneration) {
+    const deferred = pendingDeferredBasis;
+    pendingDeferredBasis = null;
+    setCustomBasis(deferred.basis.name, deferred.basis.text, deferred.file);
+    log.log(`${deferred.file.name} loaded as the basis set`);
+  } else {
+    pendingDeferredBasis = null;
+  }
+  if (pendingDeferredEvents && pendingDeferredEvents.gen === eventsGeneration) {
+    const deferred = pendingDeferredEvents;
+    pendingDeferredEvents = null;
+    if (spectraSessionId === deferred.ownerSession) {
+      commitParsedEvents(deferred.name, deferred.events, deferred.file);
+      log.log(`${deferred.name} loaded (${deferred.events.length} stimulus events)`);
+    } else {
+      clearEvents({ notify: true });
+    }
+  } else {
+    pendingDeferredEvents = null;
+  }
+}
+
 function setBusy(value) {
   busy = value;
   $("dataInput").disabled = value;
   $("folderInput").disabled = value;
+  $("datasetSelect").disabled = value;
   $("waterInput").disabled = value || !input;
   $("basisInput").disabled = value;
+  $("eventsInput").disabled = value;
+  $("clearEventsBtn").disabled = value;
   $("editedToggle").disabled = value;
   tissue.setDisabled(value);
   exampleControl.setDisabled(value);
+  if (!value) flushDeferredReads();
+  updateRunButton();
+}
+
+function clearFmrsResult() {
+  if (!fmrsResult) return;
+  const showingFmrsEntry = Boolean(
+    activeEntry && (activeEntry === fmrsResult.grandEntry || fmrsResult.windows.some((w) => w.entry === activeEntry)),
+  );
+  fmrsResult = null;
+  fmrsWindowIndex = -1;
+  setViewEnabled("fmrs", false);
+  if (showingFmrsEntry) {
+    clearResults();
+  } else {
+    if (view === "fmrs") showView(fit ? "fit" : hasGroup() ? "group" : "fit");
+    renderResultList();
+  }
+}
+
+function clearEvents({ notify = true, cancelPending = false } = {}) {
+  eventsGeneration += 1;
+  pendingDeferredEvents = null;
+  fmrsEvents = null;
+  $("eventsInfo").hidden = true;
+  $("eventsInfo").textContent = "";
+  $("clearEventsBtn").hidden = true;
+  $("eventsDrop").classList.remove("has-files");
+  clearFmrsResult();
+  if (notify) {
+    // Keep pageDrop's Undo snapshot in sync so Undo never resurrects an explicitly cleared
+    // schedule, while still letting a spectra-only drop record the cleared schedule for Undo.
+    const detail = cancelPending ? { files: [], cancelPending: true } : { files: [], restoreWithUndo: true };
+    $("eventsInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail }));
+  }
   updateRunButton();
 }
 
@@ -231,14 +386,43 @@ function datasetCount() {
   return input?.kind === "fida" ? input.datasets.length : 0;
 }
 
+function fmrsActive() {
+  return $("fmrsMode").value !== "off";
+}
+
+function updateFmrsControls() {
+  const mode = $("fmrsMode").value;
+  $("fmrsWindowRow").hidden = mode !== "sliding";
+  $("fmrsControls").hidden = mode === "off";
+  updateRunButton();
+}
+
+function fmrsEligible(k = input?.index) {
+  if (input?.kind !== "fida") return false;
+  const h = input.datasets[k]?.header;
+  if (!h) return false;
+  if (isEdited(k)) return false;
+  if ((h.subspectra ?? 1) > 1) return false;
+  if ((h.averages ?? 0) < 2) return false;
+  if (!(h.trMs > 0)) return false;
+  return true;
+}
+
+const isReadingEvents = () => activeEventsReadGen !== null && activeEventsReadGen === eventsGeneration;
+const isReadingBasis = () => activeBasisReadGen !== null && activeBasisReadGen === basisGeneration;
+
 function updateRunButton() {
   const acquisitionOk = input?.kind !== "raw" || (acquisitionFromFields().hzpppm > 0 && acquisitionFromFields().deltat > 0);
   const basisOk = $("basisSelect").value !== CUSTOM || Boolean(customBasis);
-  const disabled = busy || !input || !acquisitionOk || !basisOk;
+  const mode = $("fmrsMode").value;
+  const fmrsOn = mode !== "off";
+  const fmrsEventsOk = !fmrsOn || mode === "sliding" || Boolean(fmrsEvents?.events?.length);
+  const fmrsInputOk = !fmrsOn || fmrsEligible();
+  const disabled = busy || isReadingEvents() || isReadingBasis() || !input || !acquisitionOk || !basisOk || !fmrsEventsOk || !fmrsInputOk;
   const many = datasetCount() > 1;
   $("runButton").disabled = disabled;
-  $("runButton").textContent = many ? `Fit all ${datasetCount()} datasets` : "Preprocess and fit";
-  $("runSelectedButton").hidden = !many;
+  $("runButton").textContent = fmrsOn ? "Run fMRS analysis" : many ? `Fit all ${datasetCount()} datasets` : "Preprocess and fit";
+  $("runSelectedButton").hidden = !many || fmrsOn;
   $("runSelectedButton").disabled = disabled;
 }
 
@@ -246,6 +430,8 @@ function updateRunButton() {
 function clearResults() {
   processed = null;
   fit = null;
+  activeEntry = null;
+  fmrsWindowIndex = -1;
   $("concTable").hidden = true;
   $("fitSummary").hidden = true;
   $("plot").replaceChildren();
@@ -256,38 +442,136 @@ function clearResults() {
   $("ratioHeader").hidden = false;
   $("concColumnField").hidden = true;
   tissue.hide();
-  for (const v of VIEWS) if (v.id !== "group" && v.id !== "voxel") setViewEnabled(v.id, false);
+  for (const v of VIEWS) if (v.id !== "group" && v.id !== "voxel" && v.id !== "fmrs") setViewEnabled(v.id, false);
+  setViewEnabled("fmrs", Boolean(fmrsResult));
   renderResultList();
-  $("outputSection").open = hasGroup();
+  $("outputSection").open = hasGroup() || Boolean(fmrsResult);
   if (view === "group" && !hasGroup()) showView("fit");
+  if (view === "fmrs" && !fmrsResult) showView("fit");
 }
 
 function sourceFiles(files) {
   return files.map((file) => ({ name: file.webkitRelativePath || file._webkitRelativePath || file.name, file }));
 }
 
+function abortable(promise, signal) {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(signal.reason ?? Object.assign(new Error("Aborted"), { name: "AbortError" }));
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(signal.reason ?? Object.assign(new Error("Aborted"), { name: "AbortError" }));
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
 async function readSources(sources, signal) {
   return Promise.all(sources.map(async ({ name, file }) => {
     signal?.throwIfAborted();
-    const bytes = new Uint8Array(await file.arrayBuffer());
+    const bytes = new Uint8Array(await abortable(file.arrayBuffer(), signal));
     signal?.throwIfAborted();
     return { name, bytes, head: textHead(bytes), file };
   }));
 }
 
+function stageWaterFiles(targetPath, files) {
+  const entries = sourceFiles(files);
+  const flat = entries.length > 0 && entries.every((s) => !s.name.includes("/"));
+  const folder = flat ? `${fileStem(entries[0].name)}/` : "";
+  const prefix = `water-references/${encodeURIComponent(targetPath)}/${folder}`;
+  return entries.map((source) => ({ ...source, name: `${prefix}${source.name}` }));
+}
+
 function waterSources(files) {
   if (!input) throw new Error("Load a spectrum before adding its water reference.");
-  const targetPath = input.datasets[input.index].path;
-  const previous = input.loadOptions?.water ?? [];
-  const replaced = new Set(previous.find((w) => w.targetPath === targetPath)?.files ?? []);
-  const added = sourceFiles(files).map((source) => ({ ...source, name: `water-references/${encodeURIComponent(targetPath)}/${source.name}` }));
-  const sources = new Map(input.sources.filter((s) => !replaced.has(s.name)).map((s) => [s.name, s]));
-  for (const source of added) sources.set(source.name, source);
+  const applyAll = datasetCount() > 1 && $("waterAllToggle").checked;
+  const targetPath = applyAll ? "*" : input.datasets[input.index].path;
+  const previous = (input.loadOptions?.water ?? []).filter((w) => w.targetPath !== "*");
+  const allPrevWaterNames = new Set((input.loadOptions?.water ?? []).flatMap((w) => w.files ?? []));
+  const metabSources = input.sources.filter((s) => !allPrevWaterNames.has(s.name));
+  if (applyAll) {
+    const added = stageWaterFiles("*", files);
+    return {
+      applyAll: true,
+      files,
+      sources: [...metabSources, ...added],
+      options: { water: [{ targetPath: "*", files: added.map((s) => s.name) }] },
+      targetPath: input.datasets[input.index].path,
+      previous,
+      metabSources,
+      prevSources: input.sources,
+    };
+  }
+  const keptPrev = previous.filter((w) => w.targetPath !== targetPath);
+  const keptPrevNames = new Set(keptPrev.flatMap((w) => w.files ?? []));
+  const added = stageWaterFiles(targetPath, files);
+  const sources = [...metabSources, ...input.sources.filter((s) => keptPrevNames.has(s.name)), ...added];
   return {
-    sources: [...sources.values()],
-    options: { water: [...previous.filter((w) => w.targetPath !== targetPath), { targetPath, files: added.map((s) => s.name) }] },
+    applyAll: false,
+    files,
+    sources,
+    options: { water: [...keptPrev, { targetPath, files: added.map((s) => s.name) }] },
     targetPath,
+    previous,
+    metabSources,
+    prevSources: input.sources,
   };
+}
+
+function committedWaterGroups(fida) {
+  if (fida?.kind !== "fida" || !fida.loadOptions?.water?.length) return [];
+  const byName = new Map(fida.sources.map((s) => [s.name, s.file]));
+  const groups = [];
+  for (const entry of fida.loadOptions.water) {
+    const files = (entry.files ?? []).map((name) => byName.get(name)).filter(Boolean);
+    if (files.length) groups.push({ targetPath: entry.targetPath, files });
+  }
+  return groups;
+}
+
+function syncWaterTargets(fida) {
+  const byFile = new Map();
+  for (const { targetPath, files } of committedWaterGroups(fida)) {
+    for (const file of files) {
+      if (!byFile.has(file)) byFile.set(file, []);
+      byFile.get(file).push(targetPath);
+    }
+  }
+  for (const [file, targets] of byFile) waterTargetByFile.set(file, targets);
+}
+
+function buildRestoredWaterAssignment(metabSources, waterFiles) {
+  let groups;
+  if (undoWaterSnapshot && sameFileList(undoWaterSnapshot.files, waterFiles)) {
+    groups = undoWaterSnapshot.groups;
+  } else {
+    const byTarget = new Map();
+    for (const file of waterFiles) {
+      const raw = waterTargetByFile.get(file);
+      const targets = Array.isArray(raw) ? raw : [raw ?? "*"];
+      for (const targetPath of targets) {
+        if (!byTarget.has(targetPath)) byTarget.set(targetPath, []);
+        byTarget.get(targetPath).push(file);
+      }
+    }
+    groups = [...byTarget.entries()].map(([targetPath, files]) => ({ targetPath, files }));
+  }
+  const waterOpts = [];
+  const combined = [...metabSources];
+  for (const { targetPath, files } of groups) {
+    const added = stageWaterFiles(targetPath, files);
+    combined.push(...added);
+    waterOpts.push({ targetPath, files: added.map((s) => s.name) });
+  }
+  return { sources: combined, options: { water: waterOpts } };
 }
 
 function chooseAnatomy(images, signal, optional) {
@@ -321,10 +605,35 @@ function chooseAnatomy(images, signal, optional) {
   });
 }
 
-async function stageAnatomy({ request, change, images, sources, signal }) {
+function residentSpectraFiles() {
+  if (!input) return [];
+  if (input.kind === "fida") {
+    const waterNames = new Set((input.loadOptions?.water ?? []).flatMap((w) => w.files ?? []));
+    return input.sources.filter((s) => !waterNames.has(s.name)).map((s) => s.file).filter(Boolean);
+  }
+  return [...(input.rawFiles ?? []), ...(input.bundledWaterFile ? [input.bundledWaterFile] : [])];
+}
+
+function residentWaterFiles() {
+  if (!input) return [];
+  if (input.kind === "fida") {
+    const waterNames = new Set((input.loadOptions?.water ?? []).flatMap((w) => w.files ?? []));
+    return [...new Set(input.sources.filter((s) => waterNames.has(s.name)).map((s) => s.file).filter(Boolean))];
+  }
+  return input.attachedWaterFile ? [input.attachedWaterFile] : [];
+}
+
+const sameFileList = (a, b) => a.length === b.length && a.every((file, idx) => file === b[idx]);
+
+async function stageAnatomy({ request, change, images, sources, pairedT1, signal }) {
   if (request.kind === "fit-request") {
     if (!request.inputs.t1?.length) return { kind: "keep" };
     return { kind: "replace", prepared: await tissue.prepareT1(request.inputs.t1, signal) };
+  }
+  if (pairedT1?.clear) return { kind: "clear" };
+  if (pairedT1?.files?.length) {
+    if (sameFileList(pairedT1.files, tissue.files)) return { kind: "keep" };
+    return { kind: "replace", prepared: await tissue.prepareT1(pairedT1.files, signal) };
   }
   if (change.kind === "water-reference" || !images.length) return { kind: "keep" };
   const optional = change.kind === "replacement";
@@ -343,8 +652,11 @@ async function stageAnatomy({ request, change, images, sources, signal }) {
 
 async function loadFiles(request, signal) {
   const automation = request.kind === "fit-request";
-  const files = automation ? request.inputs.spectra : request.files;
+  const rawFiles = automation ? request.inputs.spectra : request.files;
   let water = request.kind === "water-reference";
+  const isScheduleFile = (file) => /\.(tsv|csv)$/i.test(file.name);
+  const bundledEvents = !automation && !water ? rawFiles.filter(isScheduleFile) : [];
+  const files = bundledEvents.length ? rawFiles.filter((file) => !isScheduleFile(file)) : rawFiles;
   const p = automation ? request.parameters : {};
   const settings = settingsFrom(p);
   const fractionKeys = ["fractionGM", "fractionWM", "fractionCSF"];
@@ -354,8 +666,46 @@ async function loadFiles(request, signal) {
   if (given.length && request.inputs.t1?.length) throw new Error("Give either a T1 image or tissue fractions, not both.");
   if (busy) throw new Error("Files are still loading. Wait or cancel, then retry.");
   if (water && !input) throw new Error("Load a spectrum before adding its water reference.");
+  const hadResidentInput = Boolean(input || customBasis || tissue.hasT1);
+  let committed = false;
+  let replacedSpectra = false;
   const controller = new AbortController();
   importAbort = controller;
+  if (!automation) {
+    syncImportController = controller;
+    queueMicrotask(() => {
+      if (syncImportController === controller) syncImportController = null;
+    });
+    if (!water) {
+      // Capture resident auxiliary inputs onto any active pageDrop Undo snapshot
+      // synchronously before the first await so immediate Undo (mid-read or mid-render)
+      // restores explicit water references, schedules, custom bases, and T1 anatomy.
+      const priorWater = residentWaterFiles();
+      const priorEvents = fmrsEvents?.file ? [fmrsEvents.file] : [];
+      const priorBasis = customBasis?.file ? [customBasis.file] : [];
+      const priorT1 = tissue.files;
+      if (priorWater.length) {
+        $("waterInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: priorWater, restoreWithUndo: true } }));
+      }
+      if (priorEvents.length) {
+        $("eventsInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: priorEvents, restoreWithUndo: true } }));
+      }
+      if (priorBasis.length) {
+        $("basisInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: priorBasis, restoreWithUndo: true } }));
+      }
+      if (priorT1.length) {
+        $("t1Input").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: priorT1, restoreWithUndo: true } }));
+      }
+    }
+  }
+  const earlyDroppedEvents = !automation ? syncDroppedEvents : null;
+  syncDroppedEvents = null;
+  const earlyDroppedBasis = !automation ? syncDroppedBasis : null;
+  syncDroppedBasis = null;
+  const earlyDroppedT1 = !automation ? syncDroppedT1 : null;
+  syncDroppedT1 = null;
+  const earlyDroppedWater = !automation ? syncDroppedWater : null;
+  syncDroppedWater = null;
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
   if (signal?.aborted) controller.abort();
@@ -367,24 +717,63 @@ async function loadFiles(request, signal) {
   progress.begin(water ? "Reading the water reference…" : "Reading files…");
   status(`Reading ${files.length} file${files.length === 1 ? "" : "s"}…`);
   try {
-    const read = await readSources(sourceFiles(files), importSignal);
+    // Allow any same-turn synchronous Undo/drop events (water, T1, basis, events) to land
+    // before checking resident file identity, so anatomy-only Undo never reopens resident spectra.
+    await Promise.resolve();
+    importSignal.throwIfAborted();
+    const pairedWater = !automation && !water
+      ? ((pendingDroppedWater?.controller === controller ? pendingDroppedWater.files : null) ?? earlyDroppedWater)
+      : null;
+    if (pendingDroppedWater?.controller === controller) pendingDroppedWater = null;
+    const unchangedSpectrum = !automation
+      && !water
+      && Boolean(input)
+      && sameFileList(files, residentSpectraFiles())
+      && sameFileList(pairedWater ?? [], residentWaterFiles());
+    const read = unchangedSpectrum ? [] : await readSources(sourceFiles(files), importSignal);
     const sorted = sortInputs(read);
     const decode = (file) => new TextDecoder().decode(file.bytes);
-    const basis = automation && request.inputs.basis?.length
-      ? await readBasisFile(request.inputs.basis[0])
-      : sorted.basis.length ? parseCustomBasis(sorted.basis[0].name, decode(sorted.basis[0])) : null;
+    let basis = automation && request.inputs.basis?.length
+      ? { ...(await readBasisFile(request.inputs.basis[0])), file: request.inputs.basis[0] }
+      : sorted.basis.length ? { ...parseCustomBasis(sorted.basis[0].name, decode(sorted.basis[0])), file: sorted.basis[0].file } : null;
     const control = sorted.control.length ? parseControl(decode(sorted.control[0])) : null;
     let change = { kind: "none" };
     let images = [];
     let sources = [];
-    if (!automation && input?.kind === "raw" && (water || (!sorted.raw.length && sorted.water.length))) {
+    let wildcardWater = null;
+    if (unchangedSpectrum) {
+      // Undo after an anatomy-only or auxiliary-only drop replays the already-resident
+      // spectrum files; preserve resident acquisition fields, fits, and fMRS results.
+    } else if (!automation && input?.kind === "raw" && (water || (!sorted.raw.length && sorted.water.length))) {
       const references = [...sorted.raw, ...sorted.water];
       if (references.length !== 1 || sorted.other.length) throw new Error("Choose one LCModel .H2O or water .RAW reference for this .RAW spectrum.");
       const reference = rawInput({ name: input.name, text: input.text, waterName: references[0].name, water: decode(references[0]), control: input.header });
-      change = { kind: "water-reference", input: { ...input, waterName: reference.waterName, water: reference.water } };
+      change = {
+        kind: "water-reference",
+        input: { ...input, waterName: reference.waterName, water: reference.water, attachedWaterFile: references[0].file ?? null },
+      };
       water = true;
     } else if (!water && sorted.raw.length) {
-      change = { kind: "replacement", input: rawInput({ name: sorted.raw[0].name, text: decode(sorted.raw[0]), waterName: sorted.water[0]?.name ?? null, water: sorted.water.length ? decode(sorted.water[0]) : null, control }) };
+      let attachedWaterFile = null;
+      let waterName = sorted.water[0]?.name ?? null;
+      let waterText = sorted.water.length ? decode(sorted.water[0]) : null;
+      if (pairedWater?.length === 1) {
+        const [wf] = pairedWater;
+        const wBytes = new Uint8Array(await abortable(wf.arrayBuffer(), importSignal));
+        importSignal.throwIfAborted();
+        waterName = wf.name;
+        waterText = new TextDecoder().decode(wBytes);
+        attachedWaterFile = wf;
+      }
+      change = {
+        kind: "replacement",
+        input: {
+          ...rawInput({ name: sorted.raw[0].name, text: decode(sorted.raw[0]), waterName, water: waterText, control }),
+          rawFiles: [...sorted.raw, ...sorted.control].map((s) => s.file).filter(Boolean),
+          bundledWaterFile: sorted.water[0]?.file ?? null,
+          attachedWaterFile,
+        },
+      };
       if (sorted.other.length) {
         candidate = await stageFida(sorted.other, importSignal);
         if (candidate.loaded.datasets.length) throw new Error("Import LCModel .RAW and vendor spectra separately.");
@@ -393,8 +782,21 @@ async function loadFiles(request, signal) {
       }
     } else if (sorted.other.length || water) {
       let assignment = water ? waterSources(files) : null;
-      let inputs = assignment ? await readSources(assignment.sources, importSignal) : sorted.other;
-      candidate = await stageFida(inputs, importSignal, assignment?.options);
+      let restoredWaterOptions = null;
+      let inputs;
+      if (assignment) {
+        inputs = await readSources(assignment.sources, importSignal);
+      } else if (pairedWater?.length) {
+        const restored = buildRestoredWaterAssignment(
+          sorted.other.map(({ name, file }) => ({ name, file })),
+          pairedWater,
+        );
+        restoredWaterOptions = restored.options;
+        inputs = await readSources(restored.sources, importSignal);
+      } else {
+        inputs = sorted.other;
+      }
+      candidate = await stageFida(inputs, importSignal, assignment?.options ?? restoredWaterOptions ?? undefined);
       if (!automation && !water && !candidate.loaded.datasets.length && candidate.loaded.unpairedWater?.length && input?.kind === "fida") {
         candidate.session.terminate();
         assignment = waterSources(files);
@@ -402,12 +804,50 @@ async function loadFiles(request, signal) {
         candidate = await stageFida(inputs, importSignal, assignment.options);
         water = true;
       }
-      const loaded = candidate.loaded;
+      let loaded = candidate.loaded;
+      wildcardWater = assignment ? (loaded.wildcardWater ?? null) : null;
+      let finalSources = inputs;
+      let finalOptions = assignment?.options ?? restoredWaterOptions ?? undefined;
+      if (assignment?.applyAll && loaded.datasets.length) {
+        // Materialize wildcard "*" into per-dataset targetPath entries for the datasets that
+        // accepted the shared file, preserving any previously attached references on skipped
+        // datasets and leaving no stale "*" entry that could reject later individual replacements.
+        const wildcardPrefix = `water-references/${encodeURIComponent("*")}/`;
+        const acceptedPaths = loaded.datasets
+          .filter((d) => d.waterPath?.startsWith(wildcardPrefix))
+          .map((d) => d.path);
+        const acceptedSet = new Set(acceptedPaths);
+        const keptPrev = assignment.previous.filter((w) => !acceptedSet.has(w.targetPath));
+        const keptPrevNames = new Set(keptPrev.flatMap((w) => w.files ?? []));
+        const prevWaterSources = assignment.prevSources.filter((s) => keptPrevNames.has(s.name));
+        const acceptedAdded = [];
+        const acceptedOpts = [];
+        for (const tp of acceptedPaths) {
+          const added = stageWaterFiles(tp, assignment.files);
+          acceptedAdded.push(...added);
+          acceptedOpts.push({ targetPath: tp, files: added.map((s) => s.name) });
+        }
+        const mergedSources = [...assignment.metabSources, ...prevWaterSources, ...acceptedAdded];
+        const mergedOptions = { water: [...keptPrev, ...acceptedOpts] };
+        if (keptPrev.length > 0) {
+          candidate.session.terminate();
+          finalSources = await readSources(mergedSources, importSignal);
+          candidate = await stageFida(finalSources, importSignal, mergedOptions);
+          loaded = candidate.loaded;
+        } else {
+          finalSources = mergedSources;
+        }
+        finalOptions = mergedOptions;
+      }
       const imageNames = new Set((loaded.images ?? []).flatMap((image) => image.files));
       images = loaded.images ?? [];
-      sources = inputs;
+      sources = finalSources;
       if (loaded.datasets.length) {
-        const next = { ...fidaInput(loaded), sources: inputs.filter((s) => !imageNames.has(s.name)).map(({ name, file }) => ({ name, file })), loadOptions: assignment?.options };
+        const next = {
+          ...fidaInput(loaded),
+          sources: finalSources.filter((s) => !imageNames.has(s.name)).map(({ name, file }) => ({ name, file })),
+          loadOptions: finalOptions,
+        };
         if (assignment) {
           const overrides = new Map(input.datasets.map((dataset) => [dataset.path, dataset.editOverride]));
           for (const dataset of next.datasets) if (overrides.has(dataset.path)) dataset.editOverride = overrides.get(dataset.path);
@@ -421,8 +861,20 @@ async function loadFiles(request, signal) {
     } else if (!basis) {
       throw new Error("No spectroscopy data found among the files.");
     }
-    const anatomy = await stageAnatomy({ request, change, images, sources, signal: importSignal });
-    if (change.kind === "none" && !basis && anatomy.kind !== "replace") {
+    const pairedT1 = !automation
+      ? ((pendingDroppedT1?.controller === controller ? pendingDroppedT1 : null) ?? earlyDroppedT1)
+      : null;
+    if (pendingDroppedT1?.controller === controller) pendingDroppedT1 = null;
+    const pairedBasis = !automation
+      ? ((pendingDroppedBasis?.controller === controller ? pendingDroppedBasis : null) ?? earlyDroppedBasis)
+      : null;
+    if (pendingDroppedBasis?.controller === controller) pendingDroppedBasis = null;
+    if (!basis && pairedBasis?.file && customBasis?.file !== pairedBasis.file) {
+      basis = { ...(await readBasisFile(pairedBasis.file)), file: pairedBasis.file };
+      importSignal.throwIfAborted();
+    }
+    const anatomy = await stageAnatomy({ request, change, images, sources, pairedT1, signal: importSignal });
+    if (!unchangedSpectrum && change.kind === "none" && !basis && anatomy.kind !== "replace") {
       const loaded = candidate?.loaded;
       const first = loaded?.errors[0];
       throw new Error(loaded?.unpairedWater?.length ? "Only a water reference was found. Load its spectrum first, then add the reference." : first ? `${first.file}: ${first.error}` : "No readable spectroscopy data found.");
@@ -430,11 +882,40 @@ async function loadFiles(request, signal) {
     if (automation && change.kind !== "replacement") throw new Error("No spectroscopy data found among the supplied spectra files.");
     const next = change.kind === "none" ? null : change.input;
     if (automation && typeof p.edited === "boolean") applyEditing(next, p.edited);
+    // Read any paired dropped or co-selected events file BEFORE clearing importAbort or mutating
+    // `input`, so Undo or Cancel while the schedule read is pending cleanly aborts the whole import.
+    let droppedEvents = null;
+    if ((next || unchangedSpectrum) && !automation) {
+      const pairedEvents = (pendingDroppedEvents?.controller === controller ? pendingDroppedEvents : null)
+        ?? earlyDroppedEvents;
+      if (pendingDroppedEvents?.controller === controller) pendingDroppedEvents = null;
+      const evFiles = pairedEvents?.files ?? (bundledEvents.length ? bundledEvents : null);
+      if (pairedEvents?.clear) {
+        droppedEvents = { clear: true };
+      } else if (evFiles?.length === 1) {
+        const [evFile] = evFiles;
+        if (!(unchangedSpectrum && evFile === fmrsEvents?.file)) {
+          try {
+            const evText = await abortable(evFile.text(), importSignal);
+            importSignal.throwIfAborted();
+            droppedEvents = { file: evFile, events: parseEventsText(evText) };
+          } catch (evError) {
+            if (evError.name === "AbortError") throw evError;
+            droppedEvents = { file: evFile, error: evError.message };
+          }
+        }
+      } else if (evFiles?.length > 1) {
+        droppedEvents = { ambiguous: evFiles.length };
+      }
+    }
     importSignal.throwIfAborted();
     importSignal.removeEventListener("abort", stopCandidate);
     signal?.removeEventListener("abort", abort);
-    importAbort = null;
+    committed = true;
+    replacedSpectra = Boolean(next && change.kind === "replacement");
     if (automation) {
+      basisGeneration += 1;
+      pendingDeferredBasis = null;
       customBasis = null;
       $("basisDrop").classList.remove("has-files");
       tissue.reset();
@@ -445,13 +926,60 @@ async function loadFiles(request, signal) {
       $("metabRelax").checked = p.metaboliteRelaxation ?? true;
       $("mmModel").value = settings.mmModel;
       $("lineBroadening").value = settings.lineBroadening;
+      $("simulateMm").checked = settings.simulateMacromolecules;
+      $("baselineStiffness").value = settings.baselineStiffness ?? "";
+      $("fmrsMode").value = "off";
+      undoSessionState = null;
+      updateFmrsControls();
     }
     if (next) {
+      const prevGroups = committedWaterGroups(input);
+      undoWaterSnapshot = prevGroups.length ? { files: residentWaterFiles(), groups: prevGroups } : null;
+      const prevSpectra = residentSpectraFiles();
+      const prevMode = $("fmrsMode").value;
+      const prevSelectedPath = input?.kind === "fida" ? (input.datasets[input.index]?.path ?? null) : null;
+      const prevEditOverrides = input?.kind === "fida"
+        ? new Map(input.datasets.filter((d) => d.editOverride !== undefined).map((d) => [d.path, d.editOverride]))
+        : null;
+      const restoredSession = !automation && change.kind === "replacement" && undoSessionState && sameFileList(undoSessionState.files, files)
+        ? undoSessionState
+        : null;
+      if (change.kind === "replacement" || change.kind === "water-reference") {
+        undoSessionState = !automation && prevSpectra.length
+          ? { files: prevSpectra, mode: prevMode, selectedPath: prevSelectedPath, editOverrides: prevEditOverrides }
+          : null;
+      }
+      if (restoredSession && next.kind === "fida") {
+        if (restoredSession.editOverrides?.size) {
+          for (const ds of next.datasets) {
+            if (restoredSession.editOverrides.has(ds.path)) ds.editOverride = restoredSession.editOverrides.get(ds.path);
+          }
+        }
+        if (restoredSession.selectedPath) {
+          const idx = next.datasets.findIndex((d) => d.path === restoredSession.selectedPath);
+          if (idx >= 0) next.index = idx;
+        }
+      }
       worker?.terminate();
       worker = next.kind === "fida" ? candidate.session : null;
       if (next.kind === "fida") candidate = null;
       input = next;
+      if (input.kind === "fida") syncWaterTargets(input);
       fits.clear();
+      fmrsResult = null;
+      fmrsWindowIndex = -1;
+      if (change.kind === "replacement") {
+        spectraSessionId += 1;
+        if (pendingDroppedEvents?.controller === controller) pendingDroppedEvents = null;
+        clearEvents({ notify: !automation && !droppedEvents?.events });
+        if (!fmrsEligible()) {
+          $("fmrsMode").value = "off";
+          updateFmrsControls();
+        } else if (restoredSession?.mode && $("fmrsMode").value !== restoredSession.mode) {
+          $("fmrsMode").value = restoredSession.mode;
+          updateFmrsControls();
+        }
+      }
       renderGroup();
       clearResults();
       if (input.kind === "raw") {
@@ -473,7 +1001,25 @@ async function loadFiles(request, signal) {
       $("emptyState").hidden = false;
       showDataset();
     }
-    if (basis) setCustomBasis(basis.name, basis.text);
+    if (droppedEvents?.events) {
+      commitParsedEvents(droppedEvents.file.name, droppedEvents.events, droppedEvents.file);
+    } else if (droppedEvents?.clear) {
+      clearEvents({ notify: true });
+    } else if (droppedEvents?.error) {
+      clearEvents({ notify: true });
+      log.log(`${droppedEvents.file.name}: ${droppedEvents.error}`, "warning");
+    } else if (droppedEvents?.ambiguous) {
+      clearEvents({ notify: true });
+      log.log(`Found ${droppedEvents.ambiguous} tabular files (.tsv/.csv); choose the stimulus events schedule under Functional MRS.`, "warning");
+    }
+    if (basis) setCustomBasis(basis.name, basis.text, basis.file ?? null);
+    else if (pairedBasis?.clear) clearCustomBasis({ notify: true });
+    else if (!automation && pendingDeferredBasis && pendingDeferredBasis.gen === basisGeneration) {
+      const deferred = pendingDeferredBasis;
+      pendingDeferredBasis = null;
+      setCustomBasis(deferred.basis.name, deferred.basis.text, deferred.file);
+      log.log(`${deferred.file.name} loaded as the basis set`);
+    }
     if (automation && !basis && p.basisSet && p.basisSet !== "auto") {
       $("basisSelect").value = p.basisSet;
       showBasisAdvice();
@@ -493,17 +1039,90 @@ async function loadFiles(request, signal) {
     progress.end("Inputs loaded");
     if (nextT1) {
       $("tissueSection").open = true;
-      await presentation;
+      await abortable(presentation, importSignal);
     } else if (next && view === "voxel" && tissue.hasT1) showView("voxel");
-    const message = anatomy.kind === "clear" ? `${describeInput()} loaded; anatomy skipped.` : water ? "Water reference attached to the selected dataset." : next ? `${describeInput()} loaded` : nextT1 ? "T1 loaded." : "Basis set loaded; add spectroscopy data.";
+    const waterMessage = wildcardWater
+      ? wildcardWater.attached < wildcardWater.total
+        ? `Water reference attached to ${wildcardWater.attached} of ${wildcardWater.total} datasets (incompatible or overridden datasets kept their existing references).`
+        : `Water reference attached to all ${wildcardWater.total} datasets.`
+      : "Water reference attached to the selected dataset.";
+    const partialWater = Boolean(wildcardWater && wildcardWater.attached < wildcardWater.total);
+    const message = unchangedSpectrum
+      ? (anatomy.kind === "clear" ? "Previous inputs restored; anatomy cleared." : nextT1 ? "Previous anatomy restored." : "Previous inputs restored.")
+      : anatomy.kind === "clear" ? `${describeInput()} loaded; anatomy skipped.`
+      : water ? waterMessage
+      : next ? `${describeInput()} loaded`
+      : nextT1 ? "T1 loaded."
+      : "Basis set loaded; add spectroscopy data.";
     progress.end(message);
-    status(message);
+    status(message, partialWater);
+    if (partialWater) log.open?.();
   } finally {
+    if (pendingDroppedEvents?.controller === controller) pendingDroppedEvents = null;
+    if (pendingDroppedBasis?.controller === controller) pendingDroppedBasis = null;
+    if (pendingDroppedT1?.controller === controller) pendingDroppedT1 = null;
+    if (pendingDroppedWater?.controller === controller) pendingDroppedWater = null;
+    if (syncImportController === controller) syncImportController = null;
     candidate?.session.terminate();
     importSignal.removeEventListener("abort", stopCandidate);
     signal?.removeEventListener("abort", abort);
     if (importAbort === controller) importAbort = null;
     setBusy(false);
+    if (!queuedImport) {
+      // Keep pageDrop's remembered inputs aligned with the actual resident session across
+      // manual drops, drop-zone/folder imports, non-replacement/rejected imports, AND
+      // automation runs so a later Undo never restores files from an earlier session.
+      const residentSpectra = residentSpectraFiles();
+      const residentWater = residentWaterFiles();
+      const residentEvents = fmrsEvents?.file ? [fmrsEvents.file] : [];
+      const residentBasis = customBasis?.file ? [customBasis.file] : [];
+      const residentT1 = tissue.files;
+      const keepUndo = !automation && committed && hadResidentInput;
+      const dataDetail = keepUndo
+        ? { files: residentSpectra }
+        : { files: residentSpectra, cancelPending: true };
+      const pairedOpts = keepUndo ? { restoreWithUndo: true } : {};
+      $("dataInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: dataDetail }));
+      $("waterInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: residentWater, ...pairedOpts } }));
+      $("eventsInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: residentEvents, ...pairedOpts } }));
+      $("basisInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: residentBasis, ...pairedOpts } }));
+      $("t1Input").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: residentT1, ...pairedOpts } }));
+    }
+    if (queuedImport) {
+      const nextImport = queuedImport;
+      queuedImport = null;
+      if (syncQueuedImport === nextImport) syncQueuedImport = null;
+      const currentSpectra = residentSpectraFiles();
+      const currentWater = residentWaterFiles();
+      const sameFidaInput = !nextImport.options?.water
+        && input?.kind === "fida"
+        && sameFileList(currentSpectra, nextImport.files)
+        && sameFileList(currentWater, nextImport.waterFiles ?? []);
+      if (sameFidaInput) {
+        $("dataInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: currentSpectra } }));
+        $("waterInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: currentWater } }));
+        if (nextImport.events?.clear) clearEvents({ notify: true });
+        else if (nextImport.events?.files?.length === 1 && fmrsEvents?.file !== nextImport.events.files[0]) {
+          void loadEventsFile(nextImport.events.files[0]);
+        } else {
+          $("eventsInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: fmrsEvents?.file ? [fmrsEvents.file] : [] } }));
+        }
+        if (nextImport.basis?.clear) clearCustomBasis({ notify: true });
+        else if (nextImport.basis?.file && customBasis?.file !== nextImport.basis.file) void loadBasisFile(nextImport.basis.file);
+        else $("basisInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: customBasis?.file ? [customBasis.file] : [] } }));
+        if (nextImport.t1?.clear) tissue.reset();
+        else if (nextImport.t1?.files?.length && !sameFileList(nextImport.t1.files, tissue.files)) void loadT1Files(nextImport.t1.files);
+        else $("t1Input").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: tissue.files } }));
+        progress.end("Restored previous inputs");
+        status("Restored previous inputs");
+      } else {
+        if (nextImport.events) syncDroppedEvents = nextImport.events;
+        if (nextImport.waterFiles?.length) syncDroppedWater = nextImport.waterFiles;
+        if (nextImport.basis) syncDroppedBasis = nextImport.basis;
+        if (nextImport.t1) syncDroppedT1 = nextImport.t1;
+        void importFiles(nextImport.files, nextImport.options);
+      }
+    }
   }
 }
 
@@ -594,6 +1213,7 @@ function showDataset() {
     const edited = isEdited();
     const split = edited && h.editing;
     const parts = [edited ? "MEGA-PRESS" : h.family || "sequence not in header", `${h.fieldT ? h.fieldT.toFixed(2) : "?"} T`, `TE ${h.teMs} ms`];
+    if (h.tmMs > 0 && h.family === "STEAM") parts.push(`TM ${h.tmMs} ms`);
     if (h.coils > 1) parts.push(`${h.coils} coils`);
     if (h.averages > 1) parts.push(`${split ? h.averages / 2 : h.averages} averages`);
     if (h.subspectra > 1 || split) parts.push(`${split ? 2 : h.subspectra} subspectra`);
@@ -606,11 +1226,18 @@ function showDataset() {
   const waterName = input?.kind === "raw" ? input.waterName : input?.datasets[input.index]?.water;
   $("waterInfo").hidden = !waterName;
   $("waterInfo").textContent = waterName ? `${waterName} → ${describeInput()}` : "";
+  $("waterAllField").hidden = !(datasetCount() > 1);
   $("waterDrop").classList.toggle("has-files", water);
   $("waterScaling").disabled = !water;
   $("waterScaling").checked = water;
   $("ecc").disabled = !water;
   $("preprocessingSettings").hidden = input?.kind === "raw";
+  const fmrsUnsupported = !fmrsEligible();
+  $("fmrsSection").hidden = fmrsUnsupported;
+  if (fmrsUnsupported && $("fmrsMode").value !== "off") {
+    $("fmrsMode").value = "off";
+    updateFmrsControls();
+  }
   tissue.setDataset(input?.kind === "fida" ? input.datasets[input.index].header : null);
   recommend();
   showMacromoleculeModel();
@@ -626,6 +1253,8 @@ function showMacromoleculeModel() {
   // MEGA-PRESS keeps LCModel's own line-broadening prior (fitDataset).
   $("lineBroadening").disabled = edited;
   $("lineBroadeningHint").hidden = !edited;
+  $("simulateMmField").hidden = edited;
+  $("baselineStiffnessField").hidden = edited;
   $("mmModel").disabled = suppressed;
   $("mmModelHint").hidden = !suppressed;
   const current = [$("ppmStart").value, $("ppmEnd").value];
@@ -649,8 +1278,10 @@ function showEditing() {
 // Basis set choice
 // ---------------------------------------------------------------------------
 
-function setCustomBasis(name, text) {
-  customBasis = parseCustomBasis(name, text);
+function setCustomBasis(name, text, file = null) {
+  basisGeneration += 1;
+  pendingDeferredBasis = null;
+  customBasis = { ...parseCustomBasis(name, text), file };
   const { header } = customBasis;
   $("basisInfo").hidden = false;
   $("basisInfo").textContent = `${name}: ${header.metabolites.length} metabolites${header.teMs ? `, TE ${header.teMs} ms` : ""}${header.hzpppm ? `, ${(header.hzpppm / 42.577).toFixed(1)} T` : ""}`;
@@ -659,6 +1290,25 @@ function setCustomBasis(name, text) {
   $("basisSelect").value = CUSTOM;
   showBasisAdvice();
   showMacromoleculeModel();
+  if (file) {
+    $("basisInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: [file], restoreWithUndo: true } }));
+  }
+}
+
+function clearCustomBasis({ notify = true } = {}) {
+  basisGeneration += 1;
+  pendingDeferredBasis = null;
+  customBasis = null;
+  $("basisInfo").hidden = true;
+  $("basisInfo").textContent = "";
+  $("basisDrop").classList.remove("has-files");
+  recommend();
+  showBasisAdvice();
+  showMacromoleculeModel();
+  updateRunButton();
+  if (notify) {
+    $("basisInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: [], restoreWithUndo: true } }));
+  }
 }
 
 function renderBasisOptions(ranked, assessed) {
@@ -700,7 +1350,8 @@ function showBasisAdvice() {
   advice.hidden = false;
   advice.className = `nd-message ${a.level === "match" ? "success" : a.level === "error" ? "error" : a.level === "warning" ? "warning" : "info"}`;
   const texts = a.notes.filter((n) => n.level !== "info" || a.level === "match").map((n) => n.text);
-  advice.textContent = a.level === "match" ? "Matches the data's field strength, sequence and echo time." : texts.join(" ") || "No mismatch found.";
+  const mmNote = custom && hasBasisMacromolecules(customBasis?.header) ? " Includes MM basis; uncheck Simulate macromolecules (nsimul=0) to avoid double-fitting." : "";
+  advice.textContent = (a.level === "match" ? "Matches the data's field strength, sequence and echo time." : texts.join(" ") || "No mismatch found.") + mmNote;
   updateRunButton();
 }
 
@@ -716,6 +1367,7 @@ function showBasisAdvice() {
 function fitSettings() {
   const fields = [$("ppmStart").value, $("ppmEnd").value];
   const sd = Number($("badSd").value);
+  const dk = Number($("baselineStiffness").value);
   return {
     preprocessing: {
       removeBadAverages: $("removeBad").checked,
@@ -728,6 +1380,20 @@ function fitSettings() {
     range: rangeUntouched(fields) ? null : fields.map(Number),
     mmModel: $("mmModel").value,
     lineBroadening: $("lineBroadening").value,
+    simulateMacromolecules: $("simulateMm").checked,
+    baselineStiffness: dk > 0 ? dk : null,
+  };
+}
+
+function fmrsSettings() {
+  const step = Number($("fmrsStep").value);
+  return {
+    mode: $("fmrsMode").value,
+    windowSize: Math.max(1, Number($("fmrsWindow").value) || 4),
+    stepSize: step > 0 ? step : undefined,
+    events: fmrsEvents?.events ?? [],
+    matchLinewidth: $("matchLinewidth").checked,
+    dynamicGlm: $("dynamicGlm").checked,
   };
 }
 
@@ -748,8 +1414,8 @@ function recycleWorker() {
 
 /** Fit the selected dataset with the chosen basis set and the fields as set. */
 async function run({ throwOnError = false } = {}) {
-  if (!input || busy) {
-    if (throwOnError) throw new Error(busy ? "Another job is running." : "No spectroscopy data loaded.");
+  if (!input || busy || isReadingBasis()) {
+    if (throwOnError) throw new Error(busy || isReadingBasis() ? "Another job is running." : "No spectroscopy data loaded.");
     return null;
   }
   const k = input.kind === "fida" ? input.index : 0;
@@ -817,8 +1483,8 @@ const cancelledEntry = (k) => ({ index: k, status: STATUS.cancelled, error: "Can
  * @param {{settings?: ReturnType<typeof fitSettings>, explicitBasis?: boolean, throwOnError?: boolean}} options
  */
 async function runGroup({ settings = fitSettings(), explicitBasis = false, throwOnError = false } = {}) {
-  if (!input || busy || input.kind !== "fida") {
-    if (throwOnError) throw new Error(busy ? "Another job is running." : "No spectroscopy data loaded.");
+  if (!input || busy || isReadingBasis() || input.kind !== "fida") {
+    if (throwOnError) throw new Error(busy || isReadingBasis() ? "Another job is running." : "No spectroscopy data loaded.");
     return null;
   }
   const n = input.datasets.length;
@@ -888,6 +1554,146 @@ async function runGroup({ settings = fitSettings(), explicitBasis = false, throw
   return { plan, n, fitted, failed };
 }
 
+/** Run functional MRS analysis on the selected dataset. */
+async function runFmrs({ throwOnError = false } = {}) {
+  if (!input || busy || isReadingEvents() || isReadingBasis() || input.kind !== "fida") {
+    if (throwOnError) throw new Error(busy || isReadingEvents() || isReadingBasis() ? "Another job is running." : "Load multi-transient spectroscopy data first.");
+    return null;
+  }
+  const k = input.index;
+  const controller = new AbortController();
+  setBusy(true);
+  fmrsResult = null;
+  fmrsWindowIndex = -1;
+  clearResults();
+  runAbort = controller;
+  progress.begin("Preprocessing fMRS transients…");
+  const started = performance.now();
+  const step = (text) => {
+    progress.setText(text);
+    status(text);
+  };
+  let preprocessed = null;
+  try {
+    const result = await fitFmrsDataset(engine, {
+      input,
+      index: k,
+      choice: $("basisSelect").value,
+      range: [Number($("ppmStart").value), Number($("ppmEnd").value)],
+      settings: fitSettings(),
+      bases: bases(),
+      fmrs: fmrsSettings(),
+      signal: controller.signal,
+      onStep: step,
+      onPreprocessed: (pre) => { preprocessed = pre; },
+      onBinProgress: (fraction, text) => progress.setProgress(fraction, text),
+      log: logLine,
+    });
+    fmrsResult = result;
+    const names = metaboliteNames(result.windows);
+    const preferred = names.includes("Glu") ? "Glu" : names.includes("Glu+Gln") ? "Glu+Gln" : names[0] ?? "";
+    fmrsMetabSelect.replaceChildren(...names.map((n) => new Option(n, n)));
+    if (preferred) fmrsMetabSelect.value = preferred;
+    const metabOpt = fmrsPanelSelect.querySelector('option[value="metabolite"]');
+    const wasNoMetab = Boolean(metabOpt?.disabled);
+    if (metabOpt) metabOpt.disabled = names.length === 0;
+    if (names.length === 0) {
+      fmrsPanelSelect.value = result.transients?.length ? "transients" : "stats";
+    } else if (wasNoMetab) {
+      fmrsPanelSelect.value = "metabolite";
+    }
+    const firstFitted = result.grandEntry ?? result.windows.find((w) => w.entry)?.entry ?? null;
+    if (firstFitted) {
+      // Route through showEntry so input.index and tissue controller always match the owning dataset.
+      showEntry(firstFitted, { view: "fmrs", windowIndex: firstFitted.windowIndex ?? -1 });
+    } else {
+      processed = result.grandProcessed ?? null;
+      setViewEnabled("preprocessing", Boolean(processed));
+      setViewEnabled("fmrs", true);
+      showView("fmrs");
+    }
+    renderResultList();
+    $("outputSection").open = true;
+    const fittedCount = result.windows.filter((w) => w.status === STATUS.fitted).length;
+    const firstErr = result.windows.find((w) => w.error)?.error ?? "all bins failed";
+    const seconds = ((performance.now() - started) / 1000).toFixed(1);
+    const message = controller.signal.aborted
+      ? `Cancelled: ${fittedCount} of ${result.windows.length} fMRS bins fitted`
+      : fittedCount === 0
+        ? `No fMRS windows could be fitted (${firstErr}). Inspect per-transient drift and QC to diagnose.`
+        : `fMRS done: ${fittedCount} of ${result.windows.length} bins fitted in ${seconds} s`;
+    progress.end(message, { success: !controller.signal.aborted && fittedCount > 0 });
+    status(message, fittedCount === 0 && !controller.signal.aborted);
+    if (fittedCount === 0 && !controller.signal.aborted) log.open?.();
+    if (throwOnError && controller.signal.aborted) throw Object.assign(new Error("Cancelled"), { name: "AbortError" });
+    if (throwOnError && !fittedCount) throw new Error(`No fMRS windows could be fitted: ${firstErr}`);
+    return result;
+  } catch (error) {
+    if (error.trap) recycleWorker();
+    if (!throwOnError && error.name !== "AbortError" && preprocessed) {
+      const cfg = fmrsSettings();
+      const grandProcessed = preprocessed.grandMean
+        ? { report: preprocessed.report, spectrum: preprocessed.grandMean.spectrum, unprocessed: preprocessed.grandMean.unprocessed ?? null }
+        : null;
+      fmrsResult = {
+        datasetIndex: k,
+        datasetName: datasetLabel(k),
+        generated: new Date(),
+        basis: null,
+        header: preprocessed.header ?? input.datasets[k]?.header ?? null,
+        report: preprocessed.report,
+        transients: preprocessed.report?.transients ?? [],
+        events: cfg.events ?? [],
+        mode: cfg.mode ?? "sliding",
+        matchLinewidth: Boolean(cfg.matchLinewidth),
+        targetLinewidthHz: preprocessed.report?.targetLinewidthHz ?? null,
+        fittedCount: 0,
+        grandProcessed,
+        grandEntry: null,
+        windows: (preprocessed.bins ?? []).map((b, i) => ({
+          ...b,
+          index: i,
+          status: STATUS.failed,
+          error: error.message,
+          metabolites: [],
+          entry: null,
+        })),
+        conditionSummary: [],
+        baselineCondition: null,
+        windowedStats: null,
+        dynamicGlm: null,
+      };
+      fmrsMetabSelect.replaceChildren();
+      const metabOpt = fmrsPanelSelect.querySelector('option[value="metabolite"]');
+      if (metabOpt) metabOpt.disabled = true;
+      fmrsPanelSelect.value = fmrsResult.transients.length ? "transients" : "stats";
+      processed = grandProcessed;
+      setViewEnabled("preprocessing", Boolean(processed));
+      setViewEnabled("fmrs", true);
+      showView("fmrs");
+      renderResultList();
+      $("outputSection").open = true;
+    }
+    if (throwOnError) {
+      progress.end(error.message, { success: false });
+      status(error.message, true);
+      throw error;
+    }
+    if (error.name === "AbortError") {
+      progress.reset("Cancelled");
+      status("Cancelled");
+    } else {
+      progress.end(error.message, { success: false });
+      status(error.message, true);
+      log.open?.();
+    }
+    return null;
+  } finally {
+    runAbort = null;
+    setBusy(false);
+  }
+}
+
 /**
  * A group run with a T1 loaded measures each dataset's own voxel on it (the
  * datasets are voxels of one session) and keeps the corrected values in the
@@ -926,8 +1732,17 @@ function setViewEnabled(id, enabled) {
 }
 
 /** Show a stored fit (or why there is none) in the viewer and sidebar. */
-function showEntry(entry, { view: next = "fit" } = {}) {
+function showEntry(entry, { view: next = "fit", windowIndex = -1 } = {}) {
   if (entry?.status === STATUS.fitted) {
+    // Always bind the active dataset and tissue controller to the owning dataset
+    // so a window from dataset A is never shown or tissue-corrected under dataset B.
+    if (input?.kind === "fida" && entry.index >= 0 && entry.index < input.datasets.length && entry.index !== input.index) {
+      input.index = entry.index;
+      showDataset();
+      renderGroup();
+    }
+    fmrsWindowIndex = windowIndex;
+    activeEntry = entry;
     processed = entry.processed;
     fit = entry.fit;
     showResults(next);
@@ -996,9 +1811,10 @@ function showResults(next = "fit") {
   setViewEnabled("fit", true);
   setViewEnabled("metabolites", fit.coord.metabolites.length > 0);
   setViewEnabled("preprocessing", Boolean(processed));
+  setViewEnabled("fmrs", Boolean(fmrsResult));
   $("outputSection").open = true;
   $("emptyState").hidden = true;
-  showView(next === "group" && !hasGroup() ? "fit" : next);
+  showView(next === "group" && !hasGroup() ? "fit" : next === "fmrs" && !fmrsResult ? "fit" : next);
 }
 
 /** The selected fit's entry in `fits`. */
@@ -1013,8 +1829,9 @@ function resultFiles(entry) {
     const result = item.make ? { description, make: () => asFile({ ...item, body: item.make() }) } : { description, file: asFile(item) };
     return [role, viewable === undefined ? result : { ...result, viewable }];
   }));
-  // The panel describes the dataset on display, which is the one whose files these are.
-  Object.assign(entries, tissue.resultFiles(f.correction, fileStem(datasetLabel(entry.index)), f.ratioTo));
+  // The panel describes the dataset (and fMRS window/grand mean) on display, which is the one whose files these are.
+  const stem = entry.windowId ? `${fileStem(datasetLabel(entry.index))}_${entry.windowId}` : fileStem(datasetLabel(entry.index));
+  Object.assign(entries, tissue.resultFiles(f.correction, stem, f.ratioTo));
   return entries;
 }
 
@@ -1065,9 +1882,19 @@ function groupFiles() {
   };
 }
 
+function fmrsFiles() {
+  if (!fmrsResult) return {};
+  const asFile = ({ name, body, type }) => new File([body], name, { type });
+  return Object.fromEntries(Object.entries(fmrsResultTexts(fmrsResult, VERSIONS)).map(([role, item]) => {
+    const { description, viewable } = item;
+    const result = item.make ? { description, make: () => asFile({ ...item, body: item.make() }) } : { description, file: asFile(item) };
+    return [role, viewable === undefined ? result : { ...result, viewable }];
+  }));
+}
+
 function renderResultList() {
-  const entry = fit ? currentEntry() : null;
-  results.render({ ...groupFiles(), ...(entry?.status === STATUS.fitted ? resultFiles(entry) : {}) });
+  const entry = fit ? (activeEntry ?? currentEntry()) : null;
+  results.render({ ...fmrsFiles(), ...groupFiles(), ...(entry?.status === STATUS.fitted ? resultFiles(entry) : {}) });
 }
 
 function renderGroup() {
@@ -1091,6 +1918,7 @@ function renderGroup() {
 function selectDataset(k, { keepView = false } = {}) {
   if (k < 0) return;
   input.index = k;
+  fmrsWindowIndex = -1;
   showDataset();
   renderGroup();
   const entry = fits.get(k);
@@ -1104,10 +1932,16 @@ function showView(id) {
   const plot = $("plot");
   const notice = $("viewerNotice");
   const group = id === "group";
+  const fmrs = id === "fmrs" && Boolean(fmrsResult);
+  const fmrsPanel = fmrsPanelSelect.value;
+  const fmrsStatsMode = fmrs && fmrsPanel === "stats";
   notice.hidden = true;
-  plot.hidden = group;
+  plot.hidden = group || fmrsStatsMode;
   $("groupView").hidden = !group;
+  $("fmrsView").hidden = !fmrsStatsMode;
   groupShow.hidden = !group;
+  fmrsPanelSelect.hidden = !fmrs;
+  fmrsMetabSelect.hidden = !(fmrs && fmrsPanel === "metabolite" && fmrsMetabSelect.options.length > 0);
   if (id !== "voxel") tissue.hide();
   if (id === "voxel") {
     plot.replaceChildren();
@@ -1120,6 +1954,78 @@ function showView(id) {
     const fitted = records.filter((r) => r.status === STATUS.fitted).length;
     $("emptyState").hidden = true;
     $("plotLabel").textContent = `${fitted} of ${records.length} datasets fitted. Select a dataset to show its fit; %SD above 20% is dimmed.`;
+    return;
+  }
+  if (fmrs) {
+    $("emptyState").hidden = true;
+    const { windows, events, transients, baselineCondition } = fmrsResult;
+    const pooled = fmrsResult.mode === "conditions";
+    const categories = pooled ? windows.map((w) => w.label) : null;
+    if (fmrsPanel === "stats") {
+      renderFmrsTables($("fmrsView"), fmrsResult, {
+        selectedWindow: fmrsWindowIndex,
+        onSelectWindow: (winIdx) => {
+          const w = fmrsResult.windows[winIdx];
+          if (!w?.entry) return;
+          showEntry(w.entry, { view: "fit", windowIndex: winIdx });
+          $("fitSummary").textContent = `${w.label} · ${$("fitSummary").textContent}`;
+          $("plot").focus({ preventScroll: true });
+        },
+      });
+      $("plotLabel").textContent = `${fmrsResult.datasetName}: ${windows.length} bins (${fmrsResult.mode})${fmrsResult.matchLinewidth ? `, BOLD target LW ${fmrsResult.targetLinewidthHz?.toFixed(1) ?? "?"} Hz` : ""}. Select a window to inspect its LCModel fit.`;
+      return;
+    }
+    if (fmrsPanel === "qc") {
+      plot.innerHTML = qcTimeCourseSvg({ windows, events: pooled ? [] : events, baselineCondition, categories });
+      $("plotLabel").textContent = `QC ${pooled ? "by condition" : "time courses"} across ${windows.length} bins: linewidth (Hz${fmrsResult.matchLinewidth ? ", grey pre-match / coloured post-match FID-A LW" : ""}), LCModel S/N, and tNAA/tCr.`;
+      return;
+    }
+    if (fmrsPanel === "transients") {
+      plot.innerHTML = transientDriftSvg({ transients, events, baselineCondition });
+      const removed = transients.filter((t) => !t.kept).length;
+      $("plotLabel").textContent = `Per-transient spectral registration: ${transients.length - removed}/${transients.length} kept (${removed} removed bad averages shown in red).`;
+      return;
+    }
+    const metab = fmrsMetabSelect.value;
+    if (!metab) {
+      plot.replaceChildren();
+      notice.hidden = false;
+      notice.textContent = "No fitted windows are available for metabolite time courses. Switch to Per-transient drift, QC metrics, or Summary & stats to diagnose fit failures.";
+      $("plotLabel").textContent = "No fitted windows available.";
+      return;
+    }
+    const unit = windows.find((w) => w.unit)?.unit ?? "a.u.";
+    const pts = windows.map((w, idx) => {
+      const m = w.metabolites?.find((r) => r.name === metab);
+      const y = m?.concentration ?? null;
+      const err = y != null && m?.sdPercent != null ? (y * m.sdPercent) / 100 : null;
+      return {
+        x: pooled ? idx : w.midTimeS,
+        y,
+        err,
+        flagged: m && m.sdPercent > SD_LIMIT,
+        tip: `${w.label}${w.condition ? ` (${w.condition})` : ""}: ${y != null ? formatConc(y) : "—"} ${unit} (${m?.sdPercent ?? "?"}% SD)`,
+      };
+    });
+    plot.innerHTML = timeCourseSvg({
+      points: pts,
+      events: pooled ? [] : events,
+      baselineCondition,
+      categories,
+      xLabel: pooled ? "Condition" : "Time (s)",
+      yLabel: `${metab} (${unit})`,
+      ariaLabel: `${metab} ${pooled ? "by condition" : "time course"}`,
+    });
+    const stat = fmrsResult.windowedStats?.metabolites?.find((m) => m.name === metab)?.contrasts?.[0];
+    const dyn = fmrsResult.dynamicGlm?.aligned !== false
+      ? fmrsResult.dynamicGlm?.metabolites?.find((m) => m.name === metab)?.contrasts?.[0]
+      : null;
+    const summaryBits = [
+      `${metab} across ${windows.length} bins`,
+      stat?.percentChange != null && `windowed ${stat.condition} vs ${stat.baseline}: ${stat.percentChange >= 0 ? "+" : ""}${stat.percentChange.toFixed(1)}% (p=${stat.pValue != null ? stat.pValue.toFixed(3) : "—"})`,
+      dyn?.percentChange != null && `dynamic projection: ${dyn.percentChange >= 0 ? "+" : ""}${dyn.percentChange.toFixed(1)}% (p=${dyn.pValue != null ? dyn.pValue.toFixed(3) : "—"})`,
+    ].filter(Boolean);
+    $("plotLabel").textContent = summaryBits.join(" · ");
     return;
   }
   const range = [Number($("ppmStart").value) + 0.2, Math.max(-0.5, Number($("ppmEnd").value) - 0.2)];
@@ -1158,7 +2064,37 @@ function showView(id) {
 
 function importFiles(files, options) {
   exampleControl.cancel();
+  if (!options?.water && !busy && files.length === 1 && /\.(tsv|csv)$/i.test(files[0].name) && input) {
+    // Restore pageDrop's remembered spectroscopy files so a lone schedule picked through
+    // #dataInput never replaces the resident scan in a future Undo snapshot.
+    $("dataInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: residentSpectraFiles() } }));
+    return loadEventsFile(files[0]);
+  }
+  if (busy && importAbort) {
+    // Supersede an in-flight import (e.g. clicking Undo or dropping replacement files
+    // while a slow read or anatomy render is still pending) instead of rejecting and stranding paired inputs.
+    const nextImport = {
+      files,
+      options,
+      events: syncDroppedEvents,
+      waterFiles: syncDroppedWater,
+      basis: syncDroppedBasis,
+      t1: syncDroppedT1,
+    };
+    syncDroppedEvents = null;
+    syncDroppedWater = null;
+    syncDroppedBasis = null;
+    syncDroppedT1 = null;
+    queuedImport = nextImport;
+    syncQueuedImport = nextImport;
+    queueMicrotask(() => {
+      if (syncQueuedImport === nextImport) syncQueuedImport = null;
+    });
+    importAbort.abort(Object.assign(new Error("Superseded"), { name: "AbortError", superseded: true }));
+    return Promise.resolve();
+  }
   return loadFiles({ kind: options?.water ? "water-reference" : "import", files }).catch((error) => {
+    if (error?.superseded) return;
     status(error.name === "AbortError" ? "Loading cancelled" : error.message, error.name !== "AbortError");
     progress.end(error.name === "AbortError" ? "Loading cancelled" : error.message, { success: false });
   });
@@ -1183,7 +2119,16 @@ bindFileDrop($("dropZone"), async (files) => importFiles(await files));
 $("waterInput").addEventListener("change", (event) => {
   const files = Array.from(event.target.files);
   event.target.value = "";
-  if (files.length) void importFiles(files, { water: true });
+  if (!files.length) return;
+  if (syncQueuedImport) {
+    syncQueuedImport.waterFiles = files;
+    return;
+  }
+  if (syncImportController) {
+    pendingDroppedWater = { controller: syncImportController, files };
+    return;
+  }
+  void importFiles(files, { water: true });
 });
 bindFileDrop($("waterDrop"), async (files) => importFiles(await files, { water: true }));
 $("folderInput").addEventListener("change", (event) => {
@@ -1199,27 +2144,226 @@ async function readBasisFile(file) {
   return parseCustomBasis(file.name, text);
 }
 
-async function loadBasisFile(file) {
-  if (!file || busy) return;
-  try {
-    const basis = await readBasisFile(file);
-    setCustomBasis(basis.name, basis.text);
-    status(`${file.name} loaded as the basis set`);
-  } catch (error) {
-    status(error.message, true);
+function formatBasisInfo(basis) {
+  const { header } = basis;
+  return `${basis.name}: ${header.metabolites.length} metabolites${header.teMs ? `, TE ${header.teMs} ms` : ""}${header.hzpppm ? `, ${(header.hzpppm / 42.577).toFixed(1)} T` : ""}`;
+}
+
+function restoreBasisInfo() {
+  if (customBasis) {
+    $("basisInfo").hidden = false;
+    $("basisInfo").textContent = formatBasisInfo(customBasis);
+  } else {
+    $("basisInfo").hidden = true;
+    $("basisInfo").textContent = "";
   }
 }
+
+async function loadBasisFile(file) {
+  if (!file || busy) return;
+  const gen = ++basisGeneration;
+  activeBasisReadGen = gen;
+  $("basisInfo").hidden = false;
+  $("basisInfo").textContent = `Reading ${file.name}…`;
+  updateRunButton();
+  try {
+    const basis = await readBasisFile(file);
+    if (gen !== basisGeneration) return;
+    if (busy) {
+      // An overlapping spectrum import started while this basis was reading: defer committing
+      // until the import settles so read order never silently discards the user's basis choice.
+      pendingDeferredBasis = { gen, basis, file };
+      $("basisInfo").hidden = false;
+      $("basisInfo").textContent = `${file.name} ready (applying after load)…`;
+      return;
+    }
+    setCustomBasis(basis.name, basis.text, file);
+    status(`${file.name} loaded as the basis set`);
+  } catch (error) {
+    if (gen !== basisGeneration) return;
+    pendingDeferredBasis = null;
+    restoreBasisInfo();
+    $("basisInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: customBasis?.file ? [customBasis.file] : [], cancelPending: true } }));
+    status(error.message, true);
+  } finally {
+    if (activeBasisReadGen === gen) activeBasisReadGen = null;
+    updateRunButton();
+  }
+}
+$("basisInput").addEventListener("nd-replace", () => {
+  basisGeneration += 1;
+  pendingDeferredBasis = null;
+  updateRunButton();
+  if (syncQueuedImport) {
+    syncQueuedImport.basis = { clear: true };
+    return;
+  }
+  if (syncImportController) {
+    pendingDroppedBasis = { controller: syncImportController, clear: true };
+    return;
+  }
+  if (busy && !importAbort) return;
+  const entry = { clear: true };
+  syncDroppedBasis = entry;
+  queueMicrotask(() => {
+    if (syncDroppedBasis !== entry) return;
+    syncDroppedBasis = null;
+    if (!syncQueuedImport && !syncImportController && !busy) clearCustomBasis({ notify: true });
+  });
+});
 $("basisInput").addEventListener("change", (event) => {
   const [file] = event.target.files;
   event.target.value = "";
-  void loadBasisFile(file);
+  if (!file) return;
+  basisGeneration += 1;
+  pendingDeferredBasis = null;
+  updateRunButton();
+  if (syncQueuedImport) {
+    syncQueuedImport.basis = { file };
+    return;
+  }
+  if (syncImportController) {
+    pendingDroppedBasis = { controller: syncImportController, file };
+    return;
+  }
+  if (busy && !importAbort) return;
+  const entry = { file };
+  syncDroppedBasis = entry;
+  queueMicrotask(() => {
+    if (syncDroppedBasis !== entry) return;
+    syncDroppedBasis = null;
+    if (!busy) void loadBasisFile(file);
+  });
 });
 bindFileDrop($("basisDrop"), async (files) => loadBasisFile((await files)[0]));
+function commitParsedEvents(name, events, file = null) {
+  eventsGeneration += 1;
+  pendingDeferredEvents = null;
+  fmrsEvents = { name, events, file };
+  const conds = [...new Set(events.map((e) => e.condition))];
+  $("eventsInfo").hidden = false;
+  $("eventsInfo").textContent = `${name}: ${events.length} events (${conds.join(", ")})`;
+  $("clearEventsBtn").hidden = false;
+  $("eventsDrop").classList.add("has-files");
+  clearFmrsResult();
+  if (file) {
+    $("eventsInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: [file] } }));
+  }
+  updateRunButton();
+}
+
+async function loadEventsFile(file) {
+  if (!file || busy) return;
+  // Invalidate any previously loaded schedule and block Run across all modes
+  // (including sliding) until THIS read settles or is superseded by a newer generation.
+  clearEvents({ notify: false });
+  const gen = eventsGeneration;
+  activeEventsReadGen = gen;
+  $("eventsInfo").hidden = false;
+  $("eventsInfo").textContent = `Reading ${file.name}…`;
+  $("clearEventsBtn").hidden = false;
+  updateRunButton();
+  const ownerSession = spectraSessionId;
+  try {
+    const text = await file.text();
+    if (gen !== eventsGeneration) return;
+    if (spectraSessionId !== ownerSession) {
+      clearEvents({ notify: true });
+      return;
+    }
+    const events = parseEventsText(text);
+    if (busy) {
+      // An overlapping non-replacing operation (e.g. standalone T1 import or water attachment)
+      // is busy on the same spectrum: defer committing until setBusy(false) drains deferred reads.
+      pendingDeferredEvents = { gen, name: file.name, events, file, ownerSession };
+      $("eventsInfo").hidden = false;
+      $("eventsInfo").textContent = `${file.name} ready (applying after load)…`;
+      return;
+    }
+    commitParsedEvents(file.name, events, file);
+    status(`${file.name} loaded (${events.length} stimulus events)`);
+  } catch (error) {
+    if (gen !== eventsGeneration) return;
+    clearEvents({ notify: true });
+    status(error.message, true);
+  } finally {
+    if (activeEventsReadGen === gen) activeEventsReadGen = null;
+    updateRunButton();
+  }
+}
+$("eventsInput").addEventListener("nd-replace", () => {
+  pendingDeferredEvents = null;
+  if (syncQueuedImport) {
+    syncQueuedImport.events = { clear: true };
+    return;
+  }
+  if (syncImportController) {
+    pendingDroppedEvents = { controller: syncImportController, clear: true };
+    return;
+  }
+  if (busy && !importAbort) return;
+  // Defer clearing by one microtask so a combined drop arriving as [events, spectra/water]
+  // lets loadFiles or a busy-import Undo queue claim the events file (or Undo's clear) without
+  // clearing the resident schedule if a replacement spectrum is invalid.
+  const entry = { clear: true };
+  syncDroppedEvents = entry;
+  queueMicrotask(() => {
+    if (syncDroppedEvents !== entry) return;
+    syncDroppedEvents = null;
+    if (!syncQueuedImport && !syncImportController && !busy) clearEvents({ notify: true });
+  });
+});
+function rejectAmbiguousEvents(count) {
+  const residentEvents = fmrsEvents?.file ? [fmrsEvents.file] : [];
+  $("eventsInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: residentEvents, cancelPending: true } }));
+  status(`Choose one stimulus events file (.tsv or .csv), not ${count}.`, true);
+}
+$("eventsInput").addEventListener("change", (event) => {
+  const files = Array.from(event.target.files);
+  event.target.value = "";
+  if (!files.length) return;
+  if (syncQueuedImport) {
+    // Undo or replacement drop while a prior import is aborting: pair with the queued import.
+    syncQueuedImport.events = { files };
+    return;
+  }
+  if (syncImportController) {
+    // Combined page drop (spectra/water first, events second) in the same synchronous turn.
+    pendingDroppedEvents = { controller: syncImportController, files };
+    return;
+  }
+  if (busy && !importAbort) return;
+  // Combined page drop (events first, spectra/water second) or Undo replay while busy:
+  // defer standalone loading by one microtask so a same-turn spectrum/water drop or
+  // queued Undo import can claim it.
+  const entry = { files };
+  syncDroppedEvents = entry;
+  queueMicrotask(() => {
+    if (syncDroppedEvents !== entry) return;
+    syncDroppedEvents = null;
+    if (busy) return;
+    if (files.length > 1) rejectAmbiguousEvents(files.length);
+    else void loadEventsFile(files[0]);
+  });
+});
+$("clearEventsBtn").addEventListener("click", () => {
+  clearEvents({ notify: true, cancelPending: true });
+  status("Stimulus events cleared");
+});
+bindFileDrop($("eventsDrop"), async (promised) => {
+  const files = await promised;
+  if (files.length > 1) rejectAmbiguousEvents(files.length);
+  else if (files[0]) void loadEventsFile(files[0]);
+});
+$("fmrsMode").addEventListener("change", updateFmrsControls);
+fmrsPanelSelect.addEventListener("change", () => showView("fmrs"));
+fmrsMetabSelect.addEventListener("change", () => showView("fmrs"));
 $("editedToggle").addEventListener("change", () => {
   const ds = input.datasets[input.index];
   ds.editOverride = $("editedToggle").checked;
-  // The stored fit used the other reading of the transients.
+  // The stored fit and any fMRS analysis used the other reading of the transients.
   fits.delete(input.index);
+  clearFmrsResult();
   clearResults();
   showDataset();
   renderGroup();
@@ -1238,7 +2382,7 @@ for (const id of ["hzpppmInput", "dwellInput"]) $(id).addEventListener("input", 
 $("concColumn").addEventListener("change", () => {
   if (fit) renderConcentrations();
 });
-$("runButton").addEventListener("click", () => void (datasetCount() > 1 ? runGroup() : run()));
+$("runButton").addEventListener("click", () => void (fmrsActive() ? runFmrs() : datasetCount() > 1 ? runGroup() : run()));
 $("runSelectedButton").addEventListener("click", () => void run());
 
 const exampleControl = createExampleSelector({
@@ -1340,8 +2484,82 @@ async function fitGroupOperation(context) {
   };
 }
 
+async function fitFmrsOperation(context) {
+  const { inputs, parameters: p, signal, progress: report } = context;
+  await prepareAutomation(context);
+  if (input.kind !== "fida") throw new Error("fit-fmrs requires unaveraged raw spectroscopy data.");
+  if (input.datasets.length !== 1) {
+    throw new Error(`fit-fmrs fits one multi-transient dataset at a time, not ${input.datasets.length} datasets.`);
+  }
+  const ownerInput = input;
+  clearEvents({ notify: true, cancelPending: true });
+  const gen = eventsGeneration;
+  if (inputs.events?.length) {
+    signal?.throwIfAborted();
+    const text = await inputs.events[0].text();
+    signal?.throwIfAborted();
+    if (gen !== eventsGeneration || busy || input !== ownerInput) {
+      throw new Error("Spectroscopy input or stimulus events changed while reading automation events.");
+    }
+    commitParsedEvents(inputs.events[0].name, parseEventsText(text), inputs.events[0]);
+  }
+  $("fmrsMode").value = p.fmrsMode ?? "sliding";
+  $("fmrsWindow").value = String(p.fmrsWindow ?? 4);
+  $("fmrsStep").value = p.fmrsStep ? String(p.fmrsStep) : "";
+  $("matchLinewidth").checked = Boolean(p.matchLinewidth);
+  $("dynamicGlm").checked = p.dynamicGlm ?? true;
+  updateFmrsControls();
+  const choice = $("basisSelect").value;
+  checkBasis(currentHeader(), choice, bases());
+  report("Running functional MRS analysis");
+  const result = await whileCancellable(signal, () => runFmrs({ throwOnError: true }));
+  const artifacts = Object.entries(fmrsFiles()).map(([role, item]) => ({ role, file: item.file ?? item.make() }));
+  return {
+    artifacts,
+    measurements: {
+      mode: result.mode,
+      windows: result.windows.map((w) => ({
+        id: w.id,
+        label: w.label,
+        condition: w.condition,
+        midTimeS: w.midTimeS,
+        averagesKept: w.averagesKept,
+        status: w.status,
+        qcStatus: w.qc?.status ?? null,
+        fwhmPpm: w.fwhmPpm ?? null,
+        lwHz: w.lwHz ?? null,
+        broadeningAppliedHz: w.broadeningAppliedHz ?? 0,
+        linewidthMatchStatus: w.linewidthMatchStatus ?? "off",
+        snr: w.lcmSnr ?? null,
+      })),
+      conditionSummary: result.conditionSummary,
+      windowedStats: result.windowedStats,
+      dynamicGlm: result.dynamicGlm
+        ? {
+            aligned: result.dynamicGlm.aligned,
+            alignmentRms: result.dynamicGlm.alignmentRms ?? null,
+            error: result.dynamicGlm.error ?? null,
+            seMethod: result.dynamicGlm.seMethod ?? null,
+            transientsUsed: result.dynamicGlm.transientsUsed,
+            degreesOfFreedom: result.dynamicGlm.degreesOfFreedom,
+            baseline: result.dynamicGlm.baseline,
+            metabolites: result.dynamicGlm.metabolites,
+            boldLinewidth: result.dynamicGlm.boldLinewidth?.contrasts ?? null,
+            freqShift: result.dynamicGlm.freqShift?.contrasts ?? null,
+          }
+        : null,
+    },
+    provenance: {
+      basisSet: choice === CUSTOM ? customBasis.name : choice,
+      mode: result.mode,
+      matchLinewidth: result.matchLinewidth,
+      targetLinewidthHz: result.targetLinewidthHz,
+    },
+  };
+}
+
 // T1 DICOM inputs arrive converted, through the shared dcm2niix import.
-registerAppAutomation({ app: APP.id, convertDicom: runDcm2niix, operations: { fit: fitOperation, "fit-group": fitGroupOperation } });
+registerAppAutomation({ app: APP.id, convertDicom: runDcm2niix, operations: { fit: fitOperation, "fit-group": fitGroupOperation, "fit-fmrs": fitFmrsOperation } });
 
 window.addEventListener("pagehide", () => {
   importAbort?.abort();

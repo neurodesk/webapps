@@ -102,9 +102,9 @@ importers:
 
   apps/ants:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260813
-        version: 0.1.20260813
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/ants':
         specifier: workspace:*
         version: link:../../packages/ants
@@ -186,9 +186,9 @@ importers:
 
   apps/brain-extraction:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/brain-extraction':
         specifier: workspace:*
         version: link:../../packages/brain-extraction
@@ -220,9 +220,9 @@ importers:
 
   apps/brain2print:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/brain2print':
         specifier: workspace:*
         version: link:../../packages/brain2print
@@ -243,8 +243,39 @@ importers:
         specifier: ^6.3.2
         version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)
 
+  apps/brainchomp:
+    dependencies:
+      '@neurodesk/brainchomp':
+        specifier: workspace:*
+        version: link:../../packages/brainchomp
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../../packages/runtime-support
+      '@neurodesk/synthsr':
+        specifier: workspace:*
+        version: link:../../packages/synthsr
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.26
+        version: 1.0.0-rc.26
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1)
+
   apps/brainchop:
     dependencies:
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
+      '@neurodesk/brainchop':
+        specifier: workspace:*
+        version: link:../../packages/brainchop
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
@@ -252,18 +283,15 @@ importers:
         specifier: workspace:*
         version: link:../../packages/components
       '@niivue/niivue':
-        specifier: 0.62.0
-        version: 0.62.0
-      '@tensorflow/tfjs':
-        specifier: 4.20.0
-        version: 4.20.0(seedrandom@3.0.5)
+        specifier: 1.0.0-rc.26
+        version: 1.0.0-rc.26
     devDependencies:
       '@playwright/test':
         specifier: 1.64.0
         version: 1.64.0
       vite:
-        specifier: ^5.0.0
-        version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1)
 
   apps/brainqcnet:
     dependencies:
@@ -292,9 +320,9 @@ importers:
 
   apps/browserqc:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/browserqc':
         specifier: workspace:*
         version: link:../../packages/browserqc
@@ -332,6 +360,9 @@ importers:
 
   apps/calcium-imaging:
     dependencies:
+      '@neurodesk/calcium-imaging':
+        specifier: workspace:*
+        version: link:../../packages/calcium-imaging
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -398,6 +429,34 @@ importers:
       vite:
         specifier: ^5.0.0
         version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
+
+  apps/cellpose:
+    dependencies:
+      '@neurodesk/cellpose':
+        specifier: workspace:*
+        version: link:../../packages/cellpose
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.33
+        version: 1.0.0-rc.33
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      onnxruntime-web:
+        specifier: 1.29.0
+        version: 1.29.0
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      geotiff:
+        specifier: 3.0.5
+        version: 3.0.5
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1)
 
   apps/cryo-em:
     dependencies:
@@ -514,6 +573,85 @@ importers:
       vite:
         specifier: ^5.0.0
         version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
+
+  apps/denoise:
+    dependencies:
+      '@neurodesk/denoise':
+        specifier: workspace:*
+        version: link:../../packages/denoise
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.33
+        version: 1.0.0-rc.33
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
+
+  apps/derm-compare:
+    dependencies:
+      '@neurodesk/derm-compare':
+        specifier: workspace:*
+        version: link:../../packages/derm-compare
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1)
+
+  apps/dermoscope:
+    dependencies:
+      '@neurodesk/dermoscope':
+        specifier: workspace:*
+        version: link:../../packages/dermoscope
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1)
+
+  apps/dermvit:
+    dependencies:
+      '@neurodesk/dermvit':
+        specifier: workspace:*
+        version: link:../../packages/dermvit
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      onnxruntime-web:
+        specifier: 1.29.0
+        version: 1.29.0
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1)
 
   apps/dicompare:
     dependencies:
@@ -697,9 +835,9 @@ importers:
 
   apps/dwi2trx:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@dipy/gpu-streamlines':
         specifier: file:./vendor/gpu-streamlines
         version: file:apps/dwi2trx/vendor/gpu-streamlines
@@ -868,9 +1006,9 @@ importers:
 
   apps/fastprep:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20261008
-        version: 0.1.20261008
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/fastprep':
         specifier: workspace:*
         version: link:../../packages/fastprep
@@ -914,9 +1052,9 @@ importers:
 
   apps/fireants:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260813
-        version: 0.1.20260813
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@fireants/fireants':
         specifier: 0.1.20260913
         version: 0.1.20260913
@@ -970,9 +1108,9 @@ importers:
 
   apps/greedy:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260813
-        version: 0.1.20260813
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/greedy':
         specifier: workspace:*
         version: link:../../packages/greedy
@@ -998,6 +1136,9 @@ importers:
       '@neurodesk/greedy':
         specifier: workspace:*
         version: link:../../packages/greedy
+      '@neurodesk/histo2mri':
+        specifier: workspace:*
+        version: link:../../packages/histo2mri
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -1048,9 +1189,9 @@ importers:
 
   apps/lcmodel:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/lcmodel':
         specifier: workspace:*
         version: link:../../packages/lcmodel
@@ -1079,6 +1220,9 @@ importers:
       '@neurodesk/greedy':
         specifier: workspace:*
         version: link:../../packages/greedy
+      '@neurodesk/lightsheet-atlas':
+        specifier: workspace:*
+        version: link:../../packages/lightsheet-atlas
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -1112,6 +1256,31 @@ importers:
         specifier: ^5.0.0
         version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
 
+  apps/medsam2:
+    dependencies:
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../../packages/runtime-support
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.33
+        version: 1.0.0-rc.33
+      onnxruntime-web:
+        specifier: 1.29.0
+        version: 1.29.0
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      playwright:
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1)
+
   apps/microsam:
     dependencies:
       '@neurodesk/webapp-components':
@@ -1136,6 +1305,9 @@ importers:
 
   apps/microscope-qc:
     dependencies:
+      '@neurodesk/microscope-qc':
+        specifier: workspace:*
+        version: link:../../packages/microscope-qc
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -1228,6 +1400,9 @@ importers:
 
   apps/neuromorph:
     dependencies:
+      '@neurodesk/neuromorph':
+        specifier: workspace:*
+        version: link:../../packages/neuromorph
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -1468,6 +1643,25 @@ importers:
         specifier: 1.64.0
         version: 1.64.0
 
+  apps/skin-chromophore:
+    dependencies:
+      '@neurodesk/skin-chromophore':
+        specifier: workspace:*
+        version: link:../../packages/skin-chromophore
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1)
+
   apps/spinalcordtoolbox:
     dependencies:
       '@neurodesk/spinalcordtoolbox':
@@ -1492,6 +1686,9 @@ importers:
 
   apps/spot-detection:
     dependencies:
+      '@neurodesk/spot-detection':
+        specifier: workspace:*
+        version: link:../../packages/spot-detection
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -1508,6 +1705,9 @@ importers:
 
   apps/stardist:
     dependencies:
+      '@neurodesk/stardist':
+        specifier: workspace:*
+        version: link:../../packages/stardist
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -1539,6 +1739,9 @@ importers:
       '@fideus-labs/ngff-zarr':
         specifier: 0.38.0
         version: 0.38.0
+      '@neurodesk/stitching':
+        specifier: workspace:*
+        version: link:../../packages/stitching
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -1561,6 +1764,9 @@ importers:
 
   apps/structure-tensor:
     dependencies:
+      '@neurodesk/structure-tensor':
+        specifier: workspace:*
+        version: link:../../packages/structure-tensor
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -1593,15 +1799,18 @@ importers:
 
   apps/syncro:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260813
-        version: 0.1.20260813
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/brain-extraction':
         specifier: workspace:*
         version: link:../../packages/brain-extraction
       '@neurodesk/greedy':
         specifier: workspace:*
         version: link:../../packages/greedy
+      '@neurodesk/pipeline-drivers':
+        specifier: workspace:*
+        version: link:../../packages/pipeline-drivers
       '@neurodesk/registration':
         specifier: workspace:*
         version: link:../../packages/registration
@@ -1614,12 +1823,12 @@ importers:
       '@neurodesk/synthsr':
         specifier: workspace:*
         version: link:../../packages/synthsr
-      '@neurodesk/synthstrip':
-        specifier: workspace:*
-        version: link:../../packages/synthstrip
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
+      '@niivue/niimath':
+        specifier: 1.4.20261016
+        version: 1.4.20261016
       '@niivue/niivue':
         specifier: 1.0.0-rc.26
         version: 1.0.0-rc.26
@@ -1724,6 +1933,71 @@ importers:
         specifier: ^6.3.2
         version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)
 
+  apps/totalsegmentator:
+    dependencies:
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../../packages/runtime-support
+      '@neurodesk/synthsr':
+        specifier: workspace:*
+        version: link:../../packages/synthsr
+      '@neurodesk/totalsegmentator':
+        specifier: workspace:*
+        version: link:../../packages/totalsegmentator
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.33
+        version: 1.0.0-rc.33
+      onnxruntime-web:
+        specifier: 1.29.0
+        version: 1.29.0
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      playwright:
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1)
+
+  apps/tumour-report:
+    dependencies:
+      '@neurodesk/greedy':
+        specifier: workspace:*
+        version: link:../../packages/greedy
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../../packages/runtime-support
+      '@neurodesk/synthsr':
+        specifier: workspace:*
+        version: link:../../packages/synthsr
+      '@neurodesk/tumour-report':
+        specifier: workspace:*
+        version: link:../../packages/tumour-report
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.33
+        version: 1.0.0-rc.33
+      onnxruntime-web:
+        specifier: 1.29.0
+        version: 1.29.0
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      playwright:
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1)
+
   apps/vesselboost:
     dependencies:
       '@neurodesk/vesselboost':
@@ -1773,6 +2047,25 @@ importers:
       vite:
         specifier: ^6.3.2
         version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)
+
+  apps/wound-planimetry:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@neurodesk/wound-planimetry':
+        specifier: workspace:*
+        version: link:../../packages/wound-planimetry
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1)
 
   apps/zarro:
     dependencies:
@@ -1858,9 +2151,9 @@ importers:
 
   packages/brain-extraction:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/node-drivers':
         specifier: workspace:*
         version: link:../node-drivers
@@ -1880,9 +2173,9 @@ importers:
 
   packages/brain2print:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/node-drivers':
         specifier: workspace:*
         version: link:../node-drivers
@@ -1903,6 +2196,27 @@ importers:
         specifier: ^6.3.2
         version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)
 
+  packages/brainchomp:
+    dependencies:
+      '@neurodesk/node-drivers':
+        specifier: workspace:*
+        version: link:../node-drivers
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+
+  packages/brainchop:
+    dependencies:
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
+      '@neurodesk/node-drivers':
+        specifier: workspace:*
+        version: link:../node-drivers
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+
   packages/brainqcnet:
     dependencies:
       '@neurodesk/webapp-components':
@@ -1915,9 +2229,9 @@ importers:
 
   packages/browserqc:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/node-drivers':
         specifier: workspace:*
         version: link:../node-drivers
@@ -1925,6 +2239,12 @@ importers:
         specifier: 1.4.20260928
         version: 1.4.20260928
     devDependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+
+  packages/calcium-imaging:
+    dependencies:
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../components
@@ -1951,6 +2271,18 @@ importers:
         specifier: workspace:*
         version: link:../components
 
+  packages/cellpose:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
+
   packages/components:
     dependencies:
       geotiff:
@@ -1975,13 +2307,17 @@ importers:
 
   packages/cryo-em: {}
 
-  packages/deconvolution: {}
+  packages/deconvolution:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
 
   packages/deface:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/node-drivers':
         specifier: workspace:*
         version: link:../node-drivers
@@ -2002,6 +2338,12 @@ importers:
         specifier: workspace:*
         version: link:../components
 
+  packages/denoise:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+
   packages/dependency-quality:
     dependencies:
       '@swc/core':
@@ -2013,6 +2355,54 @@ importers:
       enhanced-resolve:
         specifier: 5.26.0
         version: 5.26.0
+
+  packages/derm-compare:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      jpeg-js:
+        specifier: 0.4.4
+        version: 0.4.4
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
+
+  packages/dermoscope:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      jpeg-js:
+        specifier: 0.4.4
+        version: 0.4.4
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
+
+  packages/dermvit:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      jpeg-js:
+        specifier: 0.4.4
+        version: 0.4.4
+      onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
 
   packages/desktop:
     dependencies:
@@ -2054,9 +2444,9 @@ importers:
 
   packages/dwi2trx:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/node-drivers':
         specifier: workspace:*
         version: link:../node-drivers
@@ -2130,6 +2520,9 @@ importers:
 
   packages/fastprep:
     dependencies:
+      '@neurodesk/pipeline-drivers':
+        specifier: workspace:*
+        version: link:../pipeline-drivers
       '@neurodesk/sdc':
         specifier: workspace:*
         version: link:../sdc
@@ -2140,9 +2533,9 @@ importers:
         specifier: 0.1.20261021
         version: 0.1.20261021
     devDependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20261008
-        version: 0.1.20261008
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/node-drivers':
         specifier: workspace:*
         version: link:../node-drivers
@@ -2168,11 +2561,26 @@ importers:
 
   packages/greedy: {}
 
+  packages/histo2mri:
+    dependencies:
+      '@neurodesk/greedy':
+        specifier: workspace:*
+        version: link:../greedy
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      jpeg-js:
+        specifier: 0.4.4
+        version: 0.4.4
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
+
   packages/hmc:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/dwi2trx':
         specifier: workspace:*
         version: link:../dwi2trx
@@ -2198,9 +2606,9 @@ importers:
 
   packages/lcmodel:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/node-drivers':
         specifier: workspace:*
         version: link:../node-drivers
@@ -2214,6 +2622,21 @@ importers:
       jsdom:
         specifier: 24.1.3
         version: 24.1.3
+
+  packages/lightsheet-atlas:
+    dependencies:
+      '@neurodesk/greedy':
+        specifier: workspace:*
+        version: link:../greedy
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+
+  packages/microscope-qc:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
 
   packages/mri2vid:
     dependencies:
@@ -2242,9 +2665,9 @@ importers:
 
   packages/n4:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/node-drivers':
         specifier: workspace:*
         version: link:../node-drivers
@@ -2275,6 +2698,8 @@ importers:
         specifier: 5.4.21
         version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
 
+  packages/neuromorph: {}
+
   packages/nii2tvx: {}
 
   packages/niimath:
@@ -2288,9 +2713,9 @@ importers:
 
   packages/noddi:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/dwi2trx':
         specifier: workspace:*
         version: link:../dwi2trx
@@ -2303,9 +2728,9 @@ importers:
 
   packages/node-drivers:
     devDependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@niivue/niimath':
         specifier: 1.4.20260928
         version: 1.4.20260928
@@ -2346,6 +2771,15 @@ importers:
 
   packages/openads: {}
 
+  packages/pipeline-drivers:
+    devDependencies:
+      '@neurodesk/registration':
+        specifier: workspace:*
+        version: link:../registration
+      '@niivue/niimath':
+        specifier: 1.4.20261016
+        version: 1.4.20261016
+
   packages/qsmbly:
     devDependencies:
       '@neurodesk/webapp-components':
@@ -2359,9 +2793,9 @@ importers:
 
   packages/runtime-support:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../components
@@ -2390,9 +2824,9 @@ importers:
 
   packages/sdc:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260925
-        version: 0.1.20260925
+      '@brainchop/core':
+        specifier: 1.0.0
+        version: 1.0.0
       '@neurodesk/ants-denoise':
         specifier: workspace:*
         version: link:../ants-denoise
@@ -2440,6 +2874,21 @@ importers:
 
   packages/shoreline: {}
 
+  packages/skin-chromophore:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      jpeg-js:
+        specifier: 0.4.4
+        version: 0.4.4
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
+
   packages/spinalcordtoolbox:
     dependencies:
       '@neurodesk/webapp-components':
@@ -2449,42 +2898,59 @@ importers:
         specifier: 1.29.0
         version: 1.29.0
 
-  packages/syncro:
+  packages/spot-detection:
     dependencies:
-      '@brainchop/mindgrab':
-        specifier: 0.1.20260813
-        version: 0.1.20260813
-      '@neurodesk/node-drivers':
+      '@neurodesk/webapp-components':
         specifier: workspace:*
-        version: link:../node-drivers
-      nifti-reader-js:
-        specifier: 0.8.0
-        version: 0.8.0
+        version: link:../components
+
+  packages/stardist:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      clipper-lib:
+        specifier: 6.4.2
+        version: 6.4.2
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
       onnxruntime-node:
         specifier: 1.29.0
         version: 1.29.0
+
+  packages/stitching:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+
+  packages/structure-tensor:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      jpeg-js:
+        specifier: 0.4.4
+        version: 0.4.4
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
+
+  packages/syncro:
     devDependencies:
-      '@neurodesk/brain-extraction':
-        specifier: workspace:*
-        version: link:../brain-extraction
-      '@neurodesk/greedy':
-        specifier: workspace:*
-        version: link:../greedy
       '@neurodesk/registration':
         specifier: workspace:*
         version: link:../registration
       '@neurodesk/synthsr':
         specifier: workspace:*
         version: link:../synthsr
-      '@neurodesk/synthstrip':
-        specifier: workspace:*
-        version: link:../synthstrip
       '@playwright/test':
         specifier: 1.64.0
         version: 1.64.0
-      esbuild:
-        specifier: ^0.25.0
-        version: 0.25.12
 
   packages/synthseg:
     dependencies:
@@ -2537,6 +3003,36 @@ importers:
         specifier: 1.64.0
         version: 1.64.0
 
+  packages/totalsegmentator:
+    dependencies:
+      '@neurodesk/synthsr':
+        specifier: workspace:*
+        version: link:../synthsr
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
+
+  packages/tumour-report:
+    dependencies:
+      '@neurodesk/greedy':
+        specifier: workspace:*
+        version: link:../greedy
+      '@neurodesk/node-drivers':
+        specifier: workspace:*
+        version: link:../node-drivers
+      '@neurodesk/synthsr':
+        specifier: workspace:*
+        version: link:../synthsr
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
+
   packages/vesselboost:
     dependencies:
       '@neurodesk/webapp-components':
@@ -2568,6 +3064,21 @@ importers:
       onnxruntime-web:
         specifier: 1.29.0
         version: 1.29.0
+
+  packages/wound-planimetry:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      fast-png:
+        specifier: 8.0.0
+        version: 8.0.0
+      jpeg-js:
+        specifier: 0.4.4
+        version: 0.4.4
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
 
   scripts/quality:
     dependencies:
@@ -3029,17 +3540,8 @@ packages:
   '@borewit/text-codec@0.2.2':
     resolution: {integrity: sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ==}
 
-  '@brainchop/mindgrab@0.1.20260813':
-    resolution: {integrity: sha512-HpushBfOzG5yhzgKmhjy1q+8DYxLdM96LeeciF+W2wwStKFzNW1ABY87fwGZjFXcivoWVv+HWPfakBe/GrQPsA==}
-    deprecated: 'Replaced by @brainchop/core (same API): npm i @brainchop/core'
-
-  '@brainchop/mindgrab@0.1.20260925':
-    resolution: {integrity: sha512-FFuU3IMQqrUuiHdm6l0//eXZ5X4vuOTgq4yK4qgUn5dOiMnY7LjRP+SpFULCZK3H4zW/mNuONXAE/Ex1PZvbvA==}
-    deprecated: 'Replaced by @brainchop/core (same API): npm i @brainchop/core'
-
-  '@brainchop/mindgrab@0.1.20261008':
-    resolution: {integrity: sha512-pU+2152MT5mFqY3MbSV32jzVsm3yq5dOezM0HJGZTyPb5r8KxSri/BH9nFbI6docK9+TxFAH0JN2AmrqQmyB4A==}
-    deprecated: 'Replaced by @brainchop/core (same API): npm i @brainchop/core'
+  '@brainchop/core@1.0.0':
+    resolution: {integrity: sha512-7gf04PrZ5gJMfyHd0D0Cp9USyubrLNv5aevdTIDDNwgttc7j4GmAWb2cgEjiYs0LGsqG0zKSLWFzAJmNPCWzMQ==}
 
   '@cbor-extract/cbor-extract-darwin-arm64@2.2.2':
     resolution: {integrity: sha512-ZKZ/F8US7JR92J4DMct6cLW/Y66o2K576+zjlEN/MevH70bFIsB10wkZEQPLzl2oNh2SMGy55xpJ9JoBRl5DOA==}
@@ -4519,9 +5021,6 @@ packages:
   '@niivue/niimath@1.4.20261114':
     resolution: {integrity: sha512-Wy3mqz+G7Tn6/Ar/ce5Anj5loi98baBRn5rsRki23YKnzZpwp3uvjD18nv2cNQxhv4Qwltr7e95Aw6ntCp+g6w==}
 
-  '@niivue/niivue@0.62.0':
-    resolution: {integrity: sha512-CFaRJvoacx/N/7gwkIOIR4mFV2fZ1Kl8X31izhD2w/PpkLEQSL1hZC55ABR8FJI+zUDrK0w+nQnQwIloZdVVMg==}
-
   '@niivue/niivue@0.62.1':
     resolution: {integrity: sha512-v/D91ICqROoVp+ByDs3JjzotLzC4nJ44181Gl882AaXR62BNsvT4SaDY7ob37Dgv70AScGWsapqiCkHI7gFFgQ==}
 
@@ -5507,42 +6006,6 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
-  '@tensorflow/tfjs-backend-cpu@4.20.0':
-    resolution: {integrity: sha512-1QRQ6AqAa/VB8JOArf5nY3Dc/QQHXbfuxgdIdQhKrABEHgvlaWt2Vv696UhIlVl75YoNY+vWlCwBdGQIKYfFGw==}
-    engines: {yarn: '>= 1.3.2'}
-    peerDependencies:
-      '@tensorflow/tfjs-core': 4.20.0
-
-  '@tensorflow/tfjs-backend-webgl@4.20.0':
-    resolution: {integrity: sha512-M03fJonJGxm2u3SCzRNA2JLh0gxaAye64SEmGAXOehizowxy42l+lMsPWU8xU7r7mN6PEilBNkuKAf5YJ7Xumg==}
-    engines: {yarn: '>= 1.3.2'}
-    peerDependencies:
-      '@tensorflow/tfjs-core': 4.20.0
-
-  '@tensorflow/tfjs-converter@4.20.0':
-    resolution: {integrity: sha512-UJ2ntQ1TNtVHB5qGMwB0j306bs3KH1E1HKJ9Dxvrc6PUaivOV+CPKqmbidOFG5LylXeRC36JBdhe+gVT2nFHNw==}
-    peerDependencies:
-      '@tensorflow/tfjs-core': 4.20.0
-
-  '@tensorflow/tfjs-core@4.20.0':
-    resolution: {integrity: sha512-m/cc9qDc63al9UhdbXRUYTLGfJJlhuN5tylAX/2pJMLj32c8a6ThGDJYoKzpf32n5g3MQGYLchjClDxeGdXMPQ==}
-    engines: {yarn: '>= 1.3.2'}
-
-  '@tensorflow/tfjs-data@4.20.0':
-    resolution: {integrity: sha512-k6S8joXhoXkatcoT6mYCxBzRCsnrLfnl6xjLe46SnXO0oEEy4Vuzbmp5Ydl1uU2hHr73zL91EdAC1k8Hng/+oA==}
-    peerDependencies:
-      '@tensorflow/tfjs-core': 4.20.0
-      seedrandom: ^3.0.5
-
-  '@tensorflow/tfjs-layers@4.20.0':
-    resolution: {integrity: sha512-SCHZH29Vyw+Y9eoaJHiaNo6yqM9vD3XCKncoczonRRywejm3FFqddg1AuWAfSE9XoNPE21o9PsknvKLl/Uh+Cg==}
-    peerDependencies:
-      '@tensorflow/tfjs-core': 4.20.0
-
-  '@tensorflow/tfjs@4.20.0':
-    resolution: {integrity: sha512-+ZLfJq2jyIOE2/+yKPoyD/gfy3RZypbfMrlzvBDgodTK5jnexprihhX38hxilh9HPWvWQXJqiUjKJP5ECCikrw==}
-    hasBin: true
-
   '@testing-library/dom@10.4.1':
     resolution: {integrity: sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg==}
     engines: {node: '>=18'}
@@ -5684,29 +6147,17 @@ packages:
   '@types/keyv@3.1.4':
     resolution: {integrity: sha512-BQ5aZNSCpj7D6K2ksrRCTmKRLEpnPvWDiLPfoGyhZ++8YtiK9d/3DBKPJgry359X/P1PfruyYwvnvwFjuEiEIg==}
 
-  '@types/long@4.0.2':
-    resolution: {integrity: sha512-MqTGEo5bj5t157U6fA/BiDynNkn0YknVdh48CMPkTSpFTVmvao5UQmm7uEF6xBEo7qIMAlY/JSleYaE6VOdpaA==}
-
   '@types/mdast@4.0.4':
     resolution: {integrity: sha512-kGaNbPh1k7AFzgpud/gMdvIm5xuECykRR+JnWKQno9TAXVa6WIVCGTPvYGekIDL4uwCZQSYbUxNBSb1aUo79oA==}
 
   '@types/ms@2.1.0':
     resolution: {integrity: sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA==}
 
-  '@types/node-fetch@2.6.13':
-    resolution: {integrity: sha512-QGpRVpzSaUs30JBSGPjOg4Uveu384erbHBoT1zeONvyCfwQxIkUshLAOqN/k9EjGviPRmWTTe6aH2qySWKTVSw==}
-
   '@types/node@12.20.55':
     resolution: {integrity: sha512-J8xLz7q2OFulZ2cyGTLE1TbbZcjpno7FaN6zdJNrgAdrJ+DZzh/uFR6YrTb4C+nXakvud8Q4+rbhoIWlYQbUFQ==}
 
   '@types/node@24.13.3':
     resolution: {integrity: sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q==}
-
-  '@types/offscreencanvas@2019.3.0':
-    resolution: {integrity: sha512-esIJx9bQg+QYF0ra8GnvfianIY8qWB0GBx54PK5Eps6m+xTj86KLavHv6qDhzKcu5UUOgNfJ2pWaIIV7TRUd9Q==}
-
-  '@types/offscreencanvas@2019.7.3':
-    resolution: {integrity: sha512-ieXiYmgSRXUDeOntE1InxjWyvEelZGP63M+cGuquuRLuIKKT1osnkXjxev9B7d1nXSug5vpunx+gNlbVxMlC9A==}
 
   '@types/react-dom@19.2.3':
     resolution: {integrity: sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==}
@@ -5718,9 +6169,6 @@ packages:
 
   '@types/responselike@1.0.3':
     resolution: {integrity: sha512-H/+L+UkTV33uf49PH5pCAUBVPNj2nDBXTN+qS1dOwyyg24l3CcicicCA7ca+HMvJBZcFgl5r8e+RR6elsb4Lyw==}
-
-  '@types/seedrandom@2.4.34':
-    resolution: {integrity: sha512-ytDiArvrn/3Xk6/vtylys5tlY6eo7Ane0hvcx++TKo6RxQXuVfW0AF/oeWqAj9dN29SyhtawuXstgmPlwNcv/A==}
 
   '@types/stack-utils@2.0.3':
     resolution: {integrity: sha512-9aEbYZ3TbYMznPdcdr3SmIrLXwC/AKZXQeCf9Pgao5CKb8CyHuEX5jzWPTkvregvhRJHcpRO6BFoGW9ycaOkYw==}
@@ -5999,9 +6447,6 @@ packages:
 
   '@web3-storage/car-block-validator@1.2.2':
     resolution: {integrity: sha512-lR9l+ZszhTid5HfZE8ohnGf2RJp2kaBOnoejmsACs3iTNiy+3K09dnPm8MhgBE9RCIgPBKM0CCWXO9l+I6jrKA==}
-
-  '@webgpu/types@0.1.38':
-    resolution: {integrity: sha512-7LrhVKz2PRh+DD7+S+PVaFd5HxaWQvoMqBbsV9fNJO1pjUs1P8bM2vQVNfk+3URTqbuTI7gkXi0rfsN0IadoBA==}
 
   '@webgpu/types@0.1.71':
     resolution: {integrity: sha512-mMy8/ODcKhab808co15eW+yN+HgXoQxRQHTiBV9Mrvl1r0ufnid7YOcI+gi4eUWSWl9ezD6TW2KXccrL8HCh2A==}
@@ -6492,9 +6937,6 @@ packages:
     resolution: {integrity: sha512-WuRO1ZHzyYTVHY78r4wVWVydvQ+1lx9qZ+DeZa/8zhvrxIgCVzElJ6lwSMGtUUKFPefhvfJsHZ5C9RNkgisCOQ==}
     engines: {node: '>=14.0.0'}
 
-  cliui@7.0.4:
-    resolution: {integrity: sha512-OcRE68cOsVMXp1Yvonl/fzkQOyjLSu/8bhPDfQt0e0/Eb283TKP20Fs2MqoPsr9SwA595rRCA+QMzYc9nBP+JQ==}
-
   cliui@8.0.1:
     resolution: {integrity: sha512-BSeNnyus75C4//NQ9gQt1/csTXyo/8Sb+afLAkzAptFuMsod9HFokGNudZpi/oQV73hnVK+sR+5PVRMd+Dr7YQ==}
     engines: {node: '>=12'}
@@ -6608,9 +7050,6 @@ packages:
 
   core-js-pure@3.50.0:
     resolution: {integrity: sha512-6GP3Pxz4IKyWjAfa747vIu/jilB5z29JWROLqH/b+pXVcpgh6tM06ZIBwSuglgVqzDYURhOK6oEzTrG0bCHitA==}
-
-  core-js@3.29.1:
-    resolution: {integrity: sha512-+jwgnhg6cQxKYIIjGtAHq2nwUOolo9eoFZ4sHfUH09BLXBgxnH4gA0zEd+t+BO2cNB8idaBtZFcFTRjQJRJmAw==}
 
   core-util-is@1.0.3:
     resolution: {integrity: sha512-ZQBvi1DcpJ4GDqanjucZ2Hj3wEO5pZDS89BWbkcrvdxksJorwUDDZamX9ldFkp9aw2lmBDLgkObEA4DWNJ9FYQ==}
@@ -8126,9 +8565,6 @@ packages:
     resolution: {integrity: sha512-HgMmCqIJSAKqo68l0rS2AanEWfkxaZ5wNiEFb5ggm08lDs9Xl2KxBlX3PTcaD2chBM1gXAYf491/M2Rv8Jwayg==}
     engines: {node: '>= 0.6.0'}
 
-  long@4.0.0:
-    resolution: {integrity: sha512-XsP+KhQif4bjX1kbuSiySJFNAehNxgLb6hPRGJ9QsUr8ajHkuXGdrHmFUTUUXhDwVX2R5bY4JNZEwbUiMhV+MA==}
-
   long@5.3.2:
     resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
 
@@ -8499,15 +8935,6 @@ packages:
 
   node-api-version@0.2.1:
     resolution: {integrity: sha512-2xP/IGGMmmSQpI1+O/k72jF/ykvZ89JeuKX3TLJAYPDVLUalrshrLHkeVcCCZqG/eEa635cr8IBYzgnDvM2O8Q==}
-
-  node-fetch@2.6.13:
-    resolution: {integrity: sha512-StxNAxh15zr77QvvkmveSQ8uCQ4+v5FkvNTj0OESmiHu+VRi/gXArXtkWMElOsOUNLtUEvI4yS+rdtOHZTwlQA==}
-    engines: {node: 4.x || >=6.0.0}
-    peerDependencies:
-      encoding: ^0.1.0
-    peerDependenciesMeta:
-      encoding:
-        optional: true
 
   node-gyp-build-optional-packages@5.1.1:
     resolution: {integrity: sha512-+P72GAjVAbTxjjwUmwjVrqrdZROD4nf8KgpBoDxqXXTiYZZt/ud60dE5yvCSr9lRO8e8yv6kgJIC0K0PfZFVQw==}
@@ -9064,9 +9491,6 @@ packages:
   reference-spec-reader@0.2.0:
     resolution: {integrity: sha512-q0mfCi5yZSSHXpCyxjgQeaORq3tvDsxDyzaadA/5+AbAUwRyRuuTh0aRQuE/vAOt/qzzxidJ5iDeu1cLHaNBlQ==}
 
-  regenerator-runtime@0.13.11:
-    resolution: {integrity: sha512-kY1AZVr2Ra+t+piVaJ4gxaFaReZVH40AKNo7UCX6W+dEwBo/2oZJzqfuN1qLq1oL45o56cPaTXELwrTh8Fpggg==}
-
   regexp-tree@0.1.27:
     resolution: {integrity: sha512-iETxpjK6YoRWJG5o6hXLwvjYAoW+FEZn9os0PD/b6AP6xQwsa/Y7lCVgIixBbUPMfhu+i2LtdeAqVTgGlQarfA==}
     hasBin: true
@@ -9183,9 +9607,6 @@ packages:
   safe-buffer@5.1.2:
     resolution: {integrity: sha512-Gd2UZBJDkXlY7GbJxfsE8/nvKkUEU1G38c1siN6QP6a9PT9MmHB8GnpscSmMJSoF8LOIrt8ud/wPtojys4G6+g==}
 
-  safe-buffer@5.2.1:
-    resolution: {integrity: sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ==}
-
   safe-regex@2.1.1:
     resolution: {integrity: sha512-rx+x8AMzKb5Q5lQ95Zoi6ZbJqwCLkqi3XuJXp5P3rT8OEc6sZCJG5AE5dU3lsgRr/F4Bs31jSlVN+j5KrsGu9A==}
 
@@ -9205,9 +9626,6 @@ packages:
 
   scheduler@0.27.0:
     resolution: {integrity: sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q==}
-
-  seedrandom@3.0.5:
-    resolution: {integrity: sha512-8OwmbklUNzwezjGInmZ+2clQmExQPvomqjL7LFqOYqtmuxRgQYqOD3mHaU+MvZn5FLUeVxVfQjwLZW/n/JFuqg==}
 
   seek-bzip@2.0.0:
     resolution: {integrity: sha512-SMguiTnYrhpLdk3PwfzHeotrcwi8bNV4iemL9tx9poR/yeaMYwB9VzR1w7b57DuWpuqR8n6oZboi0hj3AxZxQg==}
@@ -9394,9 +9812,6 @@ packages:
 
   string_decoder@1.1.1:
     resolution: {integrity: sha512-n/ShnvDi6FHbbVfviro+WojiFzv+s8MPMHBczVePfUpDJLwoLT0ht1l4YwBCbi8pJAveEEdnkHyPyTP/mzRfwg==}
-
-  string_decoder@1.3.0:
-    resolution: {integrity: sha512-hkRX8U1WjJFd8LsDJ2yQ/wWWxaopEsABU1XfkM8A+j0+85JAGppt16cr1Whg6KIbb4okU6Mql6BOj+uup/wKeA==}
 
   stringify-entities@4.0.4:
     resolution: {integrity: sha512-IwfBptatlO+QCJUo19AqvrPNqlVMpW9YEL2LIVY+Rpv2qsjCGxaDLNRgeGsQWJhfItebuJhsGSLjaBbNSQ+ieg==}
@@ -9603,9 +10018,6 @@ packages:
   tough-cookie@5.1.2:
     resolution: {integrity: sha512-FVDYdxtnj0G6Qm/DhNPSb8Ju59ULcup3tuJxkFb5K8Bv2pUXILbf0xZWU8PX8Ov19OXljbUyveOFwRMwkXzO+A==}
     engines: {node: '>=16'}
-
-  tr46@0.0.3:
-    resolution: {integrity: sha512-N3WMsuqV66lT30CrXNbEjx4GEwlow3v6rr4mCcv6prnfwhS01rkgyFdjPNBYd9br7LpXV1+Emh01fHnq2Gdgrw==}
 
   tr46@5.1.1:
     resolution: {integrity: sha512-hdF5ZgjTqgAntKkklYw0R03MG2x/bSzTtkxmIRw/sTNV8YXsCJ1tfLAX23lhxhHJlEf3CRCOCGGWw3vI3GaSPw==}
@@ -10024,9 +10436,6 @@ packages:
   webcrypto-core@1.9.2:
     resolution: {integrity: sha512-gsXecm82UQNlTBURJGuqOWy1Ww08S3kZUcr3aOJS02Pk0xLtkfeUAVC0u0xhgdonFme80edSJUIJyuvL/7250Q==}
 
-  webidl-conversions@3.0.1:
-    resolution: {integrity: sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ==}
-
   webidl-conversions@7.0.0:
     resolution: {integrity: sha512-VwddBukDzu71offAQR975unBIGqfKZpM+8ZX6ySk8nYhVoo5CYaZyzt3YBvYtRtO+aoGlqxPg/B87NGVZ/fu6g==}
     engines: {node: '>=12'}
@@ -10043,9 +10452,6 @@ packages:
   whatwg-url@14.2.0:
     resolution: {integrity: sha512-De72GdQZzNTUBBChsXueQUnPKDkg/5A5zp7pFDuQAj5UFoENpiACU0wlCvzpAGnTkj++ihpKwKyYewn/XNUbKw==}
     engines: {node: '>=18'}
-
-  whatwg-url@5.0.0:
-    resolution: {integrity: sha512-saE57nupxk6v3HY35+jzBwYa0rKSy0XR8JSxZPwgLr7ys0IBzhGviA1/TUGJLmSVqs8pb9AnvICXEuOHLprYTw==}
 
   which@2.0.2:
     resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
@@ -10147,17 +10553,9 @@ packages:
     engines: {node: '>= 14.6'}
     hasBin: true
 
-  yargs-parser@20.2.9:
-    resolution: {integrity: sha512-y11nGElTIV+CT3Zv9t7VKl+Q3hTQoT9a1Qzezhhl6Rp21gJ/IVTW7Z3y9EWXhuUBC2Shnf+DX0antecpAwSP8w==}
-    engines: {node: '>=10'}
-
   yargs-parser@21.1.1:
     resolution: {integrity: sha512-tVpsJW7DdjecAiFpbIB1e3qxIQsE6NoPc5/eTdrbbIC4h0LVsWhnoa3g+m2HclBIujHzsxZ4VJVA+GUuc2/LBw==}
     engines: {node: '>=12'}
-
-  yargs@16.2.2:
-    resolution: {integrity: sha512-Nt9ZJjXTv5R8MHbqby/wXQ6Gi0Bb3TcYZkR1bzuL4yB2OxWPkXknz513gEF0GoA6tn00UpbPvERW8rzCuWCA6w==}
-    engines: {node: '>=10'}
 
   yargs@17.7.3:
     resolution: {integrity: sha512-GZtjxm/J/4TSxuL3FNYjCmLktBTnIw/rVmKSIyKeYAZpmJB2ig9VauCC5xsa82GNKVKDAqpOn3KVzNt0zmrU0g==}
@@ -10712,15 +11110,7 @@ snapshots:
 
   '@borewit/text-codec@0.2.2': {}
 
-  '@brainchop/mindgrab@0.1.20260813':
-    dependencies:
-      '@webgpu/types': 0.1.71
-
-  '@brainchop/mindgrab@0.1.20260925':
-    dependencies:
-      '@webgpu/types': 0.1.71
-
-  '@brainchop/mindgrab@0.1.20261008':
+  '@brainchop/core@1.0.0':
     dependencies:
       '@webgpu/types': 0.1.71
 
@@ -12192,18 +12582,6 @@ snapshots:
 
   '@niivue/niimath@1.4.20261114': {}
 
-  '@niivue/niivue@0.62.0':
-    dependencies:
-      '@lukeed/uuid': 2.0.1
-      '@ungap/structured-clone': 1.3.3
-      array-equal: 1.0.2
-      fflate: 0.8.3
-      gl-matrix: 3.4.4
-      nifti-reader-js: 0.8.0
-      zarrita: 0.5.4
-    optionalDependencies:
-      '@rollup/rollup-linux-x64-gnu': 4.62.2
-
   '@niivue/niivue@0.62.1':
     dependencies:
       '@lukeed/uuid': 2.0.1
@@ -13044,67 +13422,6 @@ snapshots:
       tailwindcss: 4.3.3
       vite: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)
 
-  '@tensorflow/tfjs-backend-cpu@4.20.0(@tensorflow/tfjs-core@4.20.0)':
-    dependencies:
-      '@tensorflow/tfjs-core': 4.20.0
-      '@types/seedrandom': 2.4.34
-      seedrandom: 3.0.5
-
-  '@tensorflow/tfjs-backend-webgl@4.20.0(@tensorflow/tfjs-core@4.20.0)':
-    dependencies:
-      '@tensorflow/tfjs-backend-cpu': 4.20.0(@tensorflow/tfjs-core@4.20.0)
-      '@tensorflow/tfjs-core': 4.20.0
-      '@types/offscreencanvas': 2019.3.0
-      '@types/seedrandom': 2.4.34
-      seedrandom: 3.0.5
-
-  '@tensorflow/tfjs-converter@4.20.0(@tensorflow/tfjs-core@4.20.0)':
-    dependencies:
-      '@tensorflow/tfjs-core': 4.20.0
-
-  '@tensorflow/tfjs-core@4.20.0':
-    dependencies:
-      '@types/long': 4.0.2
-      '@types/offscreencanvas': 2019.7.3
-      '@types/seedrandom': 2.4.34
-      '@webgpu/types': 0.1.38
-      long: 4.0.0
-      node-fetch: 2.6.13
-      seedrandom: 3.0.5
-    transitivePeerDependencies:
-      - encoding
-
-  '@tensorflow/tfjs-data@4.20.0(@tensorflow/tfjs-core@4.20.0)(seedrandom@3.0.5)':
-    dependencies:
-      '@tensorflow/tfjs-core': 4.20.0
-      '@types/node-fetch': 2.6.13
-      node-fetch: 2.6.13
-      seedrandom: 3.0.5
-      string_decoder: 1.3.0
-    transitivePeerDependencies:
-      - encoding
-
-  '@tensorflow/tfjs-layers@4.20.0(@tensorflow/tfjs-core@4.20.0)':
-    dependencies:
-      '@tensorflow/tfjs-core': 4.20.0
-
-  '@tensorflow/tfjs@4.20.0(seedrandom@3.0.5)':
-    dependencies:
-      '@tensorflow/tfjs-backend-cpu': 4.20.0(@tensorflow/tfjs-core@4.20.0)
-      '@tensorflow/tfjs-backend-webgl': 4.20.0(@tensorflow/tfjs-core@4.20.0)
-      '@tensorflow/tfjs-converter': 4.20.0(@tensorflow/tfjs-core@4.20.0)
-      '@tensorflow/tfjs-core': 4.20.0
-      '@tensorflow/tfjs-data': 4.20.0(@tensorflow/tfjs-core@4.20.0)(seedrandom@3.0.5)
-      '@tensorflow/tfjs-layers': 4.20.0(@tensorflow/tfjs-core@4.20.0)
-      argparse: 1.0.10
-      chalk: 4.1.2
-      core-js: 3.29.1
-      regenerator-runtime: 0.13.11
-      yargs: 16.2.2
-    transitivePeerDependencies:
-      - encoding
-      - seedrandom
-
   '@testing-library/dom@10.4.1':
     dependencies:
       '@babel/code-frame': 7.29.7
@@ -13262,28 +13579,17 @@ snapshots:
     dependencies:
       '@types/node': 24.13.3
 
-  '@types/long@4.0.2': {}
-
   '@types/mdast@4.0.4':
     dependencies:
       '@types/unist': 3.0.3
 
   '@types/ms@2.1.0': {}
 
-  '@types/node-fetch@2.6.13':
-    dependencies:
-      '@types/node': 24.13.3
-      form-data: 4.0.6
-
   '@types/node@12.20.55': {}
 
   '@types/node@24.13.3':
     dependencies:
       undici-types: 7.18.2
-
-  '@types/offscreencanvas@2019.3.0': {}
-
-  '@types/offscreencanvas@2019.7.3': {}
 
   '@types/react-dom@19.2.3(@types/react@19.2.17)':
     dependencies:
@@ -13296,8 +13602,6 @@ snapshots:
   '@types/responselike@1.0.3':
     dependencies:
       '@types/node': 24.13.3
-
-  '@types/seedrandom@2.4.34': {}
 
   '@types/stack-utils@2.0.3': {}
 
@@ -13586,8 +13890,6 @@ snapshots:
       '@multiformats/sha3': 3.0.3
       multiformats: 13.4.2
       uint8arrays: 5.1.1
-
-  '@webgpu/types@0.1.38': {}
 
   '@webgpu/types@0.1.71': {}
 
@@ -14149,12 +14451,6 @@ snapshots:
 
   clipper2-ts@2.0.1-18: {}
 
-  cliui@7.0.4:
-    dependencies:
-      string-width: 4.2.3
-      strip-ansi: 6.0.1
-      wrap-ansi: 7.0.0
-
   cliui@8.0.1:
     dependencies:
       string-width: 4.2.3
@@ -14243,8 +14539,6 @@ snapshots:
   cookie@1.1.1: {}
 
   core-js-pure@3.50.0: {}
-
-  core-js@3.29.1: {}
 
   core-util-is@1.0.3: {}
 
@@ -16207,8 +16501,6 @@ snapshots:
 
   loglevel@1.9.2: {}
 
-  long@4.0.0: {}
-
   long@5.3.2: {}
 
   longest-streak@3.1.0: {}
@@ -16758,10 +17050,6 @@ snapshots:
   node-api-version@0.2.1:
     dependencies:
       semver: 7.8.5
-
-  node-fetch@2.6.13:
-    dependencies:
-      whatwg-url: 5.0.0
 
   node-gyp-build-optional-packages@5.1.1:
     dependencies:
@@ -17333,8 +17621,6 @@ snapshots:
 
   reference-spec-reader@0.2.0: {}
 
-  regenerator-runtime@0.13.11: {}
-
   regexp-tree@0.1.27: {}
 
   remark-gfm@4.0.1:
@@ -17497,8 +17783,6 @@ snapshots:
 
   safe-buffer@5.1.2: {}
 
-  safe-buffer@5.2.1: {}
-
   safe-regex@2.1.1:
     dependencies:
       regexp-tree: 0.1.27
@@ -17516,8 +17800,6 @@ snapshots:
       xmlchars: 2.2.0
 
   scheduler@0.27.0: {}
-
-  seedrandom@3.0.5: {}
 
   seek-bzip@2.0.0:
     dependencies:
@@ -17736,10 +18018,6 @@ snapshots:
   string_decoder@1.1.1:
     dependencies:
       safe-buffer: 5.1.2
-
-  string_decoder@1.3.0:
-    dependencies:
-      safe-buffer: 5.2.1
 
   stringify-entities@4.0.4:
     dependencies:
@@ -17967,8 +18245,6 @@ snapshots:
   tough-cookie@5.1.2:
     dependencies:
       tldts: 6.1.86
-
-  tr46@0.0.3: {}
 
   tr46@5.1.1:
     dependencies:
@@ -18376,8 +18652,6 @@ snapshots:
       asn1js: 3.0.10
       tslib: 2.8.1
 
-  webidl-conversions@3.0.1: {}
-
   webidl-conversions@7.0.0: {}
 
   whatwg-encoding@3.1.1:
@@ -18390,11 +18664,6 @@ snapshots:
     dependencies:
       tr46: 5.1.1
       webidl-conversions: 7.0.0
-
-  whatwg-url@5.0.0:
-    dependencies:
-      tr46: 0.0.3
-      webidl-conversions: 3.0.1
 
   which@2.0.2:
     dependencies:
@@ -18477,19 +18746,7 @@ snapshots:
 
   yaml@2.9.1: {}
 
-  yargs-parser@20.2.9: {}
-
   yargs-parser@21.1.1: {}
-
-  yargs@16.2.2:
-    dependencies:
-      cliui: 7.0.4
-      escalade: 3.2.0
-      get-caller-file: 2.0.5
-      require-directory: 2.1.1
-      string-width: 4.2.3
-      y18n: 5.0.8
-      yargs-parser: 20.2.9
 
   yargs@17.7.3:
     dependencies:

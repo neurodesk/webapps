@@ -72,6 +72,8 @@ function coEditedMacromolecules(hzpppm) {
  *   water?: boolean, ecc?: boolean, ppmStart?: number, ppmEnd?: number,
  *   title?: string, sptype?: string, coEditedMM?: boolean,
  *   lineBroadening?: keyof typeof LINE_BROADENING,
+ *   simulateMacromolecules?: boolean,
+ *   baselineStiffness?: number | null,
  * }} options  `water` scales to the unsuppressed water reference (and
  *   enables eddy-current correction unless `ecc` is false). `sptype`
  *   selects one of LCModel's special analyses: "mega-press-3" fits a
@@ -80,6 +82,9 @@ function coEditedMacromolecules(hzpppm) {
  *   fit, separating GABA from MM3co; leave it off for MM-suppressed
  *   editing, whose difference spectrum has no co-edited MM.
  *   `lineBroadening` picks the prior on line broadening (LINE_BROADENING).
+ *   `simulateMacromolecules: false` emits `nsimul=0` for unedited fits whose
+ *   custom .BASIS already carries an empirically measured macromolecule
+ *   spectrum. `baselineStiffness` sets LCModel's `dkntmn` spline knot spacing.
  */
 export function buildControl(options) {
   const {
@@ -95,11 +100,16 @@ export function buildControl(options) {
     sptype = "",
     coEditedMM = false,
     lineBroadening = "widened",
+    simulateMacromolecules = true,
+    baselineStiffness = null,
   } = options;
   const broadening = LINE_BROADENING[lineBroadening];
   if (!broadening) throw new Error(`Unknown line-broadening prior ${lineBroadening}`);
   if (!(nunfil >= 64)) throw new Error("The spectrum needs at least 64 points.");
   if (!(ppmStart > ppmEnd)) throw new Error("The fit range must run from a higher to a lower ppm.");
+  if (baselineStiffness != null && !(Number.isFinite(baselineStiffness) && baselineStiffness > 0)) {
+    throw new Error("Baseline stiffness (dkntmn) must be a positive number.");
+  }
   const lines = [
     " $LCMODL",
     // LCModel 6.3's licence key, required by the released source.
@@ -127,7 +137,10 @@ export function buildControl(options) {
   if (coEditedMM) {
     if (!sptype.startsWith("mega-press")) throw new Error("The co-edited macromolecule model is for MEGA-PRESS difference spectra.");
     lines.push(...coEditedMacromolecules(hzpppm));
+  } else if (simulateMacromolecules === false) {
+    lines.push(" nsimul=0");
   }
+  if (baselineStiffness != null) lines.push(` dkntmn=${number(baselineStiffness)}`);
   lines.push(...broadening.namelist);
   if (Number.isFinite(teMs) && teMs > 0) lines.push(` echot=${number(teMs)}`);
   if (water) {
@@ -295,6 +308,9 @@ export function explainDiagnostic(line, { dataTeMs = null, basisTeMs = null } = 
     const basis = ms(basisTeMs);
     const data = ms(dataTeMs);
     return `${line}: the basis set's echo time${basis ? ` (${basis})` : ""} differs from the data's${data ? ` (${data})` : ""} by 3 ms or more. LCModel still fits, but coupled metabolites (Glu, Gln, GABA, Ins) can be biased: check the TE the scanner recorded, or supply a basis set simulated at the data's TE.`;
+  }
+  if (routine === "MYBASI" && number === "11") {
+    return `${line}: the basis set and the spectrum name different sequences (PRESS vs STEAM). LCModel still fits, but coupled metabolites will be biased: choose a basis set matching the acquired sequence.`;
   }
   if (/^info/i.test(level)) return `${line} (LCModel information; the fit is unaffected)`;
   return `${line} (see LCModel's manual, section 12, for ${routine} ${number})`;

@@ -1,6 +1,6 @@
 {
   "name": "histo2mri",
-  "version": "0.1.20261119",
+  "version": "0.1.20261124",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@neurodesk/greedy": "workspace:*",
+    "@neurodesk/histo2mri": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/niivue": "1.0.0-rc.26"
   },

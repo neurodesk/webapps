@@ -66,7 +66,7 @@ export async function niimathMesh(segmentation, options) {
   return outputs['brain.mz3'];
 }
 
-const loadMindgrab = () => loadMindgrabCpu(import.meta.resolve('@brainchop/mindgrab/package.json'));
+const loadMindgrab = () => loadMindgrabCpu(import.meta.resolve('@brainchop/core/package.json'));
 
 /**
  * Segment a NIfTI image with MindGrab on the CPU, mesh it with niimath and write the web app's

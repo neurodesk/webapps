@@ -17,7 +17,7 @@ const repository = 'owner/repo';
 // Hours after 20 Nov 2026 00:00 UTC, after the cutover.
 const at = hours => new Date(Date.UTC(2026, 10, 20) + hours * 3600e3).toISOString();
 const AGREEMENT = 'Error: HTTP status code: 403. A required agreement is missing or has expired.';
-const SYNCRO = '.github/workflows/syncro-native.yml';
+const GREEDY = '.github/workflows/greedy-native.yml';
 const LINKS = '.github/workflows/standalone-links.yml';
 
 function attempt(overrides = {}) {
@@ -35,18 +35,21 @@ function attempt(overrides = {}) {
 function github({ runs = [], jobs = {}, logs = {} } = {}) {
   const issues = [];
   const comments = new Map();
+  const events = new Map();
   const writes = [];
   const reads = [];
   let next = 1;
   const bot = { login: 'github-actions[bot]' };
   const latest = () => [...Object.values(Object.groupBy(runs, run => run.id))].map(each => each.reduce((a, b) => (a.run_attempt > b.run_attempt ? a : b)));
   return {
-    runs, issues, comments, writes, reads,
+    runs, issues, comments, events, writes, reads,
     async list(path) {
       reads.push(path);
       if (path.startsWith('/issues?')) return [...issues].reverse();
       const comment = path.match(/^\/issues\/(\d+)\/comments(?:\?|$)/);
       if (comment) return comments.get(Number(comment[1])) ?? [];
+      const event = path.match(/^\/issues\/(\d+)\/events(?:\?|$)/);
+      if (event) return events.get(Number(event[1])) ?? [];
       const job = path.match(/^\/actions\/runs\/(\d+)\/attempts\/(\d+)\/jobs$/);
       if (job) return jobs[`${job[1]}:${job[2]}`] ?? [{ id: Number(job[1]) * 10 + Number(job[2]), name: 'check', conclusion: 'failure', steps: [] }];
       if (path.endsWith('/artifacts')) return [];
@@ -87,7 +90,21 @@ function github({ runs = [], jobs = {}, logs = {} } = {}) {
       }
       const issue = path.match(/^\/issues\/(\d+)$/);
       if (issue && options.method === 'PATCH') {
-        Object.assign(issues.find(each => each.number === Number(issue[1])), options.body);
+        const number = Number(issue[1]);
+        const target = issues.find(each => each.number === number);
+        const now = new Date().toISOString();
+        const eventList = events.get(number) ?? [];
+        if (options.body.state === 'closed' && target.state !== 'closed') {
+          eventList.push({ event: 'closed', created_at: now });
+          events.set(number, eventList);
+        }
+        if (options.body.state === 'open' && target.state === 'closed') {
+          eventList.push({ event: 'reopened', created_at: now });
+          events.set(number, eventList);
+        }
+        Object.assign(target, options.body);
+        if (options.body.state === 'closed' && !options.body.closed_at) target.closed_at = now;
+        if (options.body.state === 'open') target.closed_at = null;
         return {};
       }
       if (/^\/issues\/\d+\/assignees$/.test(path)) return {};
@@ -150,7 +167,7 @@ test('the notarizing workflows and the workflows with a job that continues on er
   const facts = await workflowFacts(workflows);
   assert.deepEqual(facts, expected);
   // native.yml notarizes nothing itself, but runs native workflows whose macOS jobs can.
-  for (const file of ['syncro-native', 'standalone', 'synthseg-portable', 'node-cli', 'bison-native', 'native']) assert.ok(facts.notarizing.includes(`.github/workflows/${file}.yml`), file);
+  for (const file of ['greedy-native', 'standalone', 'synthseg-portable', 'node-cli', 'bison-native', 'native']) assert.ok(facts.notarizing.includes(`.github/workflows/${file}.yml`), file);
   for (const file of ['ci', 'node-cli-portable', 'quality', 'workflow-reports']) assert.ok(!facts.notarizing.includes(`.github/workflows/${file}.yml`), file);
   assert.ok(facts.notarizing.length >= 39, 'every workflow the replaced alert listed');
   assert.deepEqual(facts.continuesOnError, ['.github/workflows/ci.yml', '.github/workflows/deploy-pages.yml', '.github/workflows/standalone.yml']);
@@ -182,7 +199,7 @@ test('a listing that fills two adjacent seconds is split per second, and a full 
 
 test('a notarization failure whose rerun passed before the next tick is still alerted', async () => {
   // A release dispatch fails notarization at 03:00 and its rerun passes at 05:00; the tick runs at 06:47.
-  const failed = attempt({ id: 500, name: 'syncro-native', path: SYNCRO, event: 'workflow_dispatch', head_branch: 'syncro-v1' });
+  const failed = attempt({ id: 500, name: 'greedy-native', path: GREEDY, event: 'workflow_dispatch', head_branch: 'greedy-v1' });
   const passed = { ...failed, run_attempt: 2, conclusion: 'success', run_started_at: at(4), updated_at: at(5) };
   const client = github({
     runs: [failed, passed],
@@ -213,8 +230,8 @@ test('a notarization failure inside a workflow native.yml called on schedule is 
 
 test('a notarization failure is alerted whichever attempt the API qualifies with its ref', async () => {
   // The tag dispatch of the replayed release: attempt 1 fails notarization and attempt 2 passes.
-  for (const [first, second] of [[SYNCRO, `${SYNCRO}@syncro-v1`], [`${SYNCRO}@syncro-v1`, SYNCRO]]) {
-    const failed = attempt({ id: 500, name: 'syncro-native', path: first, event: 'workflow_dispatch', head_branch: 'syncro-v1' });
+  for (const [first, second] of [[GREEDY, `${GREEDY}@greedy-v1`], [`${GREEDY}@greedy-v1`, GREEDY]]) {
+    const failed = attempt({ id: 500, name: 'greedy-native', path: first, event: 'workflow_dispatch', head_branch: 'greedy-v1' });
     const passed = { ...failed, path: second, run_attempt: 2, conclusion: 'success', run_started_at: at(4), updated_at: at(5) };
     const client = github({
       runs: [failed, passed],
@@ -227,9 +244,9 @@ test('a notarization failure is alerted whichever attempt the API qualifies with
 });
 
 test('a failed notarizing run of an event its current workflow file does not declare is alerted', async () => {
-  // syncro-native.yml runs on push and workflow_dispatch today; an older tag declared release.
-  const release = attempt({ id: 600, name: 'syncro-native', path: `${SYNCRO}@syncro-v0`, event: 'release', head_branch: 'syncro-v0' });
-  const pullRequest = attempt({ id: 601, name: 'syncro-native', path: SYNCRO, event: 'pull_request', head_branch: 'feature' });
+  // greedy-native.yml runs on push and workflow_dispatch today; an older tag declared release.
+  const release = attempt({ id: 600, name: 'greedy-native', path: `${GREEDY}@greedy-v0`, event: 'release', head_branch: 'greedy-v0' });
+  const pullRequest = attempt({ id: 601, name: 'greedy-native', path: GREEDY, event: 'pull_request', head_branch: 'feature' });
   const client = github({
     runs: [release, pullRequest],
     jobs: { '600:1': [{ id: 61, name: 'portable / release', conclusion: 'failure', labels: ['macos-15'] }] },
@@ -241,11 +258,11 @@ test('a failed notarizing run of an event its current workflow file does not dec
 });
 
 test('a notarization failure is alerted when its workflow file was renamed after the run', async () => {
-  // The reviewer's replay: syncro-native.yml became syncro-native.yaml, and the new workflow's
+  // The reviewer's replay: greedy-native.yml became greedy-native.yaml, and the new workflow's
   // listing returns the failed run with its historical path.
   const directory = await mkdtemp(join(tmpdir(), 'renamed-'));
-  await writeFile(join(directory, 'syncro-native.yaml'), 'name: syncro-native\non:\n  workflow_dispatch:\njobs:\n  build:\n    steps:\n      - run: xcrun notarytool submit\n');
-  const failed = attempt({ id: 500, name: 'syncro-native', path: SYNCRO, listed_under: `${SYNCRO.replace(/\.yml$/, '.yaml')}`, event: 'workflow_dispatch', head_branch: 'syncro-v1' });
+  await writeFile(join(directory, 'greedy-native.yaml'), 'name: greedy-native\non:\n  workflow_dispatch:\njobs:\n  build:\n    steps:\n      - run: xcrun notarytool submit\n');
+  const failed = attempt({ id: 500, name: 'greedy-native', path: GREEDY, listed_under: `${GREEDY.replace(/\.yml$/, '.yaml')}`, event: 'workflow_dispatch', head_branch: 'greedy-v1' });
   const client = github({
     runs: [failed],
     jobs: { '500:1': [{ id: 51, name: 'mac', conclusion: 'failure', labels: ['macos-15'] }] },
@@ -286,7 +303,7 @@ test('the first tick after a long gap reports every failure in the lookback', as
 
 test('a repeated tick writes nothing and runs no report again', async () => {
   const failed = attempt({ id: 1 });
-  const notarized = attempt({ id: 2, name: 'syncro-native', path: SYNCRO, event: 'push' });
+  const notarized = attempt({ id: 2, name: 'greedy-native', path: GREEDY, event: 'push' });
   const client = github({
     runs: [failed, notarized],
     jobs: { '2:1': [{ id: 21, name: 'portable / release', conclusion: 'failure', labels: ['macos-15'] }] },
@@ -341,7 +358,7 @@ const HANDOFF = Date.parse('2026-11-18T12:00:00Z');
 function handoff() {
   const hours = value => new Date(HANDOFF + value * 3600e3).toISOString();
   const nightly = id => attempt({ id, workflow_id: id, name: `nightly-${id}`, created_at: hours(-0.5), run_started_at: hours(-0.5), updated_at: hours(0) });
-  const release = id => attempt({ id, name: 'syncro-native', path: SYNCRO, event: 'workflow_dispatch', head_branch: 'syncro-v1', created_at: hours(-1), run_started_at: hours(-1), updated_at: hours(0) });
+  const release = id => attempt({ id, name: 'greedy-native', path: GREEDY, event: 'workflow_dispatch', head_branch: 'greedy-v1', created_at: hours(-1), run_started_at: hours(-1), updated_at: hours(0) });
   const client = github({
     runs: [nightly(1), release(2)],
     jobs: { '2:1': [{ id: 21, name: 'portable / release', conclusion: 'failure', labels: ['macos-15'] }] },
@@ -411,8 +428,8 @@ test('each attempt gets the scheduled report and the notarization alert it quali
   const scheduled = attempt({ id: 1 });
   const branch = attempt({ id: 2, head_branch: 'feature' });
   const fork = attempt({ id: 3, head_repository: { full_name: 'fork/repo' } });
-  const release = attempt({ id: 4, name: 'syncro-native', path: SYNCRO, event: 'workflow_dispatch', head_branch: 'syncro-v1' });
-  const pullRequest = attempt({ id: 5, name: 'syncro-native', path: SYNCRO, event: 'pull_request', head_branch: 'feature' });
+  const release = attempt({ id: 4, name: 'greedy-native', path: GREEDY, event: 'workflow_dispatch', head_branch: 'greedy-v1' });
+  const pullRequest = attempt({ id: 5, name: 'greedy-native', path: GREEDY, event: 'pull_request', head_branch: 'feature' });
   const running = attempt({ id: 6, status: 'in_progress', conclusion: null });
   const client = github({
     jobs: { '4:1': [{ id: 41, name: 'portable / release', conclusion: 'failure', labels: ['macos-15'] }] },
@@ -451,4 +468,240 @@ test('a dry run of the command writes no step summary', async () => {
   await assert.rejects(stat(join(directory, 'dry.md')), { code: 'ENOENT' });
   await run('tick.md');
   assert.match(await readFile(join(directory, 'tick.md'), 'utf8'), /0 runs listed/);
+});
+
+test('a clean passing scheduled run auto-closes its open workflow issue, stays quiet on repeat ticks, respects manual reopen, and reopens on a later failure', async () => {
+  const failed = attempt({ id: 100, workflow_id: 7, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(2), updated_at: at(3) });
+  const passed = attempt({ id: 101, workflow_id: 7, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', conclusion: 'success', created_at: at(26), run_started_at: at(26), updated_at: at(27) });
+  const clientWithPass = github({
+    runs: [failed, passed],
+    jobs: {
+      '100:1': [{ id: 1001, name: 'report', conclusion: 'failure', steps: [] }],
+      '101:1': [{ id: 1011, name: 'report', conclusion: 'success', steps: [] }],
+    },
+  });
+  await tick(clientWithPass, at(7));
+  assert.equal(clientWithPass.issues[0].state, 'open');
+  const recovered = await tick(clientWithPass, at(28));
+  assert.equal(clientWithPass.issues[0].state, 'closed');
+  assert.equal(clientWithPass.issues[0].state_reason, 'completed');
+  assert.equal(recovered.results.length, 1);
+  assert.equal(recovered.results[0].kind, 'recovery');
+  assert.deepEqual(recovered.results[0].result, { issue: 1, closed: true });
+  assert.match(clientWithPass.comments.get(1)[0].body, /^<!-- nightly-recovery:101:attempt:1 -->/);
+
+  // Repeated tick writes nothing.
+  const writesBefore = clientWithPass.writes.length;
+  const repeated = await tick(clientWithPass, at(30));
+  assert.equal(clientWithPass.writes.length, writesBefore);
+  assert.deepEqual(repeated.results, []);
+
+  // A human manually reopens the issue: the same passing run does not re-close it.
+  Object.assign(clientWithPass.issues[0], { state: 'open', closed_at: null });
+  const reopenTick = await tick(clientWithPass, at(31));
+  assert.equal(clientWithPass.issues[0].state, 'open');
+  assert.deepEqual(reopenTick.results, []);
+  assert.ok(reopenTick.marked.includes('recovery 101:1'));
+
+  // A later scheduled failure after recovery reopens a closed issue cleanly.
+  Object.assign(clientWithPass.issues[0], { state: 'closed', closed_at: new Date().toISOString() });
+  clientWithPass.runs.push(attempt({ id: 102, workflow_id: 7, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', conclusion: 'failure', created_at: at(50), run_started_at: at(50), updated_at: at(51) }));
+  await tick(clientWithPass, at(52));
+  assert.equal(clientWithPass.issues[0].state, 'open');
+  assert.deepEqual(reported(clientWithPass), ['nightly 100:1', 'nightly 102:1']);
+});
+
+test('auto-close handles same-tick rerun recovery and dry-run previews without closing on stale reruns, failed continue-on-error jobs, or errored reports', async () => {
+  // Same-tick recovery: attempt 1 fails at 03:00, attempt 2 passes at 05:00, tick runs at 06:47.
+  const fail1 = attempt({ id: 200, workflow_id: 11, name: 'standalone-links', created_at: at(2), updated_at: at(3) });
+  const pass2 = { ...fail1, run_attempt: 2, conclusion: 'success', run_started_at: at(4), updated_at: at(5) };
+  const sameTick = github({
+    runs: [fail1, pass2],
+    jobs: {
+      '200:1': [{ id: 2001, name: 'check', conclusion: 'failure', steps: [] }],
+      '200:2': [{ id: 2002, name: 'check', conclusion: 'success', steps: [] }],
+    },
+  });
+  const sameResult = await tick(sameTick, at(6.8));
+  assert.deepEqual(reported(sameTick), ['nightly 200:1']);
+  assert.equal(sameTick.issues[0].state, 'closed');
+  assert.deepEqual(sameResult.results.map(entry => entry.kind), ['scheduled', 'recovery']);
+
+  // Stale rerun passing after a newer run failed MUST NOT close the issue.
+  const oldFail = attempt({ id: 300, workflow_id: 12, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(2), updated_at: at(3) });
+  const newFail = attempt({ id: 301, workflow_id: 12, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(26), run_started_at: at(26), updated_at: at(27) });
+  const oldRerunPass = { ...oldFail, run_attempt: 2, conclusion: 'success', run_started_at: at(28), updated_at: at(29) };
+  const stale = github({
+    runs: [oldFail, newFail, oldRerunPass],
+    jobs: {
+      '300:1': [{ id: 3001, name: 'report', conclusion: 'failure', steps: [] }],
+      '301:1': [{ id: 3011, name: 'report', conclusion: 'failure', steps: [] }],
+      '300:2': [{ id: 3002, name: 'report', conclusion: 'success', steps: [] }],
+    },
+  });
+  await tick(stale, at(30));
+  assert.equal(stale.issues[0].state, 'open');
+
+  // Continue-on-error workflow whose passing run still had a failed job stays open.
+  const ciFail = attempt({ id: 400, workflow_id: 13, name: 'ci', path: '.github/workflows/ci.yml', conclusion: 'failure', created_at: at(2), updated_at: at(3) });
+  const ciSoftFail = attempt({ id: 401, workflow_id: 13, name: 'ci', path: '.github/workflows/ci.yml', conclusion: 'success', created_at: at(26), run_started_at: at(26), updated_at: at(27) });
+  const soft = github({
+    runs: [ciFail, ciSoftFail],
+    jobs: {
+      '400:1': [{ id: 4001, name: 'app-tests', conclusion: 'failure', steps: [] }],
+      '401:1': [
+        { id: 4011, name: 'app-tests', conclusion: 'success', steps: [] },
+        { id: 4012, name: 'example-cache-retention', conclusion: 'failure', steps: [] },
+      ],
+    },
+  });
+  await tick(soft, at(28));
+  assert.equal(soft.issues[0].state, 'open');
+
+  // Dry-run previews closing an existing open issue without writing.
+  const dryClient = github({
+    runs: [attempt({ id: 501, workflow_id: 14, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', conclusion: 'success', created_at: at(26), run_started_at: at(26), updated_at: at(27) })],
+    jobs: { '501:1': [{ id: 5011, name: 'report', conclusion: 'success', steps: [] }] },
+  });
+  dryClient.issues.push({
+    number: 810, state: 'open', user: { login: 'github-actions[bot]' }, created_at: at(4),
+    body: `<!-- nightly-workflow:14 -->\n<!-- nightly-run:500:attempt:1 -->\n- Updated: ${at(3)}.`,
+  });
+  const dryTick = await tick(dryClient, at(28), { dryRun: true });
+  assert.equal(dryTick.results.length, 1);
+  assert.equal(dryTick.results[0].kind, 'recovery');
+  assert.equal(dryTick.results[0].result.dryRun, true);
+  assert.equal(dryTick.results[0].result.closed, true);
+  assert.equal(dryTick.results[0].result.issue, 810);
+  assert.equal(dryClient.issues[0].state, 'open');
+  assert.deepEqual(dryClient.writes, []);
+});
+
+test('auto-close retries an interrupted close, waits when a newer attempt is in progress, and ignores an old rerun across the cutover', async () => {
+  // 1. Interrupted close: recovery comment succeeds, PATCH fails on tick 1; tick 2 finishes closing without duplicating the comment.
+  const failed = attempt({ id: 600, workflow_id: 21, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(2), updated_at: at(3) });
+  const passed = attempt({ id: 601, workflow_id: 21, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', conclusion: 'success', created_at: at(26), run_started_at: at(26), updated_at: at(27) });
+  const retryBase = github({
+    runs: [failed, passed],
+    jobs: {
+      '600:1': [{ id: 6001, name: 'report', conclusion: 'failure', steps: [] }],
+      '601:1': [{ id: 6011, name: 'report', conclusion: 'success', steps: [] }],
+    },
+  });
+  await tick(retryBase, at(7));
+  let failPatchOnce = true;
+  const flaky = {
+    ...retryBase,
+    request: async (path, options = {}) => {
+      if (failPatchOnce && options.method === 'PATCH' && path === '/issues/1') {
+        failPatchOnce = false;
+        throw new Error('GitHub API PATCH /issues/1 returned 502');
+      }
+      return retryBase.request(path, options);
+    },
+  };
+  const firstRecovery = await tick(flaky, at(28));
+  assert.equal(firstRecovery.results.length, 1);
+  assert.match(firstRecovery.results[0].error, /502/);
+  assert.equal(retryBase.issues[0].state, 'open');
+  assert.equal(retryBase.comments.get(1).length, 1);
+  const secondRecovery = await tick(flaky, at(29));
+  assert.equal(retryBase.issues[0].state, 'closed');
+  assert.equal(retryBase.comments.get(1).length, 1, 'does not duplicate the recovery comment on retry');
+  assert.deepEqual(secondRecovery.results[0].result, { issue: 1, closed: true });
+
+  // 2. Passing attempt 1 must not close the issue while attempt 2 of the same run is in progress.
+  const earlierFail = attempt({ id: 700, workflow_id: 22, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(2), updated_at: at(3) });
+  const passAttempt1 = attempt({ id: 701, workflow_id: 22, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', conclusion: 'success', created_at: at(26), run_started_at: at(26), updated_at: at(27) });
+  const runningAttempt2 = { ...passAttempt1, run_attempt: 2, status: 'in_progress', conclusion: null, run_started_at: at(27.5), updated_at: at(28.5) };
+  const inProgress = github({
+    runs: [earlierFail, passAttempt1, runningAttempt2],
+    jobs: {
+      '700:1': [{ id: 7001, name: 'report', conclusion: 'failure', steps: [] }],
+      '701:1': [{ id: 7011, name: 'report', conclusion: 'success', steps: [] }],
+    },
+  });
+  await tick(inProgress, at(7));
+  await tick(inProgress, at(28));
+  assert.equal(inProgress.issues[0].state, 'open');
+
+  // 3. Old rerun passing after cutover must not close an issue for a newer failure that happened before cutover.
+  const preCutoverOldFail = attempt({ id: 800, workflow_id: 23, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(-48), run_started_at: at(-48), updated_at: at(-47) });
+  const preCutoverNewFail = attempt({ id: 801, workflow_id: 23, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(-2), run_started_at: at(-2), updated_at: at(-1) });
+  const postCutoverOldRerun = { ...preCutoverOldFail, run_attempt: 2, conclusion: 'success', run_started_at: at(1), updated_at: at(2) };
+  const acrossCutover = github({
+    runs: [preCutoverOldFail, preCutoverNewFail, postCutoverOldRerun],
+    jobs: { '800:2': [{ id: 8002, name: 'report', conclusion: 'success', steps: [] }] },
+  });
+  acrossCutover.issues.push({
+    number: 99, state: 'open', user: { login: 'github-actions[bot]' }, created_at: at(-0.5),
+    body: `<!-- nightly-workflow:23 -->\n<!-- nightly-run:801:attempt:1 -->\n- Started: ${at(-2)}. Updated: ${at(-1)}.`,
+  });
+  await tick(acrossCutover, at(4), { cutover: at(0) });
+  assert.equal(acrossCutover.issues[0].state, 'open');
+
+  // 4. A stale successful rerun finishing last must not mask a newer valid recovery run.
+  const oldRunFail = attempt({ id: 900, workflow_id: 24, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(1), run_started_at: at(1), updated_at: at(2) });
+  const newerFail = attempt({ id: 901, workflow_id: 24, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(25), run_started_at: at(25), updated_at: at(26) });
+  const validRecovery = attempt({ id: 902, workflow_id: 24, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', conclusion: 'success', created_at: at(49), run_started_at: at(49), updated_at: at(50) });
+  const lateOldRerunPass = { ...oldRunFail, run_attempt: 2, conclusion: 'success', run_started_at: at(51), updated_at: at(52) };
+  const unmasked = github({
+    runs: [oldRunFail, newerFail, validRecovery, lateOldRerunPass],
+    jobs: {
+      '900:1': [{ id: 9001, name: 'report', conclusion: 'failure', steps: [] }],
+      '901:1': [{ id: 9011, name: 'report', conclusion: 'failure', steps: [] }],
+      '902:1': [{ id: 9021, name: 'report', conclusion: 'success', steps: [] }],
+      '900:2': [{ id: 9002, name: 'report', conclusion: 'success', steps: [] }],
+    },
+  });
+  await tick(unmasked, at(28));
+  assert.equal(unmasked.issues[0].state, 'open');
+  const unmaskedResult = await tick(unmasked, at(54));
+  assert.equal(unmasked.issues[0].state, 'closed');
+  assert.equal(unmaskedResult.results.length, 1);
+  assert.equal(unmaskedResult.results[0].run, 902);
+
+  // 5. A failed rerun completing just after the tick's `until` cutoff vetoes recovery without being reported early.
+  const priorFail = attempt({ id: 950, workflow_id: 25, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(1), run_started_at: at(1), updated_at: at(2) });
+  const passBeforeUntil = attempt({ id: 951, workflow_id: 25, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', conclusion: 'success', created_at: at(25), run_started_at: at(25), updated_at: at(26) });
+  const failAfterUntil = { ...passBeforeUntil, run_attempt: 2, conclusion: 'failure', run_started_at: at(27), updated_at: at(28.5) };
+  const afterCutoff = github({
+    runs: [priorFail, passBeforeUntil, failAfterUntil],
+    jobs: {
+      '950:1': [{ id: 9501, name: 'report', conclusion: 'failure', steps: [] }],
+      '951:1': [{ id: 9511, name: 'report', conclusion: 'success', steps: [] }],
+      '951:2': [{ id: 9512, name: 'report', conclusion: 'failure', steps: [] }],
+    },
+  });
+  await tick(afterCutoff, at(4));
+  assert.equal(afterCutoff.issues[0].state, 'open');
+  const vetoed = await tick(afterCutoff, at(28));
+  assert.equal(afterCutoff.issues[0].state, 'open');
+  assert.deepEqual(vetoed.results, []);
+  assert.deepEqual(reported(afterCutoff), ['nightly 950:1']);
+
+  // 6. A newer post-cutoff run of a continue-on-error workflow vetoes recovery on an older clean pass
+  // until the next tick inspects its jobs and reports any soft failure.
+  const ciOldFail = attempt({ id: 960, workflow_id: 26, name: 'ci', path: '.github/workflows/ci.yml', created_at: at(1), run_started_at: at(1), updated_at: at(2) });
+  const ciCleanPass = attempt({ id: 961, workflow_id: 26, name: 'ci', path: '.github/workflows/ci.yml', conclusion: 'success', created_at: at(25), run_started_at: at(25), updated_at: at(26) });
+  const ciPostCutoffSoftFail = attempt({ id: 962, workflow_id: 26, name: 'ci', path: '.github/workflows/ci.yml', conclusion: 'success', created_at: at(27), run_started_at: at(27), updated_at: at(28.5) });
+  const postCutoffCoe = github({
+    runs: [ciOldFail, ciCleanPass, ciPostCutoffSoftFail],
+    jobs: {
+      '960:1': [{ id: 9601, name: 'app-tests', conclusion: 'failure', steps: [] }],
+      '961:1': [{ id: 9611, name: 'app-tests', conclusion: 'success', steps: [] }],
+      '962:1': [
+        { id: 9621, name: 'app-tests', conclusion: 'success', steps: [] },
+        { id: 9622, name: 'example-cache-retention', conclusion: 'failure', steps: [] },
+      ],
+    },
+  });
+  await tick(postCutoffCoe, at(4));
+  assert.equal(postCutoffCoe.issues[0].state, 'open');
+  await tick(postCutoffCoe, at(28));
+  assert.equal(postCutoffCoe.issues[0].state, 'open');
+  assert.deepEqual(reported(postCutoffCoe), ['nightly 960:1']);
+  await tick(postCutoffCoe, at(30));
+  assert.equal(postCutoffCoe.issues[0].state, 'open');
+  assert.deepEqual(reported(postCutoffCoe), ['nightly 960:1', 'nightly 962:1']);
 });

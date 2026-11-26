@@ -1,6 +1,7 @@
 //! Shared runner: resume records, command log, timings and failure cleanup. Hosts only execute.
 
 use crate::bids::{Image, deriv_path};
+use crate::host::record::{self, Outcome, Recorded};
 use crate::host::{Host, Step, file_name, join, parent};
 use crate::py;
 use serde_json::{Map, Value, json};
@@ -119,12 +120,6 @@ macro_rules! argv {
     }};
 }
 
-fn fnv(s: &str) -> u64 {
-    s.bytes().fold(0xcbf29ce484222325u64, |h, b| {
-        (h ^ b as u64).wrapping_mul(0x100000001b3)
-    })
-}
-
 impl<H: Host> Ctx<H> {
     pub async fn new(
         h: H,
@@ -224,21 +219,9 @@ impl<H: Host> Ctx<H> {
         self.h.write(path, text.as_bytes()).await.map(|_| true)
     }
 
-    fn identity(&self, paths: &[&str]) -> Value {
-        Value::Array(
-            paths
-                .iter()
-                .map(|p| {
-                    self.h
-                        .stat(p)
-                        .map_or(Value::Null, |(n, t)| json!([p, n, t.to_string()]))
-                })
-                .collect(),
-        )
-    }
-
     /// Run one tool step unless a completion record proves it already ran with the same argv, settings, inputs
-    /// and outputs. On failure its declared outputs are removed and the error carries the tool's output tail.
+    /// and outputs (`neurodesk_pipeline_host::record`). On failure its declared outputs are removed and the error
+    /// carries the tool's output tail.
     pub async fn run(
         &self,
         mut argv: Vec<String>,
@@ -255,121 +238,67 @@ impl<H: Host> Ctx<H> {
             argv.splice(1..1, flags.iter().map(|f| f.to_string()));
         }
         let first = outputs[0].as_str();
-        let outs: Vec<&str> = outputs.iter().map(String::as_str).collect();
         // GLM reads the BOLD sidecar implicitly in both its native and browser drivers.
-        let glm_sidecar = if file_name(&tool) == "glm" {
+        let glm_sidecar: Vec<String> = if file_name(&tool) == "glm" {
             argv[1..]
                 .iter()
-                .filter(|p| !outs.contains(&p.as_str()))
+                .filter(|p| !outputs.contains(p))
                 .find_map(|p| p.strip_suffix(".gz").unwrap_or(p).strip_suffix(".nii"))
                 .map(|stem| format!("{stem}.json"))
-        } else {
-            None
-        };
-        // existing files named on the command line (including undeclared side outputs), so a rerun upstream
-        // invalidates this step without hashing image payloads
-        let inputs = || -> Vec<&str> {
-            argv[1..]
-                .iter()
-                .map(|a| a.strip_prefix('@').unwrap_or(a))
-                .chain(glm_sidecar.as_deref())
-                .filter(|a| !outs.contains(a) && self.h.stat(a).is_some())
+                .into_iter()
                 .collect()
+        } else {
+            vec![]
         };
-        let record_dir = join(&self.work, "steps");
-        let record_path = join(&record_dir, &format!("{:016x}.json", fnv(first)));
-        let record = |ins: &[&str]| json!({"argv": argv, "fsl_out": fsl_out, "outputs": self.identity(&outs), "inputs": self.identity(ins)});
-        if outs.iter().all(|o| self.h.exists(o))
-            && self.h.exists(&record_path)
-            && self.json(&record_path).await.ok() == Some(record(&inputs()))
-        {
-            self.h.log(&format!("  skip  {}", file_name(first)));
-            let mut st = self.st.borrow_mut();
-            if let Some([tool, dt]) = st
-                .cached
-                .get(first)
-                .and_then(Value::as_array)
-                .cloned()
-                .as_deref()
-            {
-                st.times.push((
-                    py::value(tool),
-                    file_name(first).into(),
-                    dt.as_f64().unwrap_or(0.0),
-                ));
-            }
-            return Ok(false);
-        }
-        let log = join(&self.work, "commands.sh");
-        let env = fsl_out.map_or(String::new(), |f| format!("FSLOUTPUTTYPE={f} "));
-        let line = argv
-            .iter()
-            .map(|a| py::quote(a))
-            .collect::<Vec<_>>()
-            .join(" ");
-        self.h
-            .append(&log, format!("{env}{line}\n").as_bytes())
-            .await?;
-        self.h.remove(&record_path);
-        // a command that re-reads its own -save output (notgm) got the previous run's file from niimath, not the
-        // new one; clearing declared outputs first makes a rerun match a clean run
-        for o in &outs {
-            self.h.remove(o);
-        }
-        let t0 = self.h.now();
+        let mut settings = Map::new();
+        settings.insert("fsl_out".into(), json!(fsl_out));
         let step = Step {
-            argv: argv.clone(),
-            fsl_out,
+            argv,
+            env: fsl_out
+                .map(|f| ("FSLOUTPUTTYPE".to_string(), f.to_string()))
+                .into_iter()
+                .collect(),
             gpu: cpu.is_some() && self.gpu_slots > 0,
         };
-        let exit = self.h.run(&step).await?;
-        let missing: Vec<&str> = outs.iter().copied().filter(|o| !self.h.exists(o)).collect();
-        let name = file_name(&tool).to_string();
-        if exit.code != 0
-            && missing.is_empty()
-            && done_marker.is_some_and(|m| exit.stdout.contains(m))
-        {
-            self.h.log(&format!(
-                "  warning: {name} crashed after finishing (rc {}); outputs kept",
-                exit.code
-            ));
-        } else if exit.code != 0 || !missing.is_empty() {
-            for o in &outs {
-                self.h.remove(o);
+        let recorded = Recorded {
+            step,
+            outputs,
+            extra_inputs: &glm_sidecar,
+            settings,
+            done_marker,
+        };
+        match record::run(&self.h, &self.work, recorded).await? {
+            Outcome::Skipped => {
+                let mut st = self.st.borrow_mut();
+                if let Some([tool, dt]) = st
+                    .cached
+                    .get(first)
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .as_deref()
+                {
+                    st.times.push((
+                        py::value(tool),
+                        file_name(first).into(),
+                        dt.as_f64().unwrap_or(0.0),
+                    ));
+                }
+                Ok(false)
             }
-            // last n characters, as Python's s[-n:]
-            let tail = |s: &str, n: usize| {
-                s[s.char_indices().rev().nth(n - 1).map_or(0, |(i, _)| i)..].to_string()
-            };
-            let missing: Vec<&str> = missing.iter().map(|m| file_name(m)).collect();
-            return Err(format!(
-                "FAILED ({}, missing {}): {}\n{}{}",
-                exit.code,
-                py::list_repr(&missing),
-                argv.join(" "),
-                tail(&exit.stderr, 3000),
-                tail(&exit.stdout, 1000)
-            ));
+            Outcome::Ran { seconds: dt } => {
+                let name = file_name(&tool).to_string();
+                {
+                    let mut st = self.st.borrow_mut();
+                    st.times.push((name.clone(), file_name(first).into(), dt));
+                    st.computed |= !first.ends_with(".png");
+                    st.cached.insert(first.into(), json!([name, dt]));
+                }
+                let cached = serde_json::to_string(&self.st.borrow().cached).unwrap();
+                self.h
+                    .write(&join(&self.work, "timings.json"), cached.as_bytes())
+                    .await?;
+                Ok(true)
+            }
         }
-        let dt = self.h.now() - t0;
-        {
-            let mut st = self.st.borrow_mut();
-            st.times.push((name.clone(), file_name(first).into(), dt));
-            st.computed |= !first.ends_with(".png");
-            st.cached.insert(first.into(), json!([name, dt]));
-        }
-        let cached = serde_json::to_string(&self.st.borrow().cached).unwrap();
-        self.h
-            .write(&join(&self.work, "timings.json"), cached.as_bytes())
-            .await?;
-        self.h.mkdirs(&record_dir)?;
-        let tmp = format!("{record_path}.partial");
-        self.h
-            .write(&tmp, record(&inputs()).to_string().as_bytes())
-            .await?;
-        self.h.rename(&tmp, &record_path)?;
-        self.h
-            .log(&format!("  {dt:5.1}s {name} -> {}", file_name(first)));
-        Ok(true)
     }
 }

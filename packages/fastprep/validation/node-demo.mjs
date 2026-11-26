@@ -60,7 +60,7 @@ const files = await runFastprep({
   templates: tree(tplDir),
   runtimes: {
     niimath: createNiimath,
-    mindgrab: await loadMindgrabCpu(import.meta.resolve('@brainchop/mindgrab/package.json')),
+    mindgrab: await loadMindgrabCpu(import.meta.resolve('@brainchop/core/package.json')),
     mindgrabOptions: { backend: 'cpu' },
     greedy,
     synthsr,

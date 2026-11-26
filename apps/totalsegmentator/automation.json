@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 2,
+  "app": "totalsegmentator",
+  "title": "TotalSegmentator",
+  "description": "Segment organs, bones, vertebrae and muscles in 3D CT and MRI with TotalSegmentator v2.",
+  "defaultOperation": "segment",
+  "operations": {
+    "segment": {
+      "title": "Run segmentation",
+      "description": "Return a multilabel anatomical segmentation mask in the input scan's geometry and a TSV table of per-structure volumes and intensities.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "space": "native",
+          "description": "3D CT or MRI volume (NIfTI .nii/.nii.gz or DICOM series)",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "task": {
+          "type": "string",
+          "enum": [
+            "total",
+            "total_mr",
+            "vertebrae_mr",
+            "abdominal_muscles"
+          ],
+          "default": "total",
+          "description": "Segmentation task: total (CT, 117 classes), total_mr (MRI, 50 classes), vertebrae_mr (MRI, 25 classes), or abdominal_muscles (CT, 22 classes)."
+        },
+        "resolution": {
+          "type": "string",
+          "enum": [
+            "fast",
+            "full"
+          ],
+          "description": "Model resolution for total and total_mr: fast (3 mm single model, default) or full (1.5 mm multi-part). Omit or pass full for vertebrae_mr and abdominal_muscles."
+        },
+        "subset": {
+          "type": "string",
+          "enum": [
+            "all",
+            "muscles",
+            "vertebrae",
+            "ribs",
+            "organs",
+            "cardiac"
+          ],
+          "default": "all",
+          "description": "Structure group when running total (1.5 mm) or total_mr (1.5 mm). For total_mr, valid subsets are all, muscles, and organs."
+        },
+        "backend": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "wasm"
+          ],
+          "default": "auto",
+          "description": "Requested inference backend; WebGPU failures fall back to WASM CPU."
+        }
+      },
+      "artifacts": {
+        "segmentation": {
+          "type": "neuro:label-map",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "maximum": 1,
+          "space": "native"
+        },
+        "statistics": {
+          "type": "neuro:table",
+          "mediaType": "text/tab-separated-values",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

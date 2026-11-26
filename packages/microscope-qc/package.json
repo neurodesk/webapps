@@ -1,0 +1,42 @@
+{
+  "name": "@neurodesk/microscope-qc",
+  "version": "0.1.20261124",
+  "description": "Microscope quality control (bead PSF FWHM and field illumination uniformity following MetroloJ_QC) core and portable command line",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*"
+  },
+  "bin": {
+    "microscope-qc": "./bin/microscope-qc.js"
+  },
+  "exports": {
+    ".": "./src/core/psf.js",
+    "./core/field": "./src/core/field.js",
+    "./core/fit": "./src/core/fit.js",
+    "./core/optics": "./src/core/optics.js",
+    "./core/psf": "./src/core/psf.js",
+    "./config": "./src/config.js",
+    "./outputs": "./src/outputs.js",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check bin/microscope-qc.js && node --check src/node.js && node --check src/config.js && node --check src/outputs.js && node --check src/core/field.js && node --check src/core/fit.js && node --check src/core/optics.js && node --check src/core/psf.js && node --check validation/cli-check.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/microscope-qc"
+  }
+}

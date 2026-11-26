@@ -52,6 +52,8 @@ pub struct Spectra {
     pub txfrq: f64,
     /// Echo time, ms.
     pub te: f64,
+    /// Mixing time, ms (STEAM; seconds in NIfTI-MRS until normalised).
+    pub tm: Option<f64>,
     /// Repetition time, ms.
     pub tr: f64,
     /// Field strength, T.

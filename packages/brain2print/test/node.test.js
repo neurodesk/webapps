@@ -24,7 +24,7 @@ test('the command line takes exactly the web app create-mesh parameters', () => 
 });
 
 test('the command line pins the MindGrab build the web app stages', () => {
-  assert.equal(ownPackage.dependencies['@brainchop/mindgrab'], appPackage.dependencies['@brainchop/mindgrab']);
+  assert.equal(ownPackage.dependencies['@brainchop/core'], appPackage.dependencies['@brainchop/core']);
 });
 
 test('parameters default like the app and refuse what it refuses', () => {

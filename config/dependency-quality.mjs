@@ -13,6 +13,9 @@ export const generatedSources = {
   'packages/runtime-support/src/niimath/niimath.js': 'Committed Emscripten glue.',
   'packages/vesselboost/preprocessing/preprocessing.js': 'Committed wasm-bindgen glue.',
   'packages/runtime-support/src/nifti-js/index.js': 'Self-contained bundled NIfTI parser with embedded CommonJS modules.',
+  'apps/brainchomp/public/brainchomp/': 'Committed Emscripten glue from neuroneural/brainchomp-lib.',
+  'apps/brainchomp/vendor/brainchomp/': 'Vendored brainchomp-lib browser runtime bundle.',
+  'packages/brainchomp/wasm/brainchomp.js': 'Committed Emscripten glue from neuroneural/brainchomp-lib.',
 };
 
 export function isGenerated(path) {
@@ -41,14 +44,6 @@ export const nodeModules = /^packages\/(node-drivers|desktop)\/(src|neuroflow\/r
 // not acquire the browser runtime. These are exact existing adapters, not a
 // package-wide exemption for new imports.
 export const devRuntimeContracts = [
-  // SYNcro bundles these helpers; only ONNX Runtime, nifti-reader-js, MindGrab and the Node drivers remain external.
-  ['packages/syncro/src/assets.js', '@neurodesk/synthsr'],
-  ['packages/syncro/src/pipeline.js', '@neurodesk/synthsr'],
-  ['packages/syncro/src/node.js', '@neurodesk/brain-extraction'],
-  ['packages/syncro/src/node.js', '@neurodesk/greedy'],
-  ['packages/syncro/src/node.js', '@neurodesk/registration'],
-  ['packages/syncro/src/node.js', '@neurodesk/synthsr'],
-  ['packages/syncro/src/node.js', '@neurodesk/synthstrip'],
   ['packages/synthsr/src/gpu-session.js', '@neurodesk/runtime-support'],
   ['packages/synthsr/src/gpu-conv3d.js', '@neurodesk/runtime-support'],
   ['packages/synthsr/src/wasm-session.js', '@neurodesk/runtime-support'],

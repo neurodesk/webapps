@@ -7,7 +7,7 @@ import { readVolume } from '@neurodesk/synthsr';
 import { runSynthstrip } from '@neurodesk/synthstrip';
 import { SYNTHSTRIP_MODEL, SYNTHSTRIP_NOCSF_MODEL } from '@neurodesk/synthstrip/model';
 import { loadMindgrabCpu } from '@neurodesk/node-drivers/mindgrab';
-import mindgrabPackage from '@brainchop/mindgrab/package.json' with { type: 'json' };
+import mindgrabPackage from '@brainchop/core/package.json' with { type: 'json' };
 import packageJson from '../package.json' with { type: 'json' };
 import { runBet } from './bet.js';
 import { betRuntime } from './bet-runtime.js';
@@ -26,7 +26,7 @@ const arrayBuffer = (bytes) => bytes.buffer.slice(bytes.byteOffset, bytes.byteOf
 const offlineByDefault = () => process.env.NEURODESK_OFFLINE === '1';
 
 // The MindGrab package this package pins, which the web app also serves.
-const loadMindgrab = () => loadMindgrabCpu(import.meta.resolve('@brainchop/mindgrab/package.json'));
+const loadMindgrab = () => loadMindgrabCpu(import.meta.resolve('@brainchop/core/package.json'));
 
 async function loadBetRuntime() {
   return betRuntime(await WebAssembly.compile(await readFile(new URL('../wasm/bet.wasm', import.meta.url))));

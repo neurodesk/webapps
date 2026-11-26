@@ -72,10 +72,51 @@ pub fn mldivide_many_with_reference(columns: &[&[Complex64]], ys: &[&[f64]], pre
     if reference != ArithmeticReference::MatlabIntel {
         return mldivide_many(columns, ys, precision);
     }
-    assert_eq!(precision, Precision::Double, "Intel arithmetic requires double precision");
     assert_eq!(columns.len(), 2, "Intel arithmetic supports two-column designs");
     let rows = columns[0].len();
     assert!(columns.iter().all(|c| c.len() == rows) && ys.iter().all(|y| y.len() == rows));
+    if precision == Precision::Single {
+        let single_cols: Vec<Vec<num_complex::Complex32>> = columns
+            .iter()
+            .map(|c| c.iter().map(|v| num_complex::Complex32::new(v.re as f32, v.im as f32)).collect())
+            .collect();
+        if rows < 2 || single_cols.iter().flat_map(|c| c.iter()).any(|v| !v.re.is_finite() || !v.im.is_finite()) {
+            return Solutions { coefficients: vec![vec![Complex64::new(f64::NAN, f64::NAN); 2]; ys.len()], rank: 0, pivot: vec![0, 1] };
+        }
+        if single_cols.iter().flat_map(|c| c.iter()).any(|v| v.im != 0.0) {
+            let refs: Vec<&[num_complex::Complex32]> = single_cols.iter().map(Vec::as_slice).collect();
+            let design = intel::single::ComplexDesign::new(&refs);
+            let coefficients = ys
+                .iter()
+                .enumerate()
+                .map(|(i, y)| {
+                    let yf: Vec<f32> = y.iter().map(|&v| v as f32).collect();
+                    if yf.iter().any(|v| !v.is_finite()) {
+                        vec![Complex64::new(f64::NAN, f64::NAN); 2]
+                    } else {
+                        design.solve(&yf, ys.len(), i).0
+                    }
+                })
+                .collect();
+            return Solutions { coefficients, rank: design.rank, pivot: design.pivot };
+        }
+        let real: Vec<Vec<f32>> = single_cols.iter().map(|c| c.iter().map(|v| v.re).collect()).collect();
+        let refs: Vec<&[f32]> = real.iter().map(Vec::as_slice).collect();
+        let design = intel::single::RealDesign::new(&refs);
+        let coefficients = ys
+            .iter()
+            .enumerate()
+            .map(|(i, y)| {
+                let yf: Vec<f32> = y.iter().map(|&v| v as f32).collect();
+                if yf.iter().any(|v| !v.is_finite()) {
+                    vec![Complex64::new(f64::NAN, f64::NAN); 2]
+                } else {
+                    design.solve(&yf, ys.len(), i).into_iter().map(|v| Complex64::new(f64::from(v), 0.0)).collect()
+                }
+            })
+            .collect();
+        return Solutions { coefficients, rank: design.rank(), pivot: design.pivot().to_vec() };
+    }
     // Preserve the existing nonfinite result policy; these are not identified MATLAB kernels.
     if rows < 2 || columns.iter().flat_map(|c| c.iter()).any(|v| !v.re.is_finite() || !v.im.is_finite()) {
         return Solutions { coefficients: vec![vec![Complex64::new(f64::NAN, f64::NAN); 2]; ys.len()], rank: 0, pivot: vec![0, 1] };

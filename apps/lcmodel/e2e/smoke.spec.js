@@ -10,7 +10,7 @@ test("app boots on the workspace", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#viewer")).toBeVisible();
   await expect(page.locator("#runButton")).toBeDisabled();
-  await expect(page.locator("#basisSelect option")).toHaveCount(25);
+  await expect(page.locator("#basisSelect option")).toHaveCount(26);
 });
 
 test("shared app bar owns information actions and theme", async ({ page }) => {
@@ -110,6 +110,29 @@ test("the Siemens SPECIAL example preprocesses and fits (178 MB download)", asyn
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Fit done", { timeout: 600000 });
   expect(Number(await concentration(page, "NAA"))).toBeGreaterThan(3);
+});
+
+test("the Siemens 7 T STEAM example preprocesses and fits with its water reference (74 MB download)", async ({ page }) => {
+  test.skip(!process.env.LCMODEL_E2E_LARGE, "set LCMODEL_E2E_LARGE=1 to download the 74 MB twix example");
+  test.setTimeout(900000);
+  await page.goto("/");
+  await selectExample(page, "siemens-steam");
+  await expect(page.locator("#datasetSummary")).toContainText("STEAM");
+  await expect(page.locator("#datasetSummary")).toContainText("TE 11 ms");
+  await expect(page.locator("#datasetSummary")).toContainText("TM 32 ms");
+  await expect(page.locator("#datasetSummary")).toContainText("with water");
+  await expect(page.locator("#basisSelect")).toHaveValue("steam-7t-te8");
+  await expect(page.locator("#basisAdvice")).toHaveClass(/success/);
+  await expect(page.locator("#waterScaling")).toBeChecked();
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("Fit done", { timeout: 600000 });
+  await expect(page.locator("#concHeader")).toHaveText("Conc. (mM)");
+  expect(Number(await concentration(page, "NAA+NAAG"))).toBeCloseTo(9.26, 1);
+  expect(Number(await concentration(page, "Cr+PCr"))).toBeCloseTo(6.25, 1);
+  await expect(page.locator("#technicalLog")).not.toContainText("MYBASI 11");
+  const download = page.waitForEvent("download");
+  await page.locator("#resultList .nd-volume-toggle").filter({ hasText: "Spectrum for LCModel" }).getByRole("button", { name: "Download" }).click();
+  expect(readFileSync(await (await download).path(), "utf8")).toContain("seq= 'STEAM'");
 });
 
 test("the Siemens MEGA-PRESS example fits GABA on the difference spectrum (86 MB download)", async ({ page }) => {

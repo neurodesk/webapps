@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Brain Tumour Report — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input scan</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a post-contrast T1 NIfTI or DICOM series" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a T1c NIfTI or DICOM series</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+          <div class="nd-field" id="maskField">
+            <label for="maskInput">Tumour mask <small>optional</small>
+              <span class="nd-info-icon" tabindex="0" aria-label="About the optional tumour mask">i<span class="nd-info-tooltip">Supply an existing native-space binary tumour mask (NIfTI) aligned to the T1c scan to skip segmentation and compute morphometry and MNI RADS characterization directly.</span></span>
+            </label>
+            <p id="maskInfo" class="nd-file-info" hidden></p>
+            <button id="clearMaskButton" class="nd-btn nd-btn-secondary nd-btn-sm" type="button" hidden>Remove mask</button>
+          </div>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Tumour analysis</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="tumourType">Tumour type
+              <span class="nd-info-icon" tabindex="0" aria-label="About tumour type">i<span class="nd-info-tooltip">All three types run the Raidionics v1.3 contrast-enhancing T1c tumour-core network. Selecting Glioblastoma additionally reports the Kommers et al. (2021) resectability index in MNI space.</span></span>
+            </label>
+            <select id="tumourType">
+              <option value="glioblastoma">Glioblastoma (T1c)</option>
+              <option value="meningioma">Meningioma (T1c)</option>
+              <option value="metastasis">Brain metastasis (T1c)</option>
+            </select>
+          </div>
+          <label class="nd-check"><input id="computeMniReport" type="checkbox" checked /> MNI anatomical report
+            <span class="nd-info-icon" tabindex="0" aria-label="About the MNI anatomical report">i<span class="nd-info-tooltip">Aligns the brain-masked T1c to MNI ICBM152 2009a with Greedy WebAssembly to compute hemispheric laterality, MNI lobe and Schaefer 7/17 cortical overlap, 64-tract BCB white-matter distances and glioblastoma resectability.</span></span>
+          </label>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <label class="nd-check"><input id="skullStripped" type="checkbox" /> Input is already skull-stripped
+                <span class="nd-info-icon" tabindex="0" aria-label="About skull-stripped mode">i<span class="nd-info-tooltip">Skip Raidionics brain extraction and treat non-zero voxels as the brain mask. Enable for preprocessed BraTS or skull-stripped scans; leave off for native clinical scans with intact skull.</span></span>
+              </label>
+              <label class="nd-check"><input id="deformableMni" type="checkbox" /> Deformable MNI refinement
+                <span class="nd-info-icon" tabindex="0" aria-label="About deformable MNI refinement">i<span class="nd-info-tooltip">Runs lesion-masked deformable Greedy SVF (NMI) after affine alignment. Slower than affine-only registration and can better account for local mass effect.</span></span>
+              </label>
+              <div class="nd-field">
+                <label for="backend">Processing</label>
+                <select id="backend">
+                  <option value="auto">Automatic</option>
+                  <option value="wasm">CPU</option>
+                </select>
+                <p class="nd-hint">Automatic uses WebGPU when hardware limits allow.</p>
+              </div>
+            </div>
+          </details>
+          <p id="modeHint" class="nd-hint">Load a native-space post-contrast T1 scan.</p>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Segment &amp; characterize</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <p id="resultNotice" class="nd-message info" hidden></p>
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a T1c MRI anywhere, or choose an example.</p>
+        <p id="viewerNotice" class="nd-viewer-notice" hidden></p>
+        <section id="resultsReport" class="nd-viewer-report" aria-label="Results" hidden></section>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="privacyContent">
+      <p>Images are processed locally in this browser and are never uploaded. The Raidionics models and MNI atlases are downloaded from Hugging Face, verified against pinned SHA-256 checksums and cached in this browser.</p>
+    </template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

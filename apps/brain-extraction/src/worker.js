@@ -1,6 +1,6 @@
 import { readVolume } from '@neurodesk/synthsr';
 import { writeOutputs } from '@neurodesk/brain-extraction/outputs';
-import mindgrabPackage from '@brainchop/mindgrab/package.json' with { type: 'json' };
+import mindgrabPackage from '@brainchop/core/package.json' with { type: 'json' };
 
 self.onmessage = async ({ data: job }) => {
   const onProgress = (value, message) => self.postMessage({ type: 'progress', value, message });
@@ -18,7 +18,7 @@ self.onmessage = async ({ data: job }) => {
     } else if (job.method === 'mindgrab') {
       const [{ runMindgrab }, mindgrab, { withBackendChoice }] = await Promise.all([
         import('@neurodesk/brain-extraction/mindgrab'),
-        import('@brainchop/mindgrab'),
+        import('@brainchop/core'),
         import('@neurodesk/runtime-support/mindgrab/backend'),
       ]);
       const { segment } = withBackendChoice(mindgrab);

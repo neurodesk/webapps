@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/dwi2trx",
-  "version": "0.8.20261119",
+  "version": "0.9.20261124",
   "description": "DWI2TRX's diffusion tensor fit (niimath dtifit, MindGrab brain mask) for browsers and the command line",
   "type": "module",
   "license": "BSD-2-Clause",
@@ -30,7 +30,7 @@
     "lint": "node --check src/tensor.js && node --check src/gradients.js && node --check src/runner.js && node --check src/node-runner.js && node --check src/node.js && node --check src/niimath-version.js && node --check bin/dwi2trx.js"
   },
   "dependencies": {
-    "@brainchop/mindgrab": "0.1.20260925",
+    "@brainchop/core": "1.0.0",
     "@neurodesk/node-drivers": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/niimath": "1.4.20261114"

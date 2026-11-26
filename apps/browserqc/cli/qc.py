@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """BrowserQC without a browser: the page's pipeline on the native executables, which
 must be on PATH (or in $BROWSERQC_BIN). Standard library only, Python 3.8+.
-  brainchop-<model>, brainchop-mindgrab  https://github.com/neuroneural/brainchopC/releases
+  brainchop-<model>, brainchop-mindgrab  https://github.com/neuroneural/brainchop-core/releases
   niimath            https://pypi.org/project/niimath/  (--qc --pve --mask: newer than v1.0.20260926)
 
   python3 cli/qc.py --in T1.nii[.gz] --out qc.json [--model mindmap-pve|16chan18cls|mindmap|mindsnap] [--bids sidecar.json]
@@ -19,6 +19,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MODELS = json.loads((ROOT / "src" / "models.json").read_text())
+EXECUTABLES = {"16chan18cls": "mindmap-fast"}
 TEMPLATE_URL = "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/12eb1069c34097b7c0881b22e1f7e4ed953aa5cc/browserqc/avg152T1.nii.gz"
 TEMPLATE_SHA256 = "e8f5440f0dcec1a4d44384acbdf19c8e6cf94c032c3356ef91c4441fee3aaea8"
 
@@ -68,7 +69,8 @@ def main():
             run(f"brainchop-{model['pve']}", t1, "--pve", "-o", tmp / "pve.nii", path=path)  # writes pve_{gm,wm,csf}.nii
             tissues = ["--pve", *(tmp / f"pve_{t}.nii" for t in ("csf", "gm", "wm"))]
         else:
-            run(f"brainchop-{args.model}", t1, "-o", tmp / "seg.nii", path=path)
+            executable = EXECUTABLES.get(args.model, args.model)
+            run(f"brainchop-{executable}", t1, "-o", tmp / "seg.nii", path=path)
             tissues = ["--seg", tmp / "seg.nii", "--csf", ",".join(map(str, model["csf"])),
                        "--wm", ",".join(map(str, model["wm"]))]
         template = args.template if args.template else resolve_template()

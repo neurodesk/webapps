@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/omezarr-convert",
-  "version": "0.1.20261119",
+  "version": "0.1.20261124",
   "private": true,
   "description": "Convert microscopy TIFF, OME-TIFF, PNG/JPEG sequences and NIfTI to multiscale OME-Zarr (NGFF 0.4 and 0.5)",
   "type": "module",
@@ -8,9 +8,13 @@
   "engines": {
     "node": ">=22"
   },
+  "bin": {
+    "omezarr-convert": "./bin/omezarr-convert.js"
+  },
   "exports": {
     ".": "./src/index.js",
     "./ngff": "./src/ngff.js",
+    "./node": "./src/node.js",
     "./pyramid": "./src/pyramid.js",
     "./units": "./src/units.js",
     "./writer": "./src/writer.js",
@@ -21,7 +25,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "lint": "node ../../scripts/lint.mjs --workspace"
+    "lint": "node ../../scripts/lint.mjs --workspace && node --check bin/omezarr-convert.js && node --check src/node.js"
   },
   "dependencies": {
     "@fideus-labs/fiff": "0.8.2",
@@ -37,6 +41,7 @@
     "ajv": "8.20.0"
   },
   "files": [
+    "bin",
     "src",
     "schemas",
     "validation",

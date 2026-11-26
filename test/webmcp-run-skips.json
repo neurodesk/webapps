@@ -1,9 +1,4 @@
 {
-  "brainchop": {
-    "expect": "run failed",
-    "error": "texture|8192|WebGL",
-    "reason": "Its model needs an 8351-pixel WebGL texture; SwiftShader and many GPUs allow 8192."
-  },
   "brainqcnet": {
     "expect": "timed out",
     "reason": "Its WebAssembly classification of the example outlasts 25 minutes in a SwiftShader Chromium; the app's own e2e test takes 3.4 minutes on 8 native cores."

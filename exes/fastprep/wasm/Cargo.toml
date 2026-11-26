@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 fastprep-core = { path = "../core" }
+neurodesk-pipeline-host = { path = "../../pipeline-host", features = ["web"] }
 js-sys = "0.3"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"

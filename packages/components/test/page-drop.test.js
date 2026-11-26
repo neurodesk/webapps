@@ -29,6 +29,13 @@ test('auxiliary files go to their own input and a scan fills each empty image sl
   // FSL names its gradient files bvals and bvecs, with no stem.
   const fsl = routeFiles([file('data.nii.gz'), file('bvals'), file('bvecs')], [scan, mask, gradients], scan);
   assert.deepEqual(fsl.map(([input, files]) => [input, files.map(f => f.name)]), [[scan, ['data.nii.gz']], [gradients, ['bvals', 'bvecs']]]);
+  // Tabular metadata (.tsv/.csv) routes to a metadata input whose accept allows it, not a JSON-only schema input.
+  const events = { dataset: { neurodeskInput: 'metadata' }, accept: '.tsv,.csv,.txt' };
+  const schema = { dataset: { neurodeskInput: 'metadata' }, accept: '.json' };
+  const withEvents = routeFiles([file('scan.dat'), file('task_events.tsv')], [scan, events], scan);
+  assert.deepEqual(withEvents.map(([input, files]) => [input, files.map(f => f.name)]), [[scan, ['scan.dat']], [events, ['task_events.tsv']]]);
+  const withJsonOnly = routeFiles([file('scan.dcm'), file('notes.csv')], [scan, schema], scan);
+  assert.deepEqual(withJsonOnly.map(([input, files]) => [input, files.map(f => f.name)]), [[scan, ['scan.dcm', 'notes.csv']]]);
 });
 
 test('a mask input never takes dropped scans, so a DWI and its T1w stay together', () => {
@@ -271,4 +278,122 @@ test('a drop on a canvas inside a shadow root, as FreeBrowse renders NiiVue, ope
   await new Promise(resolve => setTimeout(resolve));
   assert.equal(reachedCanvas, false, 'the page drop takes it in the capture phase');
   assert.deepEqual([...input.files].map(f => f.name), ['scan.dcm']);
+});
+
+test('dropping two raster images fills both image slots and Undo clears a newly filled slot when another slot is occupied', async t => {
+  const { inputs, drop, undo } = dropSession('<input type="file" data-neurodesk-input="image"><input type="file" data-neurodesk-input="image">', t);
+  await drop('baseline.png', 'followup.jpg');
+  assert.deepEqual([...inputs[0].files].map(f => f.name), ['baseline.png']);
+  assert.deepEqual([...inputs[1].files].map(f => f.name), ['followup.jpg']);
+
+  // Empty the first slot via nd-files while the second stays occupied, then drop a file onto slot 1 -> Undo clears slot 1.
+  const { window } = { window: inputs[0].ownerDocument.defaultView };
+  inputs[0].files = [];
+  inputs[0].dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }));
+  await drop('replacement.png');
+  assert.deepEqual([...inputs[0].files].map(f => f.name), ['replacement.png']);
+  assert.ok(undo(), 'Undo appears when dropping into an empty slot alongside an occupied slot');
+  undo().click();
+  assert.deepEqual([...inputs[0].files], []);
+  assert.deepEqual([...inputs[1].files].map(f => f.name), ['followup.jpg']);
+
+  // Dropping two raster images when ONLY slot 2 is occupied routes image 1 to empty slot 1 and image 2 to slot 2.
+  await drop('new_base.png', 'new_foll.png');
+  assert.deepEqual([...inputs[0].files].map(f => f.name), ['new_base.png']);
+  assert.deepEqual([...inputs[1].files].map(f => f.name), ['new_foll.png']);
+});
+
+test('fresh page drop on a two-image-slot page offers Undo to clear the slot', async t => {
+  const { inputs, drop, undo } = dropSession('<input type="file" data-neurodesk-input="image"><input type="file" data-neurodesk-input="image">', t);
+  await drop('first.png');
+  assert.deepEqual([...inputs[0].files].map(f => f.name), ['first.png']);
+  assert.ok(undo(), 'fresh drop on a two-slot page offers Undo');
+  undo().click();
+  assert.deepEqual([...inputs[0].files], []);
+});
+
+test('Undo restores a paired auxiliary input cleared when a drop replaces the primary input', async t => {
+  const { window, inputs, drop, undo } = dropSession(
+    '<input type="file" data-neurodesk-input="dataset"><input type="file" data-neurodesk-input="metadata" accept=".tsv,.csv">',
+    t,
+  );
+  const [spectra, events] = inputs;
+  spectra.files = [new window.File([], 'scan_a.dat')];
+  spectra.dispatchEvent(new window.Event('change', { bubbles: true }));
+  events.files = [new window.File([], 'events_a.tsv')];
+  events.dispatchEvent(new window.Event('change', { bubbles: true }));
+
+  // Dropping scan_b replaces spectra, and the app clears the paired events input asynchronously.
+  await drop('scan_b.dat');
+  events.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [], restoreWithUndo: true } }));
+  assert.ok(undo());
+
+  undo().click();
+  assert.deepEqual([...spectra.files].map(f => f.name), ['scan_a.dat']);
+  assert.deepEqual([...events.files].map(f => f.name), ['events_a.tsv']);
+});
+
+test('Undo restores to empty after a rejected pick unless withdrawn, and only replays opted-in auxiliaries', async t => {
+  const { window, inputs, drop, undo } = dropSession(
+    '<input type="file" data-neurodesk-input="dataset"><input type="file" data-neurodesk-input="image"><input type="file" data-neurodesk-input="mask">',
+    t,
+  );
+  const [spectra, t1, mask] = inputs;
+
+  // Simulate a failed first pick that resets inputs to empty via nd-files.
+  spectra.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [], cancelPending: true } }));
+  mask.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }));
+
+  // Replacing an empty primary input still offers Undo to clear back to empty unless the app withdraws it.
+  await drop('scan_a.dat');
+  assert.ok(undo());
+  undo().click();
+  assert.deepEqual([...spectra.files], []);
+
+  await drop('scan_a.dat');
+
+  // Load T1 A (opts into restoreWithUndo) and mask A (does NOT opt in, like N4).
+  const t1A = new window.File([], 't1_a.nii');
+  const t1B = new window.File([], 't1_b.nii');
+  const maskA = new window.File([], 'mask_a.nii');
+  t1.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [t1A] } }));
+  mask.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [maskA] } }));
+  let maskReplayed = false;
+  mask.addEventListener('change', () => { maskReplayed = true; });
+
+  await drop('scan_b.dat');
+  t1.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [t1B], restoreWithUndo: true } }));
+  mask.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [] } }));
+  assert.ok(undo());
+
+  undo().click();
+  assert.deepEqual([...spectra.files].map(f => f.name), ['scan_a.dat']);
+  assert.deepEqual([...t1.files].map(f => f.name), ['t1_a.nii']);
+  assert.equal(maskReplayed, false, 'non-opted-in mask input must not be replayed on Undo');
+});
+
+test('synchronous restoreWithUndo capture preserves prior auxiliary files on immediate Undo', async t => {
+  const { window, inputs, drop, undo } = dropSession(
+    '<input type="file" data-neurodesk-input="dataset"><input type="file" data-neurodesk-input="dataset" id="water">',
+    t,
+  );
+  const [spectra, water] = inputs;
+  const specA = new window.File(['a'], 'scan_a.raw');
+  const waterA = new window.File(['w'], 'acquisition_002.raw');
+  spectra.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [specA] } }));
+  water.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [waterA] } }));
+
+  // App snapshots its resident water synchronously during the replacement drop's change event,
+  // before any async file read completes.
+  spectra.addEventListener('change', () => {
+    water.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: [waterA], restoreWithUndo: true } }));
+  }, { once: true });
+
+  await drop('scan_b.raw');
+  assert.ok(undo());
+
+  // Click Undo immediately without waiting for async completion.
+  undo().click();
+  assert.deepEqual([...spectra.files].map(f => f.name), ['scan_a.raw']);
+  assert.deepEqual([...water.files].map(f => f.name), ['acquisition_002.raw']);
 });

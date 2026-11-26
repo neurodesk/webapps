@@ -1,5 +1,16 @@
 # @neurodesk/edgereg
 
+## 0.5.20261124
+
+### Patch Changes
+
+- Updated dependencies [f316dac]
+- Updated dependencies [01e85d7]
+- Updated dependencies [dce0e7f]
+- Updated dependencies [94d6e09]
+  - @neurodesk/node-drivers@0.4.0
+  - @neurodesk/webapp-components@0.29.0
+
 ## 0.5.20261119
 
 ### Patch Changes

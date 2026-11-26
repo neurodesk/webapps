@@ -2,12 +2,12 @@
   "schemaVersion": 2,
   "app": "stardist",
   "title": "StarDist",
-  "description": "Segment cell nuclei in 2D fluorescence microscopy with StarDist's pretrained 2D_versatile_fluo model.",
+  "description": "Segment cell nuclei in 2D fluorescence, 2D H&E brightfield and 3D fluorescence microscopy with StarDist's pretrained models.",
   "defaultOperation": "segment",
   "operations": {
     "segment": {
       "title": "Segment nuclei",
-      "description": "Run StarDist 2D_versatile_fluo on one 2D image channel and return the nucleus label image and a per-nucleus table.",
+      "description": "Run a pretrained StarDist 2D or 3D model on one image or 3D stack and return the nucleus label TIFF and a per-nucleus CSV table.",
       "mode": "batch",
       "inputs": {
         "image": {
@@ -18,39 +18,48 @@
             "tiff",
             "png"
           ],
-          "description": "One 2D TIFF, OME-TIFF or PNG image of fluorescent nuclei",
+          "description": "One 2D TIFF, OME-TIFF or PNG image, or a 3D multi-page TIFF/OME-TIFF stack",
           "minimum": 1,
           "maximum": 1
         }
       },
       "parameters": {
+        "model": {
+          "type": "string",
+          "enum": [
+            "2D_versatile_fluo",
+            "2D_versatile_he",
+            "2D_paper_dsb2018",
+            "3D_demo"
+          ],
+          "default": "2D_versatile_fluo",
+          "description": "Pretrained StarDist model (2D fluorescence, 2D RGB H&E, 2D DSB 2018 paper, or 3D demo)"
+        },
         "channel": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 256,
+          "maximum": 1024,
           "default": 1,
-          "description": "Channel or page to segment, counting from 1"
+          "description": "Channel or page to segment for single-channel models, counting from 1"
         },
         "probThresh": {
           "type": "number",
           "minimum": 0.01,
           "maximum": 0.99,
-          "default": 0.479071463157368,
-          "description": "Object probability threshold (the model's tuned value by default)"
+          "description": "Object probability threshold (omitted uses the chosen model's tuned default)"
         },
         "nmsThresh": {
           "type": "number",
           "minimum": 0.01,
           "maximum": 0.99,
-          "default": 0.3,
-          "description": "Overlap threshold of non-maximum suppression (the model's tuned value by default)"
+          "description": "Overlap threshold of non-maximum suppression (omitted uses the chosen model's tuned default)"
         },
         "tiles": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 16,
+          "maximum": 8,
           "default": 0,
-          "description": "Tiles per image axis; 0 picks one tile per 1024 pixels"
+          "description": "Tiles per spatial axis; 0 chooses tiling automatically from image size"
         }
       },
       "artifacts": {

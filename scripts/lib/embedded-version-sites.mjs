@@ -67,6 +67,12 @@ export const EMBEDDED_VERSION_SITES = Object.freeze({
     { file: 'exes/greedy/Cargo.toml', pattern: /(^\[workspace\.package\][\s\S]*?^version = ")[^"]+(")/m, replace: '$1{version}$2' },
     { file: 'exes/greedy/Cargo.lock', pattern: /(name = "greedy-rs"\nversion = ")[^"]+(")/, replace: '$1{version}$2' },
   ],
+  syncro: [
+    { file: 'exes/syncro/Cargo.toml', pattern: /(^\[workspace\.package\][\s\S]*?^version = ")[^"]+(")/m, replace: '$1{version}$2' },
+    { file: 'exes/syncro/Cargo.lock', pattern: /(name = "syncro"\nversion = ")[^"]+(")/, replace: '$1{version}$2' },
+    { file: 'exes/syncro/Cargo.lock', pattern: /(name = "syncro-core"\nversion = ")[^"]+(")/, replace: '$1{version}$2' },
+    { file: 'exes/syncro/Cargo.lock', pattern: /(name = "syncro-wasm"\nversion = ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
   musclemap: [
     { file: 'apps/musclemap/model-sources/release.json', pattern: /("appVersion":\s*")[^"]+(")/, replace: '$1{version}$2' },
     { file: 'apps/musclemap/model-sources/release.json', pattern: /("targetAppVersion":\s*")[^"]+(")/, replace: '$1{version}$2' },

@@ -32,6 +32,7 @@
                 <span>Drop the unsuppressed water reference, including its companion header.</span>
               </label>
               <p id="waterInfo" class="nd-file-info" hidden></p>
+              <label class="nd-check" id="waterAllField" hidden><input id="waterAllToggle" type="checkbox" /> Apply to all loaded datasets</label>
               <p class="nd-hint">Applies to the selected dataset. Load its spectrum first.</p>
             </div>
           </details>
@@ -90,6 +91,47 @@
               <label class="nd-check"><input id="phaseReference" type="checkbox" checked /> Phase and reference to creatine</label>
             </div>
           </details>
+          <details class="nd-sidebar-section" id="fmrsSection">
+            <summary class="nd-section-title">Functional MRS (fMRS)</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="fmrsMode">Temporal binning
+                  <span class="nd-info-icon" tabindex="0" aria-label="About functional MRS binning">i<span class="nd-info-tooltip">Split unaveraged transients into sliding windows, event blocks or condition-pooled spectra after coil combination, bad-average removal, drift correction and consistent grand-mean phasing. Event alignment assumes a fixed repetition time (TR) without mid-scan pauses (transient k at k × TR).</span></span>
+                </label>
+                <select id="fmrsMode">
+                  <option value="off">Off (single averaged spectrum)</option>
+                  <option value="sliding">Sliding or fixed windows</option>
+                  <option value="blocks">Event blocks (from events file)</option>
+                  <option value="conditions">Pool by condition (from events file)</option>
+                </select>
+              </div>
+              <div class="nd-row" id="fmrsWindowRow" hidden>
+                <div class="nd-field">
+                  <label for="fmrsWindow">Window <small>avgs</small></label>
+                  <input id="fmrsWindow" type="number" min="1" max="1024" step="1" value="4" />
+                </div>
+                <div class="nd-field">
+                  <label for="fmrsStep">Step <small>avgs</small></label>
+                  <input id="fmrsStep" type="number" min="1" max="1024" step="1" placeholder="Same as window" />
+                </div>
+              </div>
+              <div id="fmrsControls" hidden>
+                <label class="nd-file" id="eventsDrop">
+                  <input id="eventsInput" type="file" data-neurodesk-input="metadata" accept=".tsv,.csv" aria-label="Choose BIDS events.tsv or CSV stimulus schedule" />
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  <span>Drop stimulus events (BIDS events.tsv or CSV)</span>
+                </label>
+                <p id="eventsInfo" class="nd-file-info" hidden></p>
+                <button id="clearEventsBtn" class="nd-btn nd-btn-secondary" type="button" hidden>Clear events</button>
+                <label class="nd-check"><input id="matchLinewidth" type="checkbox" /> Match linewidth across bins (BOLD)
+                  <span class="nd-info-icon" tabindex="0" aria-label="About BOLD linewidth matching">i<span class="nd-info-tooltip">Apply exponential line broadening so every bin matches the widest non-outlier linewidth before LCModel fitting, removing BOLD T2* narrowing bias.</span></span>
+                </label>
+                <label class="nd-check"><input id="dynamicGlm" type="checkbox" checked /> Dynamic spectral projection GLM
+                  <span class="nd-info-icon" tabindex="0" aria-label="About dynamic spectral projection GLM">i<span class="nd-info-tooltip">Two-stage fixed-template projection (inspired by Clarke et al. 2024): aligns every kept complex transient to LCModel's grand-mean templates plus BOLD linewidth and frequency-shift derivatives, then fits a temporal GLM with Newey-West HAC standard errors (conditional on grand-mean templates).</span></span>
+                </label>
+              </div>
+            </div>
+          </details>
           <details class="nd-sidebar-section" id="fitSettings">
             <summary class="nd-section-title">LCModel settings</summary>
             <div class="nd-section-content">
@@ -124,6 +166,15 @@
                 </div>
               </div>
               <label class="nd-check"><input id="ecc" type="checkbox" checked /> Eddy-current correction with the water reference</label>
+              <label class="nd-check" id="simulateMmField"><input id="simulateMm" type="checkbox" checked /> Simulate macromolecules (LCModel)
+                <span class="nd-info-icon" tabindex="0" aria-label="About simulated macromolecules">i<span class="nd-info-tooltip">Uncheck (nsimul=0) for unedited fits when your custom .BASIS file already includes an empirically measured metabolite-nulled macromolecule spectrum, common in 7 T short-TE STEAM fMRS.</span></span>
+              </label>
+              <div class="nd-field" id="baselineStiffnessField">
+                <label for="baselineStiffness">Baseline stiffness <small>dkntmn</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About baseline stiffness">i<span class="nd-info-tooltip">LCModel spline knot spacing (dkntmn, ppm) for unedited fits. Larger values stiffen the baseline so it does not absorb small functional metabolite changes; LCModel clamps dkntmn to the fit range. Leave empty for LCModel's default.</span></span>
+                </label>
+                <input id="baselineStiffness" type="number" min="0.05" max="10" step="0.05" placeholder="LCModel default" />
+              </div>
             </div>
           </details>
           <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Preprocess and fit</button>
@@ -197,8 +248,9 @@
 
     <main id="viewer">
       <div class="nd-viewer-canvas-wrapper">
-        <div id="plot" class="lcm-plot-host" aria-live="polite"></div>
+        <div id="plot" class="lcm-plot-host" tabindex="-1" aria-live="polite"></div>
         <div id="groupView" class="lcm-group-host" hidden></div>
+        <div id="fmrsView" class="lcm-group-host" hidden></div>
         <canvas id="t1Canvas" aria-label="T1 image with the spectroscopy voxel" hidden></canvas>
         <p id="emptyState" class="nd-viewer-empty">Choose an example or drop spectroscopy data to begin.</p>
         <p id="viewerNotice" class="nd-viewer-notice" hidden></p>
@@ -225,6 +277,7 @@
       <p><strong>Groups.</strong> Drop several acquisitions, or a folder of subjects, and the app fits each one in turn with the same settings. Every spectrum is paired with the water reference in its own folder. Each dataset gets the basis set recommended for its header, unless you chose a library basis set that suits all of them or dropped your own .BASIS file, which then fits every dataset. A dataset that fails is listed with its error and the rest continue. The group table shows each dataset's concentrations or ratios with their %SD, FID-A's SNR, linewidth and removed averages, and LCModel's FWHM, S/N and shift. Its CSV download is long, one row per dataset and metabolite, because units and ratio references can differ between datasets; the second CSV has one row per dataset. Both also record each dataset's macromolecule model, line-broadening prior and, when it was corrected, its tissue fractions and tissue-corrected concentrations.</p>
       <p><strong>Reports.</strong> This port does not draw LCModel's PostScript page. Instead each fit has a printable HTML report with the same information: the fit with its baseline and residual, the concentration table with %SD above 20% marked, LCModel's diagnostics and fit quality, the data's header, FID-A's preprocessing summary, the basis set with its checksum, the fit settings, the tissue correction and its inputs when one was applied, the control file and the versions used. Open it and print it to PDF from the browser.</p>
       <p><strong>Tissue correction.</strong> LCModel scales to the water reference as if the voxel were pure white matter (WCONC 35880 mM; ATTH2O 0.7 for standard fits and 0.43 for MEGA-PRESS difference fits). With a T1 image from the same session, the app segments it in the browser with MindMap's partial-volume grey matter, white matter and CSF maps (brainchop, on WebGPU, WebGL2 or CPU), places the voxel from the spectroscopy header (spec2nii's conventions for Siemens, GE, Philips and NIfTI-MRS), and samples the oblique voxel box on the T1 grid. MindMap's CSF map holds the ventricles only, so the part of the voxel no map labels (sulcal and interhemispheric CSF) counts as CSF. The Voxel view shows the box on the T1: check it covers the region you planned. Concentrations are then corrected as in Gasparovic et al. 2006, in mmol per kg tissue water, with Osprey's constants: tissue water contents of 0.78, 0.65 and 0.97, water T1 and T2 per tissue and metabolite T1 and T2 from the literature at 3 T and 7 T. For GABA-edited data, GABA, GABA+ and Glx are also given with Harris et al.'s alpha correction (alpha 0.5). In a group, a loaded T1 is taken to be the session's and each dataset's own voxel is measured on it; typed fractions correct only the dataset on display. Fractions from another tool can be typed in. Bruker and .RAW files do not carry the voxel position here.</p>
+      <p><strong>Functional MRS (fMRS).</strong> Unaveraged multi-transient unedited scans can be analysed over time in the Functional MRS section. FID-A combines channels (sharing a single compatible water reference such as a Siemens <code>OnlyRFoff</code> scan across runs or windows), removes bad averages while tracking original transient indices and timestamps, corrects frequency and phase drift, and applies one global phase and chemical-shift reference from the high-SNR grand mean so low-SNR windows remain coherent. Transients are binned into sliding/fixed windows, contiguous event blocks, or condition-pooled spectra from a BIDS <code>events.tsv</code> or CSV schedule, with optional BOLD linewidth matching (exponential line broadening to equalise linewidths across bins before LCModel fitting). LCModel settings also expose <code>nsimul=0</code> (for custom basis sets carrying an empirically measured macromolecule spectrum) and spline baseline stiffness (<code>dkntmn</code>). The Time course view plots metabolite trajectories, QC trajectories (linewidth, S/N, tNAA/tCr), per-transient drift and bad averages, windowed temporal GLM contrasts (controlling for drift and linewidth, excluding QC-FAIL windows), and a two-stage fixed-template dynamic spectral projection GLM across all kept complex transients (inspired by Clarke et al. 2024) with BOLD linewidth and frequency-shift derivative terms and Newey-West HAC standard errors conditional on the grand-mean templates.</p>
       <p>Research use only.</p>
     </template>
     <template id="privacyContent"><p>Spectroscopy files are processed in this browser and are never uploaded. Basis sets and examples are downloaded from Hugging Face at a pinned revision and verified by checksum.</p></template>

@@ -26,7 +26,8 @@ const REQUIRED_METHODS = {
   sdc: ['arxiv.org/abs/2403.10706', '10.1088/0031-9155/57/18/5715', '10.5281/zenodo.3758524', '10.3389/fninf.2017.00017', '10.1371/journal.pone.0152472', '10.1016/j.media.2007.06.004', '10.1109/TMI.2010.2046908', '10.1002/jmri.22003', 'arxiv.org/abs/2506.11860', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   dwicorrect: ['10.1016/j.neuroimage.2015.10.019', '10.1016/j.neuroimage.2016.06.058', '10.1016/j.neuroimage.2017.02.085', '10.1016/j.neuroimage.2015.07.067', '10.1016/j.media.2013.02.010', '10.1038/s41592-021-01185-5', 'arxiv.org/abs/2403.10706', '10.1088/0031-9155/57/18/5715', 'arxiv.org/abs/2506.11860', '10.21105/joss.05098', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   dwidenoise: ['arxiv.org/abs/2011.01355', '10.3389/fninf.2014.00008', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
-  stardist: ['10.1007/978-3-030-00934-2_30', '10.1038/s41592-018-0216-7', '10.1038/s41592-019-0612-7', 'onnxruntime.ai', 'github.com/niivue/niivue'],
+  stardist: ['10.1007/978-3-030-00934-2_30', '10.1109/WACV45572.2020.9093435', '10.1038/s41592-018-0216-7', '10.1038/s41592-019-0612-7', '10.7717/peerj.453', 'onnxruntime.ai', 'github.com/niivue/niivue'],
+  cellpose: ['10.1038/s41592-020-01018-x', '10.1038/s41592-025-02595-5', '10.7717/peerj.453', 'onnxruntime.ai', 'github.com/niivue/niivue'],
   degibbs: ['10.1002/mrm.26054', '10.1016/j.neuroimage.2019.116137', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   'microscope-qc': ['10.1083/jcb.202107093', '10.1111/jmi.13041', '10.1038/nmeth.3102', '10.1038/nbt899', '10.5281/zenodo.10522322', '10.1038/nmeth.2089', 'github.com/niivue/niivue'],
   'calcium-imaging': ['10.1364/OL.33.000156', '10.1016/j.jneumeth.2017.07.031', '10.1038/nn.2620', '10.1016/0165-1684(94)90060-4', '10.1038/nature12354', '10.1371/journal.pcbi.1005423', '10.1016/j.neuron.2015.11.037', '10.7554/eLife.38173', '10.1038/s41586-020-2807-6', 'github.com/niivue/niivue'],
@@ -56,7 +57,8 @@ const REQUIRED_METHODS = {
   niimath: ['10.52294/001c.94384', '10.1016/j.jneumeth.2016.03.001'],
   mri2vid: ['10.1007/s003300101100', '10.1016/j.jneumeth.2016.03.001', 'github.com/Vanilagy/mp4-muxer'],
   browserqc: ['10.1371/journal.pone.0184661', '10.21105/joss.05098', '10.52294/001c.94384', '10.1016/j.jneumeth.2016.03.001', '10.1098/rstb.2001.0915'],
-  brainchop: ['10.21105/joss.05098'],
+  brainchop: ['10.21105/joss.05098', '10.1016/j.neuroimage.2026.122074', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  brainchomp: ['brainchomp.org', '10.21105/joss.05098', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   brain2print: ['10.1038/s41598-025-00014-5', '10.1016/j.neuroimage.2026.122074', '10.52294/001c.94384', '10.1016/j.jneumeth.2016.03.001'],
   topofit: ['arxiv.org/abs/2505.14017', 'proceedings.mlr.press/v172/hoopes22a.html', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue', '10.1016/j.neuroimage.2012.11.065', '10.52294/001c.94384', '10.1093/cercor/bhu277', '10.1167/18.13.23', '10.1016/j.neuroimage.2006.01.021'],
   surfannotate: ['10.1016/j.neuroimage.2012.01.021', 'github.com/niivue/niivue'],
@@ -64,13 +66,13 @@ const REQUIRED_METHODS = {
   zarro: ['10.1038/s41592-021-01326-w', 'zarr.dev', 'dandiarchive.org'],
   synthseg: ['10.1016/j.media.2023.102789', '10.52294/001c.94384', 'brain-development.org/ixi-dataset', '10.1016/j.neuroimage.2020.117200', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   synthsr: ['10.1016/j.neuroimage.2021.118206', 'github.com/neurolabusc/py_synthsr'],
-  syncro: ['10.1016/j.neuroimage.2021.118206', 'arxiv.org/abs/2506.11860', '10.1016/j.neuroimage.2022.119474', 'sites.google.com/view/greedyreg/about', '10.1016/j.media.2007.06.004', '10.1007/11866763_8', '10.52294/001c.94384'],
+  syncro: ['10.1016/j.neuroimage.2021.118206', 'arxiv.org/abs/2506.11860', 'sites.google.com/view/greedyreg/about', '10.1016/j.media.2007.06.004', '10.1007/11866763_8', '10.52294/001c.94384'],
   'white-matter-lesions': ['10.1101/2025.05.19.25327707', '10.1038/s41592-020-01008-z', '10.1016/j.neuroimage.2022.119474', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   edgereg: ['afni.nimh.nih.gov', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   ants: ['10.1038/s41598-021-87564-6', '10.1016/j.neuroimage.2010.09.025', '10.1016/j.neuroimage.2026.122074', '10.1016/j.jneumeth.2016.03.001'],
   'carotid-flow': ['10.5281/zenodo.18712355', '10.1177/00359157740676P113', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   disconnectome: ['10.1038/s41467-022-32595-4', 'github.com/neurolabusc/nii2tvx', 'github.com/niivue/niivue'],
-  lcmodel: ['10.1002/mrm.1910300604', '10.1002/mrm.26091', '10.1002/mrm.25094', '10.1002/mp.12375', '10.1002/(SICI)1099-1492(199810)11:6<266::AID-NBM530>3.0.CO;2-J', '10.1002/nbm.4618', '10.1002/mrm.24391', '10.1002/mrm.20901', '10.1002/jmri.24903', '10.1016/j.jneumeth.2020.108827', '10.1016/j.neuroimage.2026.122074', '10.1002/mrm.29418', '10.1016/j.jneumeth.2016.03.001'],
+  lcmodel: ['10.1002/mrm.1910300604', '10.1002/mrm.26091', '10.1002/mrm.25094', '10.1002/mp.12375', '10.1002/(SICI)1099-1492(199810)11:6<266::AID-NBM530>3.0.CO;2-J', '10.1002/nbm.4618', '10.1002/mrm.24391', '10.1002/mrm.20901', '10.1002/jmri.24903', '10.1016/j.jneumeth.2020.108827', '10.1016/j.neuroimage.2026.122074', '10.1002/mrm.29418', '10.1038/jcbfm.2014.233', '10.1002/mrm.30001', '10.1016/j.jneumeth.2016.03.001'],
   greedy: ['sites.google.com/view/greedyreg/about', 'github.com/pyushkevich/greedy', 'arxiv.org/abs/2506.11860', '10.1016/j.jneumeth.2016.03.001'],
   'me-ica': ['10.21105/joss.03669', '10.1016/j.neuroimage.2011.12.028', '10.1073/pnas.1301725110', '10.1002/hbm.20359', '10.1016/j.neuroimage.2015.02.052', '10.1109/72.761722'],
   fireants: ['10.1038/s41467-026-72508-3', 'arxiv.org/abs/2506.11860', '10.1016/j.jneumeth.2016.03.001'],
@@ -82,6 +84,15 @@ const REQUIRED_METHODS = {
   microsam: ['10.1038/s41592-024-02580-4', '10.1109/ICCV51070.2023.00371', '10.48550/arXiv.2306.14289', '10.1038/s41592-019-0612-7', 'onnxruntime.ai'],
   bison: ['10.1002/mrm.28547', '10.1016/j.neuroimage.2017.06.009', '10.1016/j.neuroimage.2010.07.033', '10.1016/S1053-8119(09)70884-5', 'sites.google.com/view/greedyreg/about', '10.1109/TMI.2010.2046908', '10.1002/jmri.22003', '10.52294/001c.94384', '10.18112/openneuro.ds007522.v2.0.1', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   gliomoda: ['10.1101/2025.11.12.25339968', '10.48550/arXiv.2507.09036', '10.1038/s41592-020-01008-z', '10.1038/s41597-022-01560-7', 'onnxruntime.ai', 'github.com/niivue/niivue'],
+  'tumour-report': ['10.1038/s41598-023-42048-7', '10.3389/fneur.2022.932219', '10.1093/neuonc/noab026', '10.1016/j.neuroimage.2010.07.033', '10.1093/cercor/bhx179', '10.1093/gigascience/giy004', 'sites.google.com/view/greedyreg/about', 'onnxruntime.ai', '10.1016/j.jneumeth.2016.03.001', '10.6084/m9.figshare.29365844.v1', '10.1038/s41597-022-01560-7', 'github.com/niivue/niivue'],
+  denoise: ['proceedings.mlr.press/v97/batson19a.html', 'github.com/royerlab/aydin', '10.1109/CVPR52729.2023.01347', '10.1109/CVPR.2005.38', '10.1109/ISBI.2008.4541250', '10.1109/TIP.2012.2202675', '10.1109/TIP.2008.2001399', '10.1038/s41592-019-0612-7', '10.5281/zenodo.5101351', 'github.com/niivue/niivue'],
+  totalsegmentator: ['10.1148/ryai.230024', '10.1148/radiol.241613', '10.1101/2025.01.13.25319967', '10.1038/s41592-020-01008-z', 'onnxruntime.ai', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  medsam2: ['10.48550/arXiv.2504.03600', '10.48550/arXiv.2408.00714', '10.1016/j.jneumeth.2016.03.001', 'onnxruntime.ai', 'github.com/niivue/niivue'],
+  dermoscope: ['10.1016/s0010-4825(97)00020-6', '10.2352/CIC.2004.12.1.art00008', '10.1109/JBHI.2014.2336473', '10.1109/TSMC.1979.4310076', '10.1016/s0190-9622(94)70061-3', '10.1049/iet-ipr.2015.0385', 'isic-archive.com'],
+  'skin-chromophore': ['10.1111/j.1467-2494.1991.tb00561.x', '10.1111/bjd.12529', '10.1111/j.1365-2133.1984.tb14149.x', '10.1159/000211297', '10.1364/josaa.16.002169', '10.2352/CIC.2004.12.1.art00008', '10.1002/col.20070', 'isic-archive.com'],
+  'wound-planimetry': ['pubmed.ncbi.nlm.nih.gov/2916597', '10.1109/TSMC.1979.4310076', '10.1155/2014/851582', 'File:Neuropathic_heel_ulcer_diabetic.jpg', 'File:Venous_ulcer_dorsal_leg.jpg'],
+  'derm-compare': ['10.1001/archderm.142.9.1113', '10.1067/mjd.2000.107504', '10.1016/j.artmed.2012.08.002', '10.1002/col.20070', '10.1016/s0010-4825(97)00020-6', '10.2352/CIC.2004.12.1.art00008', '10.1109/TSMC.1979.4310076', 'isic-archive.com'],
+  dermvit: ['10.48550/arXiv.2010.11929', '10.1038/sdata.2018.161', '10.2352/CIC.2004.12.1.art00008', '10.1007/978-3-319-10590-1_53', 'onnxruntime.ai', 'isic-archive.com'],
   openads: ['10.1038/s43856-021-00062-8', '10.1038/s43856-023-00327-4', '10.1038/s41597-022-01923-0', '10.1016/j.neuroimage.2022.119474', '10.1016/j.neuroimage.2010.09.025', '10.1038/s42256-019-0138-9', '10.1016/j.jneumeth.2016.03.001', 'onnxruntime.ai', 'github.com/niivue/niivue'],
 };
 
@@ -90,7 +101,7 @@ test('every registered app has app information with packages and cited methods',
     const info = information.apps[app.id];
     assert.ok(info, `${app.id} has an app-information entry`);
     assert.ok(info.packages.length >= 1, `${app.id} lists what runs under the hood`);
-    assert.ok(info.packages.some((item) => /niivue|zarrita|pyodide|rust|mp4-muxer|onnx runtime/i.test(item.name)), `${app.id} names its runtime`);
+    assert.ok(info.packages.some((item) => /niivue|zarrita|pyodide|rust|mp4-muxer|onnx runtime|canvas 2d|fast-png/i.test(item.name)), `${app.id} names its runtime`);
     const cited = info.citations.map((item) => `${item.doi ?? ''} ${item.url ?? ''} ${item.code ?? ''} ${item.title}`).join('\n');
     for (const method of REQUIRED_METHODS[app.id] ?? []) {
       assert.ok(cited.includes(method), `${app.id} must cite ${method}`);

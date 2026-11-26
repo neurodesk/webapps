@@ -113,9 +113,9 @@ on:
         type: boolean
         default: false
       probes:
-        description: With record_matlab, record a pre-registered probe set (sparse conv boundary/blocks/gaps, conv-*-predictions.md; constants-gamma-gemv-predictions.md)
+        description: With record_matlab, record a pre-registered probe set (sparse conv boundary/blocks/gaps, conv-*-predictions.md; constants-gamma-gemv-predictions.md; intel-norm-single-css-predictions.md)
         type: choice
-        options: [none, boundary, blocks, gaps, constants-gamma-gemv, cleanup-order-1]
+        options: [none, boundary, blocks, gaps, constants-gamma-gemv, cleanup-order-1, intel-norm-single-css]
         default: none
       controls_only:
         description: Record the MKL controls in effect inside MATLAB under three environment requests (controls-preregistration.md)
@@ -355,6 +355,15 @@ jobs:
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-controls" packages/samsrf/validation/matlab/controls-reference.json
           python3 -I packages/samsrf/validation/matlab/analyse-controls.py "$RUNNER_TEMP/samsrf-controls" "$RUNNER_TEMP/samsrf-qr-kernels"
           python3 -I packages/samsrf/validation/matlab/qr-accuracy.py "$RUNNER_TEMP/samsrf-qr-reference/ubuntu-24.04/compatible" "$RUNNER_TEMP/samsrf-qr-port.json" "$RUNNER_TEMP/samsrf-qr-accuracy.json"
+      - name: Intel x87 dnrm2, single-precision BLAS/QR, and nonnegative CSS gates (#730, #731)
+        run: |
+          python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-intel-norm-single-css" packages/samsrf/validation/matlab/intel-norm-single-css-reference.json
+          SAMSRF_INTEL_NORM_SINGLE_CSS_DIR="$RUNNER_TEMP/samsrf-intel-norm-single-css" \
+          SAMSRF_INTEL_NONNEGATIVE_CSS_INPUT_DIR="$RUNNER_TEMP/samsrf-matrix-input" \
+          SAMSRF_SINGLE_KERNELS_DIR="$RUNNER_TEMP/samsrf-single-kernels" \
+          SAMSRF_QR_KERNELS_DIR="$RUNNER_TEMP/samsrf-qr-kernels" \
+          SAMSRF_QR_REFERENCE_DIR="$RUNNER_TEMP/samsrf-qr-reference" \
+            cargo test --release --manifest-path exes/samsrf/Cargo.toml -p samsrf-mkl-avx512 --test intel_norm_single_css -- --nocapture
       - name: Retain the full CSS comparison including remaining differences
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -481,6 +490,24 @@ jobs:
           done
           node packages/samsrf/validation/matlab/compare-qr-backends.mjs "$RUNNER_TEMP/samsrf-qr-smoke" "$RUNNER_TEMP/samsrf-qr-smoke.json" --smoke
           octave --quiet --no-gui --eval "addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_qr_kernels(fullfile(getenv('RUNNER_TEMP'),'samsrf-qr-kernels-smoke'),fullfile(getenv('RUNNER_TEMP'),'samsrf-qr-smoke','compatible'),true)"
+      - name: Exercise the intel-norm-single-css probe recorder
+        run: |
+          for suffix in first repeat; do
+            octave --quiet --no-gui --eval "addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); record_intel_norm_single_css('','',fullfile(getenv('RUNNER_TEMP'),'samsrf-intel-probe-smoke','$suffix'),'',true)"
+          done
+          python3 - "$RUNNER_TEMP/samsrf-intel-probe-smoke/first" "$RUNNER_TEMP/samsrf-intel-probe-smoke/repeat" <<'PY'
+          import json, pathlib, sys
+          first, repeat = (pathlib.Path(p) for p in sys.argv[1:])
+          for name in ('dnrm2-x87.json', 'single-blas-qr.json', 'nonnegative-css.json'):
+              a = {k: v for k, v in json.loads((first / name).read_text()).items() if k != 'environment'}
+              b = {k: v for k, v in json.loads((repeat / name).read_text()).items() if k != 'environment'}
+              assert a == b, f'{name}: smoke records differ between processes'
+          arrays = sorted(p.name for p in first.glob('*.f64'))
+          assert arrays and arrays == sorted(p.name for p in repeat.glob('*.f64')), 'smoke array files differ'
+          for name in arrays:
+              assert (first / name).read_bytes() == (repeat / name).read_bytes(), name
+          print(f'intel-norm-single-css smoke: {len(arrays)} arrays equal across two Octave processes')
+          PY
 
   # Dispatch-only, separately reviewed budget: no retries or automatic CPU selection.
   cleanup-order-reference:
@@ -541,7 +568,7 @@ jobs:
       matrix:
         host: [ubuntu-22.04, ubuntu-24.04]
         # Runner labels do not choose the CPU; more kernel runs reach more of them.
-        replica: ${{ fromJSON(inputs.qr_kernels && '[1, 2, 3]' || '[1]') }}
+        replica: ${{ fromJSON((inputs.qr_kernels || (inputs.record_matlab && inputs.probes == 'intel-norm-single-css')) && '[1, 2, 3]' || '[1]') }}
     runs-on: ${{ matrix.host }}
     timeout-minutes: 90
     env:
@@ -607,7 +634,7 @@ jobs:
       - name: Fetch the pinned least-squares designs for the kernel probe
         if: inputs.qr_kernels
         run: |
-          if [ '${{ inputs.record_matlab }}' = true ] || [ '${{ inputs.revcor_only }}' = true ] || [ '${{ inputs.qr_only }}' = true ]; then
+          if [ '${{ inputs.record_matlab }}' = true ] || [ '${{ inputs.revcor_only }}' = true ] || [ '${{ inputs.qr_only }}' = true ] || [ '${{ inputs.probes != 'none' && inputs.probes != '' }}' = true ]; then
             echo 'qr_kernels records the least-squares kernels alone.' >&2
             exit 1
           fi
@@ -965,6 +992,38 @@ jobs:
               assert (first / name).read_bytes() == (repeat / name).read_bytes(), name
           print(f'{len(arrays)} arrays and every case equal in a new process')
           PY
+      - name: Prepare a same-host repeat of the intel-norm-single-css probes
+        if: inputs.record_matlab && inputs.probes == 'intel-norm-single-css'
+        run: |
+          mkdir "$RUNNER_TEMP/samsrf-matlab-repeat"
+          cp "$RUNNER_TEMP/samsrf-matlab/source.json" "$RUNNER_TEMP/samsrf-matlab-repeat/source.json"
+          python3 packages/samsrf/validation/matlab/capture_environment.py "$RUNNER_TEMP/samsrf-matlab-repeat"
+      - name: Record the intel-norm-single-css probes
+        if: inputs.record_matlab && inputs.probes == 'intel-norm-single-css'
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); t = getenv('RUNNER_TEMP'); record_intel_norm_single_css(fullfile(pwd,'reference-source'),fullfile(t,'samsrf-matrix-input'),fullfile(t,'samsrf-matlab'),fullfile(pwd,'reference-spm'),false)
+      - name: Repeat the intel-norm-single-css probes in a new MATLAB process
+        if: inputs.record_matlab && inputs.probes == 'intel-norm-single-css'
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: addpath(fullfile(pwd,'packages','samsrf','validation','matlab')); t = getenv('RUNNER_TEMP'); record_intel_norm_single_css(fullfile(pwd,'reference-source'),fullfile(t,'samsrf-matrix-input'),fullfile(t,'samsrf-matlab-repeat'),fullfile(pwd,'reference-spm'),false)
+      - name: Require an exact same-host repeat of the intel-norm-single-css probes
+        if: inputs.record_matlab && inputs.probes == 'intel-norm-single-css'
+        run: |
+          python3 - "$RUNNER_TEMP/samsrf-matlab" "$RUNNER_TEMP/samsrf-matlab-repeat" <<'PY'
+          import json, pathlib, sys
+          first, repeat = (pathlib.Path(p) for p in sys.argv[1:])
+          for name in ('dnrm2-x87.json', 'single-blas-qr.json', 'nonnegative-css.json'):
+              a = {k: v for k, v in json.loads((first / name).read_text()).items() if k != 'environment'}
+              b = {k: v for k, v in json.loads((repeat / name).read_text()).items() if k != 'environment'}
+              assert a == b, f'{name}: cases differ between processes'
+          arrays = sorted(p.name for p in first.glob('*.f64'))
+          assert arrays and arrays == sorted(p.name for p in repeat.glob('*.f64')), 'array files differ'
+          for name in arrays:
+              assert (first / name).read_bytes() == (repeat / name).read_bytes(), name
+          print(f'{len(arrays)} arrays and every case equal in a new process')
+          PY
       - name: Fetch the pinned fitted-HRF traces
         if: inputs.fitted_hrf
         run: |
@@ -1291,6 +1350,9 @@ jobs:
     name: Runtime-only validation of the published reference image
     runs-on: ubuntu-24.04
     timeout-minutes: 240
+    permissions:
+      contents: read
+      packages: read
     env:
       IMAGE: ${{ inputs.runtime_image }}
     steps:
@@ -1302,6 +1364,16 @@ jobs:
           python3 packages/samsrf/validation/container/download.py "$RUNNER_TEMP/samsrf-cli" packages/samsrf/validation/matlab/cli-reference.json
           python3 -m venv "$RUNNER_TEMP/samsrf-cli-venv"
           "$RUNNER_TEMP/samsrf-cli-venv/bin/pip" install --only-binary=:all: -r packages/samsrf/validation/matlab/requirements-cli.txt
+      - name: Pull the reference image
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          if [[ "$IMAGE" == ghcr.io/* ]]; then
+            trap 'docker logout ghcr.io || true' EXIT
+            echo "$GITHUB_TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+          fi
+          docker pull "$IMAGE"
       - name: Run, repeat, interrupt and fail the image without MATLAB
         run: |
           cli="$RUNNER_TEMP/samsrf-cli"
@@ -1309,7 +1381,6 @@ jobs:
           python3 "$matlab/cli_plan.py" verify "$cli/bundle" "$cli/bundle-sha256.json"
           chmod -R a-w "$cli/bundle"
           if command -v matlab; then echo 'MATLAB must not be installed on this host' >&2; exit 1; fi
-          docker pull "$IMAGE"
           for run in runtime-1 runtime-2 interrupt; do
             python3 "$matlab/cli_plan.py" stage "$cli/plan.json" "$cli/bundle" "$cli/$run"
           done

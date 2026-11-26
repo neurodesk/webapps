@@ -68,14 +68,15 @@ src/libImaging/Resample.c (Pillow 13.0.0), https://github.com/python-pillow/Pill
   OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
   PERFORMANCE OF THIS SOFTWARE.
 
-The model (CC BY 4.0), MobileSAM and Segment Anything (Apache-2.0)
--------------------------------------------------------------------
-The app downloads microsam-vit-t-lm-encoder.onnx and microsam-vit-t-lm-decoder.onnx
-(models/microsam.manifest.json): micro-sam's "SAM LM Generalist (ViT-T)" (vit_t_lm,
-BioImage.IO faithful-chicken 1.1) by Anwai Archit, Constantin Pape and the micro-sam
-contributors, licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Archit, A. et
-al. Segment Anything for Microscopy. Nature Methods 22, 579-591 (2025),
-https://doi.org/10.1038/s41592-024-02580-4.
+The models (CC BY 4.0), MobileSAM and Segment Anything (Apache-2.0)
+--------------------------------------------------------------------
+The app downloads microsam-vit-t-lm-{encoder,decoder}.onnx and
+microsam-vit-t-em-organelles-{encoder,decoder}.onnx (models/microsam.manifest.json):
+micro-sam's "SAM LM Generalist (ViT-T)" (vit_t_lm, BioImage.IO faithful-chicken 1.1) and
+"SAM EM Organelle Generalist (ViT-T)" (vit_t_em_organelles, BioImage.IO greedy-whale 1.3)
+by Anwai Archit, Constantin Pape and the micro-sam contributors, licensed CC BY 4.0
+(https://creativecommons.org/licenses/by/4.0/). Archit, A. et al. Segment Anything for
+Microscopy. Nature Methods 22, 579-591 (2025), https://doi.org/10.1038/s41592-024-02580-4.
 
 Modified (CC BY 4.0 section 3(a)(1)(B)): converted to ONNX by validation/export_onnx.py. The
 encoder is exported as micro-sam's PyTorch path runs it: TinyViT's cached attention biases

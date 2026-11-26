@@ -1,0 +1,47 @@
+[
+  {
+    "id": "isic-hemangioma",
+    "label": "Vascular hemangioma (ISIC_0001115)",
+    "description": "Dermoscopic vascular hemangioma with elevated hemoglobin optical density and erythema contrast against perilesional skin.",
+    "expectedResult": "Hemoglobin, melanin and ITA° maps, Target vs Reference ΔE2000 report, colorimetry CSV and JSON provenance.",
+    "files": [
+      {
+        "role": "image",
+        "name": "ISIC_0001115.jpg",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0001115.jpg",
+        "sha256": "73a9563f4fbdeaccb2be0f7b994d9f161835f1a0ad4a930577f136c221c8afbf",
+        "bytes": 272036
+      }
+    ]
+  },
+  {
+    "id": "isic-pigmented-melanoma",
+    "label": "Heavily pigmented melanoma (ISIC_0000013)",
+    "description": "Dermoscopic heavily pigmented melanoma showing elevated melanin optical density and depressed ITA° relative to surrounding skin.",
+    "expectedResult": "Melanin, hemoglobin and ITA° maps, Target vs Reference ΔE2000 report, colorimetry CSV and JSON provenance.",
+    "files": [
+      {
+        "role": "image",
+        "name": "ISIC_0000013.jpg",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000013.jpg",
+        "sha256": "087a955305a31cf5c6d197c9aa8848bb23822201b656d47f89fe4020a4b78650",
+        "bytes": 38863
+      }
+    ]
+  },
+  {
+    "id": "isic-erythematous-nodular",
+    "label": "Erythematous nodular lesion with ruler (ISIC_0000004)",
+    "description": "Erythematous nodular dermoscopy image with dark peripheral vignette borders and clinical ruler markings.",
+    "expectedResult": "Vignette-masked chromophore and ITA° maps, Target vs Reference ΔE2000 report, colorimetry CSV and JSON provenance.",
+    "files": [
+      {
+        "role": "image",
+        "name": "ISIC_0000004.jpg",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000004.jpg",
+        "sha256": "0536889aef8dc35813d27d25bb00ffe903972417c73b0e8ed66dd7fea7c85751",
+        "bytes": 53851
+      }
+    ]
+  }
+]

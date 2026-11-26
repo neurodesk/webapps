@@ -41,6 +41,7 @@ version = "0.1.20261016"
 dependencies = [
  "fastprep-core",
  "libc",
+ "neurodesk-pipeline-host",
 ]
 
 [[package]]
@@ -49,6 +50,7 @@ version = "0.1.20261016"
 dependencies = [
  "flate2",
  "neurodesk-nifti",
+ "neurodesk-pipeline-host",
  "serde_json",
 ]
 
@@ -58,6 +60,7 @@ version = "0.1.20261016"
 dependencies = [
  "fastprep-core",
  "js-sys",
+ "neurodesk-pipeline-host",
  "wasm-bindgen",
  "wasm-bindgen-futures",
 ]
@@ -160,6 +163,17 @@ dependencies = [
 [[package]]
 name = "neurodesk-nifti"
 version = "0.1.0"
+
+[[package]]
+name = "neurodesk-pipeline-host"
+version = "0.0.0"
+dependencies = [
+ "js-sys",
+ "libc",
+ "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+]
 
 [[package]]
 name = "once_cell"

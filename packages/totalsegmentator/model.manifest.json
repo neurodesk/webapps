@@ -1,0 +1,432 @@
+{
+  "schema_version": 1,
+  "app": "totalsegmentator",
+  "license": "Apache-2.0",
+  "preprocessing_contract": {
+    "source": "packages/totalsegmentator/src/pipeline.js",
+    "orientation": "Closest canonical RAS (as_closest_canonical), restored to original orientation after prediction",
+    "resampling": "Linear zoom (order=1) to model spacing; nearest-neighbor (order=0) back to canonical input grid",
+    "layout": "NCDHW; NIfTI voxel order (z, y, x), transpose_forward [0, 1, 2]",
+    "normalization": "CTNormalization (clip [p005, p995], z-score with dataset stats) for CT; whole-volume ZScoreNormalization for MRI",
+    "prediction": "nnU-Net v2 sliding window: step 0.5, Gaussian importance (sigma patch/8), fold_0, no mirroring; abdominal_muscles crops to body_trunc via Dataset300 (6 mm)"
+  },
+  "assets": [
+    {
+      "id": "total-ct-3mm",
+      "filename": "totalsegmentator-total-ct-3mm.onnx",
+      "bytes": 33157943,
+      "sha256": "72b3a92b8a1e7fe862f6b9c1fb3ee404943aecac8db447180480b0192b779982",
+      "float16_max_logit_change": 0.1766,
+      "source_url": "https://github.com/wasserth/TotalSegmentator/releases/download/v2.0.0-weights/Dataset297_TotalSegmentator_total_3mm_1559subj.zip",
+      "configuration": "3d_fullres",
+      "network": "PlainConvUNet",
+      "patch": [
+        112,
+        112,
+        128
+      ],
+      "spacing": [
+        3,
+        3,
+        3
+      ],
+      "transpose_forward": [
+        0,
+        1,
+        2
+      ],
+      "normalization": "CTNormalization",
+      "use_mask_for_norm": false,
+      "num_classes": 118,
+      "mirror_axes": [],
+      "checkpoint_sha256": "1e38e40356adc2706a662e365405a97f862d62a7da65f6bf81d025aee1b979ac",
+      "ct_intensity": {
+        "mean": -50.38697721419439,
+        "std": 503.39235619144,
+        "percentile_00_5": -1004,
+        "percentile_99_5": 1588
+      }
+    },
+    {
+      "id": "total-ct-organs",
+      "filename": "totalsegmentator-total-ct-organs.onnx",
+      "bytes": 62467103,
+      "sha256": "32b28c774bbe5a313ac6b3a6302d809b5c14d3d45c4256dc93bc16334839a499",
+      "float16_max_logit_change": 0.02142,
+      "source_url": "https://github.com/wasserth/TotalSegmentator/releases/download/v2.0.0-weights/Dataset291_TotalSegmentator_part1_organs_1559subj.zip",
+      "configuration": "3d_fullres",
+      "network": "PlainConvUNet",
+      "patch": [
+        128,
+        128,
+        128
+      ],
+      "spacing": [
+        1.5,
+        1.5,
+        1.5
+      ],
+      "transpose_forward": [
+        0,
+        1,
+        2
+      ],
+      "normalization": "CTNormalization",
+      "use_mask_for_norm": false,
+      "num_classes": 25,
+      "mirror_axes": [],
+      "checkpoint_sha256": "98c429f89fd9b3b08890fbb2b4c08c365ad4655fdcadb45efaa29380129fd890",
+      "ct_intensity": {
+        "mean": -370.00039267657144,
+        "std": 436.5998675471528,
+        "percentile_00_5": -1024,
+        "percentile_99_5": 276
+      }
+    },
+    {
+      "id": "total-ct-vertebrae",
+      "filename": "totalsegmentator-total-ct-vertebrae.onnx",
+      "bytes": 62467367,
+      "sha256": "cb877be30b7294fe99c651c364333a11df9906fb2d78072d3e8ee776e6deee6d",
+      "float16_max_logit_change": 0.0136,
+      "source_url": "https://github.com/wasserth/TotalSegmentator/releases/download/v2.0.0-weights/Dataset292_TotalSegmentator_part2_vertebrae_1532subj.zip",
+      "configuration": "3d_fullres",
+      "network": "PlainConvUNet",
+      "patch": [
+        128,
+        128,
+        128
+      ],
+      "spacing": [
+        1.5,
+        1.5,
+        1.5
+      ],
+      "transpose_forward": [
+        0,
+        1,
+        2
+      ],
+      "normalization": "CTNormalization",
+      "use_mask_for_norm": false,
+      "num_classes": 27,
+      "mirror_axes": [],
+      "checkpoint_sha256": "7022f71829ef00aa14d790a7667bc18eb1691f2fe5b0a38c475862abc84c2457",
+      "ct_intensity": {
+        "mean": 367.32929817099546,
+        "std": 320.8587389393513,
+        "percentile_00_5": -96,
+        "percentile_99_5": 1514
+      }
+    },
+    {
+      "id": "total-ct-cardiac",
+      "filename": "totalsegmentator-total-ct-cardiac.onnx",
+      "bytes": 62466310,
+      "sha256": "2b52af6a4d6b70d67f78bdff14a1d5e91837d4499d6b794c9954f5975bcb5f8b",
+      "float16_max_logit_change": 0.02912,
+      "source_url": "https://github.com/wasserth/TotalSegmentator/releases/download/v2.0.0-weights/Dataset293_TotalSegmentator_part3_cardiac_1559subj.zip",
+      "configuration": "3d_fullres",
+      "network": "PlainConvUNet",
+      "patch": [
+        128,
+        128,
+        128
+      ],
+      "spacing": [
+        1.5,
+        1.5,
+        1.5
+      ],
+      "transpose_forward": [
+        0,
+        1,
+        2
+      ],
+      "normalization": "CTNormalization",
+      "use_mask_for_norm": false,
+      "num_classes": 19,
+      "mirror_axes": [],
+      "checkpoint_sha256": "189010ac67fec3f1704df7547306d0067eabaaf620e0a46a1bdd183afa0800e4",
+      "ct_intensity": {
+        "mean": 142.1977119916391,
+        "std": 154.74032651622053,
+        "percentile_00_5": -101,
+        "percentile_99_5": 813
+      }
+    },
+    {
+      "id": "total-ct-muscles",
+      "filename": "totalsegmentator-total-ct-muscles.onnx",
+      "bytes": 62466971,
+      "sha256": "08d57afe4a642f808bb333b451db8b4d48c1107c9fc0dd697e305715db331e99",
+      "float16_max_logit_change": 0.02571,
+      "source_url": "https://github.com/wasserth/TotalSegmentator/releases/download/v2.0.0-weights/Dataset294_TotalSegmentator_part4_muscles_1559subj.zip",
+      "configuration": "3d_fullres",
+      "network": "PlainConvUNet",
+      "patch": [
+        128,
+        128,
+        128
+      ],
+      "spacing": [
+        1.5,
+        1.5,
+        1.5
+      ],
+      "transpose_forward": [
+        0,
+        1,
+        2
+      ],
+      "normalization": "CTNormalization",
+      "use_mask_for_norm": false,
+      "num_classes": 24,
+      "mirror_axes": [],
+      "checkpoint_sha256": "655eb40de03aa3de7348b69d7569a1cc3a2dc7969a11c0d60a7331e07df11c28",
+      "ct_intensity": {
+        "mean": 174.82106003593222,
+        "std": 362.496044938386,
+        "percentile_00_5": -197,
+        "percentile_99_5": 1729
+      }
+    },
+    {
+      "id": "total-ct-ribs",
+      "filename": "totalsegmentator-total-ct-ribs.onnx",
+      "bytes": 62467367,
+      "sha256": "2493258656566cb41ec13fb9199d2e388cdf94f7b37bc45c1bf4389b5a1f3edf",
+      "float16_max_logit_change": 0.02716,
+      "source_url": "https://github.com/wasserth/TotalSegmentator/releases/download/v2.0.0-weights/Dataset295_TotalSegmentator_part5_ribs_1559subj.zip",
+      "configuration": "3d_fullres",
+      "network": "PlainConvUNet",
+      "patch": [
+        128,
+        128,
+        128
+      ],
+      "spacing": [
+        1.5,
+        1.5,
+        1.5
+      ],
+      "transpose_forward": [
+        0,
+        1,
+        2
+      ],
+      "normalization": "CTNormalization",
+      "use_mask_for_norm": false,
+      "num_classes": 27,
+      "mirror_axes": [],
+      "checkpoint_sha256": "a674364c60b304fbd56feccdd95f8d0fe0c45a5bfa1ef25815516e4dde04d3fc",
+      "ct_intensity": {
+        "mean": 291.98966240726804,
+        "std": 261.53174290110513,
+        "percentile_00_5": -110,
+        "percentile_99_5": 1302
+      }
+    },
+    {
+      "id": "body-ct-6mm",
+      "filename": "totalsegmentator-body-ct-6mm.onnx",
+      "bytes": 33150192,
+      "sha256": "9396c5bb365ca7c65a81495531631edebbc7efa7b9d66ced612c7748afd235c7",
+      "float16_max_logit_change": 0.22377,
+      "source_url": "https://github.com/wasserth/TotalSegmentator/releases/download/v2.0.0-weights/Dataset300_body_6mm_1559subj.zip",
+      "configuration": "3d_fullres",
+      "network": "PlainConvUNet",
+      "patch": [
+        64,
+        64,
+        64
+      ],
+      "spacing": [
+        6,
+        6,
+        6
+      ],
+      "transpose_forward": [
+        0,
+        1,
+        2
+      ],
+      "normalization": "CTNormalization",
+      "use_mask_for_norm": false,
+      "num_classes": 3,
+      "mirror_axes": [
+        0,
+        1,
+        2
+      ],
+      "checkpoint_sha256": "ae993f22dc8316fb2c015656dd6a2c15fa062f6174915bef06355a71c93f394c",
+      "ct_intensity": {
+        "mean": -43.95634460449219,
+        "std": 371.595703125,
+        "percentile_00_5": -989,
+        "percentile_99_5": 1383
+      }
+    },
+    {
+      "id": "total-mr-3mm",
+      "filename": "totalsegmentator-total-mr-3mm.onnx",
+      "bytes": 33153387,
+      "sha256": "daba927621cc6e6d0b0240fd5c549683193ae75a8ba1132d1cd7bb7447d8f73e",
+      "float16_max_logit_change": 0.07513,
+      "source_url": "https://github.com/wasserth/TotalSegmentator/releases/download/v2.5.0-weights/Dataset852_TotalSegMRI_total_3mm_1088subj.zip",
+      "configuration": "3d_fullres",
+      "network": "PlainConvUNet",
+      "patch": [
+        96,
+        96,
+        128
+      ],
+      "spacing": [
+        3,
+        3,
+        3
+      ],
+      "transpose_forward": [
+        0,
+        1,
+        2
+      ],
+      "normalization": "ZScoreNormalization",
+      "use_mask_for_norm": false,
+      "num_classes": 51,
+      "mirror_axes": [],
+      "checkpoint_sha256": "8357596afa397d8ac128cf7121b5cc882a140f47d6b7d8740b01a9d18c037d8d"
+    },
+    {
+      "id": "total-mr-organs",
+      "filename": "totalsegmentator-total-mr-organs.onnx",
+      "bytes": 61646001,
+      "sha256": "94e33122e84bc95ffc0772e68fee1fb47fac2c390f1475597f5715bff9161905",
+      "float16_max_logit_change": 0.03127,
+      "source_url": "https://github.com/wasserth/TotalSegmentator/releases/download/v2.5.0-weights/Dataset850_TotalSegMRI_part1_organs_1088subj.zip",
+      "configuration": "3d_fullres",
+      "network": "PlainConvUNet",
+      "patch": [
+        112,
+        128,
+        160
+      ],
+      "spacing": [
+        1.5,
+        1.5,
+        1.5
+      ],
+      "transpose_forward": [
+        0,
+        1,
+        2
+      ],
+      "normalization": "ZScoreNormalization",
+      "use_mask_for_norm": false,
+      "num_classes": 30,
+      "mirror_axes": [],
+      "checkpoint_sha256": "8577a4c22b5cc43e9ccc5fa6203451ee4b22f54000bf16cfc1c5625439861129"
+    },
+    {
+      "id": "total-mr-muscles",
+      "filename": "totalsegmentator-total-mr-muscles.onnx",
+      "bytes": 61644944,
+      "sha256": "0dec72728037c006759e73ee851d890855a1cfbb09109a7fe15b767b6ebaf3fc",
+      "float16_max_logit_change": 0.02486,
+      "source_url": "https://github.com/wasserth/TotalSegmentator/releases/download/v2.5.0-weights/Dataset851_TotalSegMRI_part2_muscles_1088subj.zip",
+      "configuration": "3d_fullres",
+      "network": "PlainConvUNet",
+      "patch": [
+        112,
+        128,
+        160
+      ],
+      "spacing": [
+        1.5,
+        1.5,
+        1.5
+      ],
+      "transpose_forward": [
+        0,
+        1,
+        2
+      ],
+      "normalization": "ZScoreNormalization",
+      "use_mask_for_norm": false,
+      "num_classes": 22,
+      "mirror_axes": [],
+      "checkpoint_sha256": "87d29b95c7e0db6cc402d773e58c24386ab1c40bc6d4923cd8144795bfebb2a0"
+    },
+    {
+      "id": "vertebrae-mr",
+      "filename": "totalsegmentator-vertebrae-mr.onnx",
+      "bytes": 61645473,
+      "sha256": "3a2c622ab0ac146700949551457b0a39c14ce3fb12ab22924a3e013b676efbe6",
+      "float16_max_logit_change": 0.01641,
+      "source_url": "https://github.com/wasserth/TotalSegmentator/releases/download/v2.5.0-weights/Dataset756_mri_vertebrae_1076subj.zip",
+      "configuration": "3d_fullres",
+      "network": "PlainConvUNet",
+      "patch": [
+        112,
+        128,
+        160
+      ],
+      "spacing": [
+        1.5,
+        1.5,
+        1.5
+      ],
+      "transpose_forward": [
+        0,
+        1,
+        2
+      ],
+      "normalization": "ZScoreNormalization",
+      "use_mask_for_norm": false,
+      "num_classes": 26,
+      "mirror_axes": [],
+      "checkpoint_sha256": "52b1c4de77d089bfdc35936aecf1760f841ba0d8d72d10a1aa072309ea2f2120"
+    },
+    {
+      "id": "abdominal-muscles-ct",
+      "filename": "totalsegmentator-abdominal-muscles-ct.onnx",
+      "bytes": 33152834,
+      "sha256": "52a3af464843252c3b4b992b3a4b370dad7fcc16f8d3b8be727448c62adeab00",
+      "float16_max_logit_change": 0.02928,
+      "source_url": "https://github.com/wasserth/TotalSegmentator/releases/download/v2.5.0-weights/Dataset952_abdominal_muscles_167subj.zip",
+      "configuration": "3d_fullres_high",
+      "network": "PlainConvUNet",
+      "patch": [
+        176,
+        112,
+        112
+      ],
+      "spacing": [
+        1,
+        0.75,
+        0.75
+      ],
+      "transpose_forward": [
+        0,
+        1,
+        2
+      ],
+      "normalization": "CTNormalization",
+      "use_mask_for_norm": false,
+      "num_classes": 23,
+      "mirror_axes": [],
+      "checkpoint_sha256": "67fe55feaff22ffd5ec419ac1ddbbb92904ad6561b374af57678a645511f1c2b",
+      "ct_intensity": {
+        "mean": 27.34934607791863,
+        "std": 48.5881538619992,
+        "percentile_00_5": -131.99998474121094,
+        "percentile_99_5": 167.99998474121094
+      }
+    }
+  ],
+  "source_commit": "wasserth/TotalSegmentator v2.0.0-weights (CT total, 5-part full-res, body 6mm) and v2.5.0-weights (MR total, 2-part full-res, vertebrae_mr, abdominal_muscles), fold_0/checkpoint_final.pth",
+  "graph_optimization": "ConvTranspose rewritten as an equivalent 1x1x1 Conv plus depth-to-space for the WebGPU backend; convolution weights stored as float16 and cast to float32 in the graph, so arithmetic is float32. Built by packages/totalsegmentator/scripts/export_model.py",
+  "repository": "neurodeskorg/webapps",
+  "revision": "6173981d93715333a83cd270165e7636b031276d",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/6173981d93715333a83cd270165e7636b031276d/totalsegmentator/models/"
+}

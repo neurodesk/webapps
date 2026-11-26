@@ -8,4 +8,5 @@ rust-version.workspace = true
 [dependencies]
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 neurodesk-nifti = { path = "../../nifti" }
+neurodesk-pipeline-host = { path = "../../pipeline-host" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

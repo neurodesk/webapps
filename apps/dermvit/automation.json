@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 2,
+  "app": "dermvit",
+  "title": "DermViT",
+  "description": "Local 7-class HAM10000 dermoscopic skin lesion classification with a quantized Vision Transformer (ViT-Base-Patch16-224) and optional 5x5 occlusion sensitivity mapping. Research and educational use only; not a medical device.",
+  "defaultOperation": "classify",
+  "operations": {
+    "classify": {
+      "title": "Classify dermoscopic lesion",
+      "description": "Classify a dermoscopic JPEG or PNG image across the 7 HAM10000 lesion classes locally with ONNX Runtime Web, with optional Shades of Gray color constancy and 5x5 occlusion sensitivity mapping.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "file:image",
+          "formats": [
+            "jpg",
+            "jpeg",
+            "png"
+          ],
+          "description": "One dermoscopic lesion image (JPEG or PNG).",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "backend": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "webgpu",
+            "wasm"
+          ],
+          "default": "auto",
+          "description": "ONNX Runtime Web backend; auto prefers WebGPU when available and falls back to WebAssembly (CPU)."
+        },
+        "colorConstancy": {
+          "type": "boolean",
+          "default": false,
+          "description": "Apply Shades of Gray (Minkowski p=6) color constancy normalization before resizing to 224x224."
+        },
+        "computeSaliency": {
+          "type": "boolean",
+          "default": false,
+          "description": "Compute a 5x5 occlusion sensitivity heatmap for the top predicted class (25 forward passes)."
+        }
+      },
+      "artifacts": {
+        "predictions": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "provenance": {
+          "type": "neuro:provenance",
+          "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "saliency": {
+          "type": "file:image",
+          "mediaType": "image/png",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

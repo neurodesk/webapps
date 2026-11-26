@@ -1,6 +1,6 @@
 {
   "name": "microscope-qc",
-  "version": "0.1.20261119",
+  "version": "0.1.20261124",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,6 +12,7 @@
     "lint": "node ../../scripts/lint.mjs --workspace"
   },
   "dependencies": {
+    "@neurodesk/microscope-qc": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/niivue": "1.0.0-rc.26"
   },

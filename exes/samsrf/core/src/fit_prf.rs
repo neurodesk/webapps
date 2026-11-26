@@ -159,7 +159,7 @@ impl Prepared {
             .iter()
             .enumerate()
             .map(|(p, xn)| if model.data_precision == Precision::Single {
-                f64::from(precision::correlation_single(search.prediction(p), y, true))
+                f64::from(precision::correlation_single_with_reference(search.prediction(p), y, true, model.arithmetic_reference))
             } else {
                 match (&yn, xn) {
                     (Some(yn), Some(xn)) => dot(yn, xn),
@@ -201,7 +201,7 @@ impl Prepared {
         let prediction = hrf::convolve(&prediction, &self.coarse_hrf, model.downsample_predictions);
         let correlation = match model.data_precision {
             Precision::Double => prf::pearson(y, &prediction),
-            Precision::Single => f64::from(precision::correlation_single(&prediction, y, true)),
+            Precision::Single => f64::from(precision::correlation_single_with_reference(&prediction, y, true, model.arithmetic_reference)),
         };
         Ok((params, model.data_precision.round(correlation * correlation), Some(prediction)))
     }
@@ -315,8 +315,10 @@ impl Prepared {
                     // Pinned samsrf_fit_prf uses the final parameter here. With a
                     // fitted HRF this is AmpRat, unlike the optimizer's exponent.
                     legacy_exponent = fp.last().copied();
-                } else {
+                } else if model.arithmetic_reference == crate::arithmetic::ArithmeticReference::Current {
                     prf::compress(&mut fx, fp[model.param_names.len()]);
+                } else {
+                    prf::compress_matlab(&mut fx, fp[model.param_names.len()]);
                 }
             }
             prediction = Some(fx);

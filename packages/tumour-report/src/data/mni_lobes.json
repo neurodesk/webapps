@@ -1,0 +1,254 @@
+[
+  {
+    "label": 30,
+    "name": "frontal_left",
+    "region": "frontal",
+    "laterality": "left",
+    "matter": "wm"
+  },
+  {
+    "label": 210,
+    "name": "frontal_left",
+    "region": "frontal",
+    "laterality": "left",
+    "matter": "gm"
+  },
+  {
+    "label": 17,
+    "name": "frontal_right",
+    "region": "frontal",
+    "laterality": "right",
+    "matter": "wm"
+  },
+  {
+    "label": 211,
+    "name": "frontal_right",
+    "region": "frontal",
+    "laterality": "right",
+    "matter": "gm"
+  },
+  {
+    "label": 83,
+    "name": "temporal_left",
+    "region": "temporal",
+    "laterality": "left",
+    "matter": "wm"
+  },
+  {
+    "label": 218,
+    "name": "temporal_left",
+    "region": "temporal",
+    "laterality": "left",
+    "matter": "gm"
+  },
+  {
+    "label": 59,
+    "name": "temporal_right",
+    "region": "temporal",
+    "laterality": "right",
+    "matter": "wm"
+  },
+  {
+    "label": 219,
+    "name": "temporal_right",
+    "region": "temporal",
+    "laterality": "right",
+    "matter": "gm"
+  },
+  {
+    "label": 57,
+    "name": "parietal_left",
+    "region": "parietal",
+    "laterality": "left",
+    "matter": "wm"
+  },
+  {
+    "label": 6,
+    "name": "parietal_left",
+    "region": "parietal",
+    "laterality": "left",
+    "matter": "gm"
+  },
+  {
+    "label": 105,
+    "name": "parietal_right",
+    "region": "parietal",
+    "laterality": "right",
+    "matter": "wm"
+  },
+  {
+    "label": 2,
+    "name": "parietal_right",
+    "region": "parietal",
+    "laterality": "right",
+    "matter": "gm"
+  },
+  {
+    "label": 73,
+    "name": "occipital_left",
+    "region": "occipital",
+    "laterality": "left",
+    "matter": "wm"
+  },
+  {
+    "label": 8,
+    "name": "occipital_left",
+    "region": "occipital",
+    "laterality": "left",
+    "matter": "gm"
+  },
+  {
+    "label": 45,
+    "name": "occipital_right",
+    "region": "occipital",
+    "laterality": "right",
+    "matter": "wm"
+  },
+  {
+    "label": 4,
+    "name": "occipital_right",
+    "region": "occipital",
+    "laterality": "right",
+    "matter": "gm"
+  },
+  {
+    "label": 67,
+    "name": "cerebellum_left",
+    "region": "cerebellum",
+    "laterality": "left",
+    "matter": null
+  },
+  {
+    "label": 76,
+    "name": "cerebellum_right",
+    "region": "cerebellum",
+    "laterality": "right",
+    "matter": null
+  },
+  {
+    "label": 20,
+    "name": "brain_stem_",
+    "region": "brain_stem",
+    "laterality": null,
+    "matter": null
+  },
+  {
+    "label": 3,
+    "name": "lateral-ventricle_left",
+    "region": "lateral ventricle",
+    "laterality": "left",
+    "matter": null
+  },
+  {
+    "label": 9,
+    "name": "lateral-ventricle_right",
+    "region": "lateral ventricle",
+    "laterality": "right",
+    "matter": null
+  },
+  {
+    "label": 232,
+    "name": "3rd-ventricle_",
+    "region": "3rd ventricle",
+    "laterality": null,
+    "matter": null
+  },
+  {
+    "label": 233,
+    "name": "4th-ventricle_",
+    "region": "4th ventricle",
+    "laterality": null,
+    "matter": null
+  },
+  {
+    "label": 255,
+    "name": "extracerebral-CSF_",
+    "region": "extracerebral CSF",
+    "laterality": null,
+    "matter": null
+  },
+  {
+    "label": 39,
+    "name": "caudate_left",
+    "region": "caudate",
+    "laterality": "left",
+    "matter": null
+  },
+  {
+    "label": 53,
+    "name": "caudate_right",
+    "region": "caudate",
+    "laterality": "right",
+    "matter": null
+  },
+  {
+    "label": 14,
+    "name": "putamen_left",
+    "region": "putamen",
+    "laterality": "left",
+    "matter": null
+  },
+  {
+    "label": 16,
+    "name": "putamen_right",
+    "region": "putamen",
+    "laterality": "right",
+    "matter": null
+  },
+  {
+    "label": 102,
+    "name": "thalamus_left",
+    "region": "thalamus",
+    "laterality": "left",
+    "matter": null
+  },
+  {
+    "label": 203,
+    "name": "thalamus_right",
+    "region": "thalamus",
+    "laterality": "right",
+    "matter": null
+  },
+  {
+    "label": 33,
+    "name": "subthalamic_nucleus_left",
+    "region": "subthalamic_nucleus",
+    "laterality": "left",
+    "matter": null
+  },
+  {
+    "label": 23,
+    "name": "subthalamic_nucleus_right",
+    "region": "subthalamic_nucleus",
+    "laterality": "right",
+    "matter": null
+  },
+  {
+    "label": 12,
+    "name": "globus_pallidus_left",
+    "region": "globus_pallidus",
+    "laterality": "left",
+    "matter": null
+  },
+  {
+    "label": 11,
+    "name": "globus_pallidus_right",
+    "region": "globus_pallidus",
+    "laterality": "right",
+    "matter": null
+  },
+  {
+    "label": 29,
+    "name": "fornix_left",
+    "region": "fornix",
+    "laterality": "left",
+    "matter": null
+  },
+  {
+    "label": 254,
+    "name": "fornix_right",
+    "region": "fornix",
+    "laterality": "right",
+    "matter": null
+  }
+]

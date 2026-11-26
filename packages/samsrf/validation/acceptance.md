@@ -5,9 +5,9 @@ test or evidence, its measured scope and what remains. It was
 audited on 2026-11-13 against `main` at `ef089b0a`, brought up to date on
 2026-11-16 against `main` at `6df4fb3e` (after #855 and #857), reconciled
 on 2026-11-19 against `main` at `3cf5c9cf` (after #895, `62a5f0c3`) for #897,
-and updated on 2026-11-23 after #900, #902, #904, #915, #916, #917, and the
-Build 5 local licensed build, restored 24-run Runtime-only audit, and lossless
-production UI matrix.
+and updated on 2026-11-24 after #900, #902, #904, #915–#919, #921, #922, #925,
+Build 5's private GHCR publication (`ghcr.io/neurodesk/samsrf-reference@sha256:c132e952…`),
+and cross-host Runtime-only validation ([run 45361306312](https://github.com/neurodesk/webapps/actions/runs/45361306312)).
 The issues' original descriptions predate most of this work. This audit does
 not change their acceptance requirements or approve closing an issue.
 
@@ -64,7 +64,7 @@ run 42928350417; the source receipts do not attest the inputs), checked again on
 | --- | --- | --- |
 | `current` (default) | 20 runs exact, 2 differ, 2 refused; 163 of 168 maps | No run exact, 22 differ, 2 refused; 63 of 168 maps |
 | `matlab-amd` | 20 runs exact, 2 differ, 2 refused; 166 of 168 maps | No run exact, 22 differ, 2 refused; 63 of 168 maps |
-| `matlab-intel` | Double runs: none of 12 exact; 32 of their 92 maps. The 12 single runs are refused | Double runs: 10 of 12 exact, 2 differ; 90 of their 92 maps. The 12 single runs are refused |
+| `matlab-intel` | No run exact, 22 differ, 2 refused; 63 of 168 maps | 19 runs exact, 3 differ, 2 refused; 158 of 168 maps |
 
 A map is exact when every raw `Srf.Data` value, imaginary part and GIfTI value
 equals MATLAB's, bit for bit. Under `current` on the AMD host every float32
@@ -86,10 +86,15 @@ How these were checked: `run_web_matrix.mjs`, `compare_web_cli.py` and
 to `compare_web_cli.py` against each host's source execution (the Intel host on
 its own bundle), without mutating the bundle's plan models. `compare_web_cli.py`
 checks that `environment.json` records the matching `arithmeticReference` and
-classifies all 12 Intel single runs as `refused` (checking the single Gaussian
-refusal first and the Intel single-precision refusal on the remaining 10).
-The `matlab-amd` and `matlab-intel` counts agree with the
-reviewed accounting in
+classifies only the two universal single Gaussian runs (`rc_gaussian_lh_single`,
+`cf_gaussian_lh_single`) as `refused` across all three references. On Intel
+Xeon Platinum 8573C, `matlab-intel` reproduces 10 of 12 double runs (90 of 92
+double maps, leaving only the same 12 CF hull `y0` values as AMD) and 9 of 10
+runnable single-precision runs bit for bit (all 68 maps of those 9 runs, plus
+`Noise Ceiling` of `prf_css_lh_single`), leaving only the 12 complex vertices
+of `prf_css_lh_single` (mixed complex-double × real-single dot order not
+pre-registered). The `matlab-amd` and `matlab-intel` double counts agree with
+the reviewed accounting in
 [`matlab/intel-avx512/harness/cc528cf6-main4cdc/avx512-complex-qr/matrix.json`](matlab/intel-avx512/harness/cc528cf6-main4cdc/avx512-complex-qr/matrix.json)
 (aside from the 16 CF hull `y0` values resolved by #902).
 These are results on a finite set of recorded inputs, not general MATLAB
@@ -103,22 +108,25 @@ each download, requires it to equal the engine harness's raw maps and counts a
 map exact only when its doubles and imaginary parts also equal MATLAB's. On
 2026-11-23 (`main` at `2d4581c3f`, committed WASM `d1745bec…`, Chromium
 `156.0.8078.4`), the production interface was measured across the full 24-run
-matrix with lossless downloads against the locally built, unpublished Build 5
-compiled image (`sha256:c132e952…`) and source execution on one AMD host
-(`current` default reference, with Build 5's `web-1` as the engine root): both
-`ui-1-vs-compiled.json` and `ui-1-vs-source.json` exit 0 (`failures: []`), with
-**20 of 24 runs exact, 2 differing, 2 refused, 0 `unsupported`, 0 `ui-error`,
-0 `failed`, and 0 `inventory-error`**; **163 of 168 maps exact** across all 22
-lossless downloads (`losslessDownloadRuns: 22`, `losslessComparedMaps: 168`),
-and **212 of 212 downloaded GIfTIs equal to the engine harness's**
-(`engineFilesDiffer: 0`, `engineMismatchRuns: 0`, with the 22 lossless downloads
-verified by array contents and provenance separately). Both CSS runs are exact
-including imaginary parts, both double RC hull runs are exact in raw double, and
-only the same 5 maps of `cf_hull_lh_double` (`y0`, 7 vertices) and
+matrix with lossless downloads against the **Build 5** compiled image
+(`sha256:c132e952…`, since published privately to GHCR under the same digest)
+and source execution on one AMD host (`current` default reference, with Build 5's
+`web-1` as the engine root): both `ui-1-vs-compiled.json` and
+`ui-1-vs-source.json` exit 0 (`failures: []`), with **20 of 24 runs exact,
+2 differing, 2 refused, 0 `unsupported`, 0 `ui-error`, 0 `failed`, and 0
+`inventory-error`**; **163 of 168 maps exact** across all 22 lossless downloads
+(`losslessDownloadRuns: 22`, `losslessComparedMaps: 168`), and **212 of 212
+downloaded GIfTIs equal to the engine harness's** (`engineFilesDiffer: 0`,
+`engineMismatchRuns: 0`, with the 22 lossless downloads verified by array
+contents and provenance separately). Both CSS runs are exact including imaginary
+parts, both double RC hull runs are exact in raw double, and only the same 5
+maps of `cf_hull_lh_double` (`y0`, 7 vertices) and
 `cf_hull_smooth_global_lh_double` (`R^2`, `y0`, `Beta`, `Suppression`, 5–13
 vertices, up to 147 ULP) differ in raw double while their float32 GIfTIs are
-exact. This is local single-host evidence against an unpublished image, not
-cross-host or general UI parity.
+exact. That UI run is single-host evidence on one AMD host; cross-host engine
+validation in Node and Chromium ran on GitHub Actions `ubuntu-24.04` (AMD EPYC
+7763, [run 45361306312](https://github.com/neurodesk/webapps/actions/runs/45361306312))
+against the published private GHCR digest (`20/24` exact, `163/168` maps).
 
 The command line takes a subject HRF fit with `--hrf hrf_*.mat`, built into the
 kernel by the code the app uses, and `apps/samsrf/automation.json` has the
@@ -138,12 +146,12 @@ hull-area-1 (2 of 2) budgets are spent.
 | Limit | `current` (default) | `matlab-amd` | `matlab-intel` |
 | --- | --- | --- | --- |
 | Two double CF hull runs | Differ on AMD: 12 CF hull `y0` values and 29 global-regression values (at most 147 ULP); both RC hull runs are exact | Differ on AMD: the 12 CF hull `y0` values | Differ on Intel: the same 12 CF hull `y0` values; both RC hull runs are exact |
-| Whole-cortex global-signal sum | 2,000 of 2,000 values exact (AMD, double and single) | 2,000 of 2,000 values exact (AMD, double and single) | 1,000 of 1,000 double values exact (Intel, 0.0 rel err); single refused |
+| Whole-cortex global-signal sum | 2,000 of 2,000 values exact (AMD, double and single) | 2,000 of 2,000 values exact (AMD, double and single) | 1,000 of 1,000 double values exact (Intel, 0.0 rel err); single uses the same 1,024-column chunking |
 | Single RC 2D and single CF Gaussian fits | Refused | Refused | Refused |
-| Other single analyses | Run | Run | Refused |
-| CSS with `Css_Convention: "nonnegative"` | Runs | Runs | Refused |
+| Other single analyses | Run | Run | Run: 9 of 10 CLI runs bit-exact on Intel Xeon 8573C (`prf_css_lh_single` differs on its 12 complex vertices) |
+| CSS with `Css_Convention: "nonnegative"` | Runs | Runs | Runs: 48/48 evals and 12/12 Nelder-Mead fits bit-exact on Intel Xeon 6975P-C and AMD EPYC 7763 |
 | Fewer than two volumes | Runs | Runs | Refused |
-| Norms at rounding ties | AMD norm order, which matches the recorded AMD norms | AMD norm order, as `current` | Correctly rounded norm: two recorded one-ULP misses |
+| Norms at rounding ties | AMD norm order, which matches the recorded AMD norms | AMD norm order, as `current` | Resolved: portable software x87 80-bit `dnrm2`/`dznrm2` (168/168 real, 48/48 complex, 8/8 extreme, 1,200/1,200 `corr`) |
 | Small-shape `gampdf`, zero signs, single `sin`, `cos`, `exp` | Small-shape `gampdf` (29,376/29,376) and negative-base power zero signs (0/27,552 diffs) match MATLAB; single `sin`, `cos`, `exp` remain open | Same as `current` | Same as `current` |
 
 ### 1. Hull geometry and full-pipeline last bits (#732; historical #729)
@@ -217,52 +225,65 @@ and on Intel under `matlab-intel`).
   and `cos` at these inputs, shown on recordings not read before the rule is
   frozen.
 
-**Every `matlab-intel` single analysis.**
+**`matlab-intel` single-precision analyses (resolved for BLAS and two-column QR; mixed complex-single dot open).**
 
-- Evidence: where single runs first depart on Intel is located, with the AMD
-  hosts as control (`mkl-avx512/tests/divergence.rs`; [Intel AVX-512 and the
-  reference host](matlab/README.md#intel-avx-512-and-the-reference-host)):
-  `sgemv` in the single CF correlation, the `?gemv` update or the complex norm
-  in every single QR chain, and `x' * y`. The role of `sdot` is inferred by
-  elimination. No Intel single kernel is identified.
-- Product: refused, never run with another reference's kernels. The two single
-  Gaussian fits above (`rc_gaussian_lh_single`, `cf_gaussian_lh_single`) are
-  refused first with their own messages; the remaining ten single-precision
-  analyses that run under `current` and `matlab-amd` return:
-  "model: matlab-intel arithmetic requires Data_Precision 'double'; Intel
-  single-precision kernels are not implemented".
-- To move it: identify `sgemv`, the single QR and Q application and `sdot` on
-  Intel recordings not read before the model is frozen.
+- Evidence: the pre-registered recording (`intel-norm-single-css-reference.json`,
+  workflow run 45286336873 on commit `6ab8c5bca`, Hugging Face commit
+  `54645a921b7c442085b2db974ad78ed8b89d00d9`) and held-out recordings on Xeon
+  8573C (`single-kernels`) and Xeon 8370C (`qr-kernels`) establish MKL
+  AVX512_E1's single `sdot` (4,400/4,400 exact, lengths 2..=1,000), `sgemv_t`
+  (5,500/5,500 exact + 378/378 held-out Xeon 8573C), `scorr` (140/140 exact),
+  real two-column QR (`107/107` 1-col chains + `1,712/1,712` 8-col solves on
+  Xeon 8370C; `160/160` 1-RHS + `1,280/1,280` 8-RHS on Xeon 6975P-C), and
+  complex two-column QR (`67/67` 1-col chains + `1,072/1,072` 8-col solves on
+  Xeon 8370C, matching every stored component bit for bit, with zero imaginary
+  parts verified where MATLAB omitted the imaginary array on all-zero-imaginary
+  multi-RHS results such as `glm_single_1e-10_0.3_multi_ones-first`; `160/160`
+  1-RHS + `1,280/1,280` 8-RHS on Xeon 6975P-C), gated by
+  `mkl-avx512/tests/intel_norm_single_css.rs`. On the unseen 24-run Intel Xeon
+  8573C CLI matrix, 9 of 10 runnable single-precision runs match bit for bit;
+  only `prf_css_lh_single` differs on its 12 complex vertices (the mixed
+  complex-double × real-single `cdotc_real` dot order was not pre-registered).
+- Product: runs for all single-precision analyses except the two universal
+  single Gaussian refusals above (`rc_gaussian_lh_single`,
+  `cf_gaussian_lh_single`).
 
-**Intel CSS with the nonnegative convention.**
+**Intel CSS with the nonnegative convention (resolved).**
 
-- Evidence: the Intel CSS evidence covers SamSrf's complex power
-  (`Css_Convention: "samsrf"`): the recorded finite two-column complex QR
-  designs and the matrix's CSS runs. The `nonnegative` objective, which clips
-  responses before the power, has no Intel validation.
-- Product: refused: "model: MATLAB Intel CSS requires Css_Convention='samsrf';
-  nonnegative CSS is not supported by this reference". `current` and
-  `matlab-amd` keep both conventions; the default convention is unchanged.
-- Decision: the restriction is kept and documented. Lifting it needs an Intel
-  nonnegative CSS validation.
+- Evidence: `intel-norm-single-css-reference.json` (run 45286336873,
+  `nonnegative-css.json`) records 48 signed-aperture evaluations and 12 full
+  Nelder-Mead `fminsearch` fine fits on `x001_lh` across both Intel Xeon 6975P-C
+  and AMD EPYC 7763 (every seed verified to exercise both negative clipping and
+  positive compression). `mkl-avx512/tests/intel_norm_single_css.rs` matches all
+  48/48 evaluations (`objective`, `beta`) and all 12/12 fits (`fitted`, `fval`,
+  `1 - fval`, `exitflag`, `funcCount`, `iterations`, `beta`) bit for bit on both
+  hosts.
+- Product: runs under `current`, `matlab-amd`, and `matlab-intel`; `current`
+  retains its pre-existing default arithmetic unchanged.
 
 **Fewer than two volumes** under `matlab-intel` are refused: "model:
 matlab-intel arithmetic requires at least two volumes".
 
 ### 3. Numerical edge cases and coverage (#730, #731)
 
-**Two near-tie norm misses** (`matlab-intel` only).
+**Intel `dnrm2` / `dznrm2` near rounding midpoints (resolved).**
 
-- Evidence: the correctly rounded norm reproduces the recorded Intel norms
-  except two, whose exact value lies 6.4e-5 and 2.6e-4 ULP above a rounding
-  midpoint; MATLAB's result is one ULP lower. Both are pinned with the AMD order
-  as negative control (`mkl-avx512/tests/recordings.rs`,
-  `mkl-avx512/tests/blas_recordings.rs`).
-- Product: `matlab-intel` runs with the correctly rounded norm, so at such a
-  tie it can be one ULP above MATLAB's. No tolerance band is fitted to the two
-  examples.
-- To move it: MKL's `dnrm2` rule near midpoints, which needs a recording that
-  probes ties.
+- Evidence: the pre-registered blind probe suite (`intel-dnrm2-probes.json` /
+  `intel-norm-single-css-reference.json`, run 45286336873) uniquely identified
+  MKL AVX512_E1's `dnrm2`/`dznrm2` as four-lane x87 80-bit extended-precision
+  accumulation (`a0 += a2; a1 += a3;`, optional 2-element tail into `(a0, a1)`,
+  `tot = a0 + a1`, optional final element into `tot`, 64-bit RNE `sqrt`, then
+  53-bit RNE to `f64`). The portable zero-allocation software `F80`
+  implementation in `exes/samsrf/core/src/arithmetic/intel/mod.rs` reproduces
+  all 168/168 blind real near-midpoint norms, all 48/48 blind complex norms
+  (exact pre-registered SHA-256 `5db3763f…`), all 8/8 extreme-scale norms
+  (`2^±600`, `2^±1000`, exact pre-registered SHA-256 `20add51c…`), and all
+  1,200/1,200 `arithmetic-order` `corr` values including both previously pinned
+  near-tie misses (`n = 36` pair 6 and `n = 75` pair 16), with zero regressions
+  on any existing gate (`mkl-avx512/tests/recordings.rs`, `blas_recordings.rs`,
+  `intel_norm_single_css.rs`).
+- Product: `matlab-intel` uses this portable software `F80` `nrm2` across native
+  and WebAssembly builds (also removing `num-bigint` from production WASM).
 
 **Small-shape `gampdf` and zero signs (resolved on the pinned recordings).**
 
@@ -306,7 +327,7 @@ remain replay evidence, not blind holdouts.
 | The recorded cases keep exact rank and zero-column decisions; coefficient gates reflect demonstrated fidelity | `qr_reference.rs`: rank of all 348 designs, MATLAB's printed tolerance for all 89 warnings; 346 coefficients bit-identical, 2 at 0 ULPs with an imaginary zero MATLAB stores as real; frozen outcomes at 0 ULPs. `matlab_reference.rs` keeps the original 146 forward cases | Met on AMD | None on AMD |
 | Constant, nearly constant, rank-deficient, full-rank, extreme-scale, mixed real/complex and imaginary-underflow cases; imaginary coefficients asserted | The 348 designs of `qr-reference.json` cover each family; `qr_reference.rs` compares real and imaginary parts and requires a real result where MATLAB's is real | Met | None |
 | Complete single Gaussian and CSS outputs; parameter and score parity does not regress | `compare.mjs` (114 required source gates, single CSS included), `css_pipeline.rs` and `compare-css.mjs` (double CSS original 138/0, nonnegative 126/0 coefficients identical/differing), `css_diagnostics.rs` (108 traces bit for bit) | Met on AMD | Single Gaussian RC/CF fits are #729's and stay refused ([open limits](#open-numerical-limits)). History: before #873 and the single forward Beta/Baseline fix, the CLI matrix's single CSS run differed at 12-13 of 21 vertices and one single forward vertex in Beta (1 ULP) and Baseline (5 ULP); both runs are exact in the current frozen outcome |
-| Missing references fail CI; MATLAB, BLAS and thread settings recorded; backend residuals separated from port errors | Recordings' `environment.json` and `hosts.json` are asserted (interpreter, BLAS line, CPU); `qr_kernels.rs` requires six hosts, five AMD with identical bits; every chain step equals MKL's (`every_recorded_chain_step_matches_mkl_on_amd`, 345 chains) | Partial | Host metadata and finite repeats are recorded. #730's controls receipt shows MKL runs each CPU's own branch whatever is requested; MKL's thread functions are unobservable in MATLAB. Since #895 the `matlab-intel` reference reproduces Intel's recorded finite real and complex two-column double solves; Intel single kernels are not identified and are refused ([open limits](#open-numerical-limits)) |
+| Missing references fail CI; MATLAB, BLAS and thread settings recorded; backend residuals separated from port errors | Recordings' `environment.json` and `hosts.json` are asserted (interpreter, BLAS line, CPU); `qr_kernels.rs` requires six hosts, five AMD with identical bits; every chain step equals MKL's (`every_recorded_chain_step_matches_mkl_on_amd`, 345 chains); `intel_norm_single_css.rs` verifies all 107 real + 67 complex single chains and 1,712 real + 1,072 complex 8-col solves on Intel Xeon 8370C plus 320 1-RHS and 2,560 8-RHS blind single solves on Intel Xeon 6975P-C | Met on AMD and Intel (single & double two-column QR) | Host metadata and finite repeats are recorded. #730's controls receipt shows MKL runs each CPU's own branch whatever is requested; MKL's thread functions are unobservable in MATLAB. Single RC/CF Gaussian fits stay refused; `prf_css_lh_single` on Intel still differs on its 12 complex vertices pending a mixed complex-single dot probe ([open limits](#open-numerical-limits)) |
 | Before/after maximum ULP and absolute differences, and the covered domain, published without arbitrary-input claims | [Least-squares solves](matlab/README.md#least-squares-solves): acceptance checklist, finite-domain scope, history table (#773 → #795 → now) | Met | None |
 | Changeset and README say what is exact or tolerance-based | Changesets of #795, #812, #818, #822; README "Correlations and regressions" and the QR checklist | Met | None |
 
@@ -362,24 +383,25 @@ and [Open numerical limits](#open-numerical-limits).
 
 | Criterion | Evidence | Status | Remaining |
 | --- | --- | --- | --- |
-| Recipe executed on a licensed builder | History: early attempts stopped at the licence check (2026-11-16: from this repository's cloud build host the licence server's private address was unreachable, License Manager Error -15,570; matlab/README "Compiler access"); on the licensed host, `licensed-host/build_and_validate.sh` then built build 2 (local ID `sha256:be7ae7aa…`, 2026-11-16; an independent audit verified its receipts on 2026-11-17, and it is in no reachable Docker store) and build 3 (2026-11-18, pre-clean-staging, local unpublished: OCI manifest `sha256:99f912af…`, config `sha256:746944cc…`, audited on 2026-11-18). On 2026-11-23 (`main` at `2d4581c3f`, after #915–#917), the licensed host built **build 5** (local, unpublished) under clean tracked-only `/build` staging: OCI target/manifest digest `sha256:c132e952…`, config digest `sha256:711e465c…`, archive `samsrf-reference.oci.tar` (1,381,349,376 bytes, SHA-256 `28ccdcda…`, 7 layers, 0 attestations, 0 unreferenced blobs), and `base-images.json` (`lineageVerified: true`) verifying the 4-image layer prefix chain (`ubuntu:22.04` `f64b2ffc…` → `matlabruntimebase/r2023b/release/update11` `ce5f495c…` → `samsrf-reference-runtime:r2023b` `1dbdc61c…` → `samsrf-reference:41ed1e96-r2023b` `c132e952…`, plus `matlab-runtime-installer:r2023b-update-11` `1f07cb49…` in `copyFromStages`) ([Runtime container status](matlab/README.md#building-a-matching-runtime-container)) | Met on retained local evidence | Publication: [steps that need the maintainer](matlab/README.md#publication-steps-that-need-the-maintainer) |
-| Compiled-vs-source maps pass per-map gates | `compare_cli.py` on the retained executions, on one host: compiled and source MATLAB agree bitwise in all 24 runs (1,036 numerical and structural array checks, the 184 contract maps among them). History: build 2 and build 3 source receipts did not record the bundle, so their source inputs were unattested; for build 3 the 2026-11-18 audit reported six retained comparisons (source repeat, compiled against source, compiled repeat, and across builds 2 and 3) equal in all 24 runs. Since #915, `run_source_cli.m` hashes the effective `/input` tree and each run's staged `SamSrf_defaults.json` and `hrf_custom.mat` before and after execution, writing `receipts/inputs.json` (with `staged`) and per-run `stagedInputs`, verified by `cli_plan.py verify-inputs` in both `licensed-host/build_and_validate.sh` and `samsrf-native.yml` and checked by `compare_web_cli.py --expect source` without `--allow-unattested-source-inputs`. In **build 5** (2026-11-23), all four runs (`source-1`, `source-2`, `compiled-1`, `compiled-2`) wrote identical `receipts/inputs.json` (`sha256:49c84772…`, `unchanged: true`, 60 bundle entries, 24 staged run entries), and `source-repeat.json`, `compiled-vs-source.json` and `compiled-repeat.json` all passed `exact: true` across all 24 runs (1,036 arrays, 0 failed), plus SIGINT interrupt (exit 130) and missing-model failure (exit 249) | Met on retained local evidence | Publication and cross-host `runtime_image` validation ([steps that need the maintainer](matlab/README.md#publication-steps-that-need-the-maintainer)) |
-| Runtime-only execution without a licence | `runtime_image` dispatch: no MATLAB on the host, no network in the container, read-only inputs. History: the 2026-11-18 audit restored build 3 into an empty Docker store and ran three cases (`prf_custom_hrf_lh_double`, `rc_custom_hrf_lh_double`, `cf_hull_lh_single`), reporting 127 arrays equal and missing-model failing; `matlab/oci_identity.mjs` now accepts either target or config digest (`test/oci-identity.test.js`). In **build 5** (2026-11-23), both `samsrf-reference:41ed1e96-r2023b` and `samsrf-reference-runtime:r2023b` were removed from the local Docker store, and `docker load` restored `samsrf-reference:41ed1e96-r2023b` from `samsrf-reference.oci.tar` (`restored-oci-identity.json` byte-identical to `oci-identity.json`, `sha256:2bd41c18…`); all 24 runs (`compiled-restored`) then ran with `MLM_LICENSE_FILE` and `SAMSRF_LICENSE` unset, `--network none`, read-only root and inputs, verified `receipts/inputs.json` (`unchanged: true`), and matched both `compiled-1` and `source-1` bitwise (`restored-vs-compiled.json` and `restored-vs-source.json` both 24/24 `exact: true`, 1,036 arrays, 0 failed) | Partial | Fresh restored interrupt check and `runtime_image` on a published digest on another host |
-| Repeated runs reproduce outputs | Source recordings repeat exactly on each host (1,036 array checks per host). The web engine repeats byte for byte (Node 24, Node 22 in a pinned image, Chromium). In **build 5**, `source-repeat.json`, `compiled-repeat.json`, `restored-vs-compiled.json` and `restored-vs-source.json` all repeat bitwise across all 24 runs (1,036 arrays). History: builds 2 and 3 repeated their 24-run source and compiled executions bitwise (`source-repeat.json`, `compiled-repeat.json`; the 2026-11-18 build 3 restore covered three cases) | Met on retained local evidence | A published image repeats its own on another host |
-| Immutable digest and receipts; stock and repaired baselines separate | The stock Neurodesk 2024 image (SamSrf 10.003), the repaired source recording and the web runs are kept apart; each web report names the MATLAB execution it used. The licensed-host receipts name the compiled image by its local ID; it has no registry digest. Since #897/#915/#917 the driver saves the image as an OCI archive and binds the ID it ran to the archive's digests (`oci_identity.mjs`, `container-build/oci-identity.json`), and `build_container.py` stages only Git-tracked present files (excluding `.git` and ignored files) under a canonical `/build` mount (`SAMSRF_CANONICAL_BUILD_DIR`) and fail-closed verifies generated Dockerfile `FROM` bases, `COPY --from` stages and `RootFS.Layers` prefix lineage in `base-images.json`. Build 5 verified `lineageVerified: true`, 0 attestations, 0 unreferenced blobs, and zero `.git` strings or `/storage/tmp/samsrf-licensed` host paths in `docker image inspect` and `docker history --no-trunc` (the compiled CTF archive internals were not unpacked) | Partial | Redistribution authorization (MathWorks Runtime SLA) and publication with an immutable registry digest ([steps that need the maintainer](matlab/README.md#publication-steps-that-need-the-maintainer)) |
-| Web comparison lists exact, tolerance, failing and unsupported cases | `run_web_matrix.mjs` (engine in Node), `run_browser_matrix.mjs` (the app's `engine.js` in Chromium, an engine-module harness from source, not the production bundle or interface; raw maps merged from the exported shard, replay equal to export) and `compare_web_cli.py`. The comparator derives the MATLAB execution from its receipts and refuses mismatched plan, bundle, argv, execution kind or image identity. It classes every contract map of all 24 runs exact or differing, bitwise, after checking the ROI, vertex counts and byte lengths. A refusal counts only with the core's exact text, in both runners and again in the comparator; a crash is `failed`, and a MATLAB failure does not hide it. Refused, unsupported and failed runs are listed with both sides' statuses; web-only polar and eccentricity maps are listed as not compared. 44 tests with negative controls. Wired into the `build` and `runtime_image` jobs (Node and Chromium) and the licensed-host driver (Node). Against source MATLAB (`cli-reference.json`, inputs unattested by the historical source receipts), CI holds the Node runner to the frozen outcome on the AMD host: 20 of 24 runs and 163 of 168 maps exact (history: 18/24 and 157/168 after #874; #866's first report was 77/168 in Node and 63/140 in browser). On **build 5** (2026-11-23, committed WASM `d1745bec…`, `@neurodesk/samsrf` `0.7.20261120`, prospective source attestation), Node compiled acceptance ran under all three explicit references on the AMD host with 0 failed/unsupported/inventory-error runs: `current` **20/24 exact, 2 differ, 2 refused (163/168 maps)** against both `compiled-1` and `source-1`; `matlab-amd` **20/24 exact, 2 differ, 2 refused (166/168 maps)** against both `compiled-1` and `source-1`; `matlab-intel` (same-host comparison of Intel-mode WASM against AMD MATLAB Runtime output `compiled-1`) **0/12 double exact, 12 differ, 12 single refused (32/92 double maps)**. `run_browser_matrix.mjs` was not re-run separately on build 5 (the production UI matrix in the next row ran in Chromium against the same `d1745bec…` WASM and `web-1` engine root; history: on #874 `abbd6625…`, Node and Chromium both matched 18/22 computed runs and 157/168 maps byte for byte) | Partial | The differences listed under "SamSrfAnalysis CLI matrix" below, and cross-host validation against a published image |
-| The production interface runs the matrix, held to MATLAB and to the engine harness | `run_ui_matrix.mjs` drives a built `apps/samsrf` bundle through its interface. `compare_ui_cli.py` compares only the whole matrix; it binds the served module to the engine harness's, each saved model to the plan model and each download to its hash. A run whose result was offered before an error is `ui-error`, a refusal without its expected text is `failed`, and a download that is not the engine harness's export fails a gate of its own (matlab/README "Production interface against the CLI matrix"). 44 tests; each of 17 mutations reverting a check fails them. On **2026-11-23** (`main` at `2d4581c3f`, committed WASM `d1745bec…`, Chromium `156.0.8078.4`), against the locally built, unpublished **build 5** compiled image (`sha256:c132e952…`) and source execution (with `web-1` as engine root), all 22 computed runs complete with lossless downloads (`losslessDownloadRuns: 22`, `losslessComparedMaps: 168`): both `ui-1-vs-compiled.json` and `ui-1-vs-source.json` exit 0 (`failures: []`) with **20 exact, 2 differing, 2 refused, 0 `ui-error`, 0 `unsupported`, 0 `failed`, 0 `inventory-error`**, **163 of 168 exact maps** (raw doubles and CSS imaginary parts verified; both CSS runs and both double RC hull runs are exact; only the 5 raw-double maps in `cf_hull_lh_double` and `cf_hull_smooth_global_lh_double` differ while their float32 GIfTIs are exact), and **212 of 212 downloaded GIfTIs equal to the engine harness's** (`engineFilesDiffer: 0`, `engineMismatchRuns: 0`, with the 22 lossless downloads verified by array contents and provenance separately). History: on 2026-11-18 (#874, module `abbd6625…`, float32 downloads only) 20/24 runs and 160/168 maps were exact in float32 with both CSS runs differing for unobserved imaginary parts and 4 double hull runs differing in double; on 2026-11-17 none of 18 completed (tagless surface) and 4 subject-HRF runs had no route | Partial | The 5 differing raw-double maps in the 2 double CF hull runs (#732, #897), the 2 single Gaussian refusals (#729), and cross-host testing against a published image |
+| Recipe executed on a licensed builder | History: early attempts stopped at the licence check (2026-11-16: from this repository's cloud build host the licence server's private address was unreachable, License Manager Error -15,570; matlab/README "Compiler access"); on the licensed host, `licensed-host/build_and_validate.sh` then built build 2 (local ID `sha256:be7ae7aa…`, 2026-11-16; an independent audit verified its receipts on 2026-11-17, and it is in no reachable Docker store) and build 3 (2026-11-18, pre-clean-staging, local unpublished: OCI manifest `sha256:99f912af…`, config `sha256:746944cc…`, audited on 2026-11-18). On 2026-11-23 (`main` at `2d4581c3f`, after #915–#917), the licensed host built **build 5** under clean tracked-only `/build` staging: OCI target/manifest digest `sha256:c132e952abf617eebff01fbbb0d12e8b44a3af9850c15595092d761708f4ee0d`, config digest `sha256:711e465c4e9cf17cc7c1ca7150f9d52531340d89d00dbdec894e5e4b5dfdc2ee`, archive `samsrf-reference.oci.tar` (1,381,349,376 bytes, SHA-256 `28ccdcda…`, 7 layers, 0 attestations, 0 unreferenced blobs), and `base-images.json` (`lineageVerified: true`) verifying the 4-image layer prefix chain (`ubuntu:22.04` `f64b2ffc…` → `matlabruntimebase/r2023b/release/update11` `ce5f495c…` → `samsrf-reference-runtime:r2023b` `1dbdc61c…` → `samsrf-reference:41ed1e96-r2023b` `c132e952…`, plus `matlab-runtime-installer:r2023b-update-11` `1f07cb49…` in `copyFromStages`). Published privately to GHCR on 2026-11-24 with immutable digest `ghcr.io/neurodesk/samsrf-reference@sha256:c132e952abf617eebff01fbbb0d12e8b44a3af9850c15595092d761708f4ee0d` (repo-linked to `neurodesk/webapps` with Read access) ([Runtime container status](matlab/README.md#building-a-matching-runtime-container)) | Met | — |
+| Compiled-vs-source maps pass per-map gates | `compare_cli.py` on the retained executions, on one host: compiled and source MATLAB agree bitwise in all 24 runs (1,036 numerical and structural array checks, the 184 contract maps among them). History: build 2 and build 3 source receipts did not record the bundle, so their source inputs were unattested; for build 3 the 2026-11-18 audit reported six retained comparisons (source repeat, compiled against source, compiled repeat, and across builds 2 and 3) equal in all 24 runs. Since #915, `run_source_cli.m` hashes the effective `/input` tree and each run's staged `SamSrf_defaults.json` and `hrf_custom.mat` before and after execution, writing `receipts/inputs.json` (with `staged`) and per-run `stagedInputs`, verified by `cli_plan.py verify-inputs` in both `licensed-host/build_and_validate.sh` and `samsrf-native.yml` and checked by `compare_web_cli.py --expect source` without `--allow-unattested-source-inputs`. In **build 5** (2026-11-23), all four runs (`source-1`, `source-2`, `compiled-1`, `compiled-2`) wrote identical `receipts/inputs.json` (`sha256:49c84772…`, `unchanged: true`, 60 bundle entries, 24 staged run entries), and `source-repeat.json`, `compiled-vs-source.json` and `compiled-repeat.json` all passed `exact: true` across all 24 runs (1,036 arrays, 0 failed), plus SIGINT interrupt (exit 130) and missing-model failure (exit 249). Cross-host on GitHub Actions `ubuntu-24.04` (AMD EPYC 7763, [run 45361306312](https://github.com/neurodesk/webapps/actions/runs/45361306312)), `runtime-vs-pinned-source.json` also passed 24/24 with 0 failures | Met | — |
+| Runtime-only execution without a licence | `runtime_image` dispatch: no MATLAB on the host, no network in the container, read-only inputs. In **build 5** (2026-11-23), both `samsrf-reference:41ed1e96-r2023b` and `samsrf-reference-runtime:r2023b` were removed from the local Docker store, and `docker load` restored `samsrf-reference:41ed1e96-r2023b` from `samsrf-reference.oci.tar` (`restored-oci-identity.json` byte-identical to `oci-identity.json`, `sha256:2bd41c18…`); all 24 runs (`compiled-restored`) ran with `MLM_LICENSE_FILE` and `SAMSRF_LICENSE` unset, `--network none`, read-only root and inputs, matched `compiled-1` and `source-1` bitwise (24/24, 1,036 arrays), and passed a restored-image SIGINT check (`exitCode: 130`, `runningWhenSignalled: true`, `stoppedWithinGrace: true`, `afterSeconds: 50.98`, receipt SHA-256 `818a194a…`). On **2026-11-24** (`main` at `8a6a1d23b`, after #922 and #925), GitHub Actions `samsrf-native.yml` `runtime_image=ghcr.io/neurodesk/samsrf-reference@sha256:c132e952…` ([run 45361306312](https://github.com/neurodesk/webapps/actions/runs/45361306312), `ubuntu-24.04`, AMD EPYC 7763, no MATLAB installed, private GHCR pull via `packages: read` + logout trap, `JAVA_TOOL_OPTIONS=-Duser.home=/tmp`) passed all steps: `runtime-1`, `runtime-2`, `runtime-repeat.json` (24/24, 0 failures), `interrupt` (`exitCode: 130`, `stoppedWithinGrace: true`, `afterSeconds: 34.19`, no stray `?` directory), and `failure` (`exitCode: 249`) | Met | — |
+| Repeated runs reproduce outputs | Source recordings repeat exactly on each host (1,036 array checks per host). The web engine repeats byte for byte (Node 24, Node 22 in a pinned image, Chromium). In **build 5**, local `source-repeat.json`, `compiled-repeat.json`, `restored-vs-compiled.json`, `restored-vs-source.json`, and cross-host GitHub Actions `runtime-repeat.json` and `runtime-vs-pinned-source.json` ([run 45361306312](https://github.com/neurodesk/webapps/actions/runs/45361306312)) all repeat bitwise across all 24 runs (1,036 arrays, 0 failures) | Met | — |
+| Immutable digest and receipts; stock and repaired baselines separate | The stock Neurodesk 2024 image (SamSrf 10.003), the repaired source recording and the web runs are kept apart; each web report names the MATLAB execution it used. Since #897/#915/#917 the driver saves the image as an OCI archive and binds the ID it ran to the archive's digests (`oci_identity.mjs`, `container-build/oci-identity.json`), and `build_container.py` stages only Git-tracked present files (excluding `.git` and ignored files) under a canonical `/build` mount (`SAMSRF_CANONICAL_BUILD_DIR`) and fail-closed verifies generated Dockerfile `FROM` bases, `COPY --from` stages and `RootFS.Layers` prefix lineage in `base-images.json`. Build 5 verified `lineageVerified: true`, 0 attestations, 0 unreferenced blobs, and zero `.git` strings or `/storage/tmp/samsrf-licensed` host paths in `docker image inspect` and `docker history --no-trunc` (the compiled CTF archive internals were not unpacked). With maintainer authorization for private CI hosting, Build 5 was pushed on 2026-11-24 as a **private** GHCR package linked to `neurodesk/webapps` (Read access) under immutable digest `ghcr.io/neurodesk/samsrf-reference@sha256:c132e952abf617eebff01fbbb0d12e8b44a3af9850c15595092d761708f4ee0d` (config `sha256:711e465c…`) and validated in [run 45361306312](https://github.com/neurodesk/webapps/actions/runs/45361306312) | Met | — |
+| Web comparison lists exact, tolerance, failing and unsupported cases | `run_web_matrix.mjs` (engine in Node), `run_browser_matrix.mjs` (the app's `engine.js` in Chromium, an engine-module harness from source, not the production bundle or interface; raw maps merged from the exported shard, replay equal to export) and `compare_web_cli.py`. The comparator derives the MATLAB execution from its receipts and refuses mismatched plan, bundle, argv, execution kind or image identity. It classes every contract map of all 24 runs exact or differing, bitwise, after checking the ROI, vertex counts and byte lengths. A refusal counts only with the core's exact text, in both runners and again in the comparator; a crash is `failed`, and a MATLAB failure does not hide it. Refused, unsupported and failed runs are listed with both sides' statuses; web-only polar and eccentricity maps are listed as not compared. 44 tests with negative controls. Wired into the `build` and `runtime_image` jobs (Node and Chromium) and the licensed-host driver (Node). Against source MATLAB (`cli-reference.json`, inputs unattested by the historical source receipts), CI holds the Node runner to the frozen outcome on the AMD host: 20 of 24 runs and 163 of 168 maps exact. On **build 5** (2026-11-23, committed WASM `d1745bec…`, `@neurodesk/samsrf` `0.7.20261120`, prospective source attestation), Node compiled acceptance ran under all three explicit references on the AMD build host (`current` **20/24 exact, 163/168 maps**; `matlab-amd` **20/24 exact, 166/168 maps**; `matlab-intel` against AMD `compiled-1`: 0/12 double exact). Cross-host on GitHub Actions `ubuntu-24.04` (AMD EPYC 7763, [run 45361306312](https://github.com/neurodesk/webapps/actions/runs/45361306312), `main` `8a6a1d23b`, committed WASM `8bb8ab4f…`), both **Node** (`web-1-vs-runtime.json`) and **Chromium** (`browser-1-vs-runtime.json`) matched **20/24 exact, 2 differ, 2 refused, 0 failed, 0 inventory-error, 163/168 maps exact** against `ghcr.io/neurodesk/samsrf-reference@sha256:c132e952…` | Met for the documented scope | Documented numerical limits listed under "Open numerical limits" (not a universal parity claim) |
+| The production interface runs the matrix, held to MATLAB and to the engine harness | `run_ui_matrix.mjs` drives a built `apps/samsrf` bundle through its interface. `compare_ui_cli.py` compares only the whole matrix; it binds the served module to the engine harness's, each saved model to the plan model and each download to its hash. A run whose result was offered before an error is `ui-error`, a refusal without its expected text is `failed`, and a download that is not the engine harness's export fails a gate of its own (matlab/README "Production interface against the CLI matrix"). 44 tests; each of 17 mutations reverting a check fails them. On **2026-11-23** (`main` at `2d4581c3f`, committed WASM `d1745bec…`, Chromium `156.0.8078.4`), against the **build 5** compiled image (`sha256:c132e952…`, since pushed to GHCR under the same digest) and source execution (with `web-1` as engine root), all 22 computed runs completed with lossless downloads (`losslessDownloadRuns: 22`, `losslessComparedMaps: 168`): both `ui-1-vs-compiled.json` and `ui-1-vs-source.json` exited 0 (`failures: []`) with **20 exact, 2 differing, 2 refused, 0 `ui-error`, 0 `unsupported`, 0 `failed`, 0 `inventory-error`**, **163 of 168 exact maps** (raw doubles and CSS imaginary parts verified; both CSS runs and both double RC hull runs are exact; only the 5 raw-double maps in `cf_hull_lh_double` and `cf_hull_smooth_global_lh_double` differ while their float32 GIfTIs are exact), and **212 of 212 downloaded GIfTIs equal to the engine harness's** (`engineFilesDiffer: 0`, `engineMismatchRuns: 0`, with the 22 lossless downloads verified by array contents and provenance separately). History: on 2026-11-18 (#874, module `abbd6625…`, float32 downloads only) 20/24 runs and 160/168 maps were exact in float32 with both CSS runs differing for unobserved imaginary parts and 4 double hull runs differing in double; on 2026-11-17 none of 18 completed (tagless surface) and 4 subject-HRF runs had no route | Met for the documented scope | The 5 differing raw-double maps in the 2 double CF hull runs (#732) and the 2 single Gaussian refusals (#729) |
 
-Compiled-versus-source agreement and the lossless UI matrix rest on retained
-executions of locally built images. Build 2 is gone; Build 3 (pre-clean-staging)
-and Build 5 (2026-11-23, `2d4581c3f`, clean-staged, layer-lineage-verified,
-prospectively source-input-attested, 24-run restored-audited, explicit-reference
-compiled-accepted, and 24-run lossless UI-verified) exist locally and are **not
-published**; this file claims no published image. Redistribution authorization,
-pushing an approved image to GHCR with an immutable registry digest, a fresh
-restored interrupt run, and cross-host `runtime_image` validation remain open.
-The UI and engine replays above and the local Runtime audit have different
-scopes and do not establish cross-host or general compiled or UI parity.
+Build 5 (`ghcr.io/neurodesk/samsrf-reference@sha256:c132e952abf617eebff01fbbb0d12e8b44a3af9850c15595092d761708f4ee0d`,
+config `sha256:711e465c4e9cf17cc7c1ca7150f9d52531340d89d00dbdec894e5e4b5dfdc2ee`)
+was published privately to GHCR on 2026-11-24 (repo-linked to `neurodesk/webapps`
+with Read access) and passed cross-host Runtime-only validation without MATLAB
+on GitHub Actions `ubuntu-24.04` (AMD EPYC 7763,
+[run 45361306312](https://github.com/neurodesk/webapps/actions/runs/45361306312),
+`main` `8a6a1d23b`, WASM `8bb8ab4f…`): 24/24 repeat and pinned-source exact,
+SIGINT interrupt (exit 130), missing-model failure (exit 249), and both Node and
+Chromium web-vs-runtime comparisons at 20/24 exact (163/168 maps). Packaging and
+finite-matrix validation do not establish universal arbitrary-input or
+cross-architecture parity.
 
 ### SamSrfAnalysis CLI matrix: web engine against source MATLAB
 

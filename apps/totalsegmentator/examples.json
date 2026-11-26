@@ -1,0 +1,44 @@
+[
+  {
+    "id": "ct-abdomen",
+    "label": "CT abdomen (3 mm)",
+    "description": "De-identified abdominal CT scan from TotalSegmentator's reference suite (122 x 101 x 30 voxels at 3 mm, Apache-2.0).",
+    "expectedResult": "Multilabel anatomical segmentation (organs, spine, ribs and trunk muscles) and a per-structure volume and Hounsfield-unit table.",
+    "automation": {
+      "parameters": {
+        "task": "total",
+        "resolution": "fast"
+      }
+    },
+    "files": [
+      {
+        "role": "image",
+        "name": "example_ct_sm.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/6173981d93715333a83cd270165e7636b031276d/totalsegmentator/examples/example_ct_sm.nii.gz",
+        "sha256": "e50c00b2914e2cac0aaee8e7f3b5f57d44d9f21bfd5c0577271c54c0cb49e9fb",
+        "bytes": 483312
+      }
+    ]
+  },
+  {
+    "id": "mr-abdomen",
+    "label": "MRI abdomen (3 mm)",
+    "description": "De-identified abdominal MRI scan from TotalSegmentator's reference suite (117 x 91 x 20 voxels at 3 mm, LPS orientation, Apache-2.0).",
+    "expectedResult": "Multilabel anatomical segmentation of abdominal organs, vertebrae and muscles with per-structure volume and intensity statistics.",
+    "automation": {
+      "parameters": {
+        "task": "total_mr",
+        "resolution": "fast"
+      }
+    },
+    "files": [
+      {
+        "role": "image",
+        "name": "example_mr_sm.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/6173981d93715333a83cd270165e7636b031276d/totalsegmentator/examples/example_mr_sm.nii.gz",
+        "sha256": "209b46efaff595dd54a9332872e17a722b62654bbb68dbd89acd5090701bbd4f",
+        "bytes": 277762
+      }
+    ]
+  }
+]

@@ -2433,30 +2433,166 @@
     },
     "brainchop": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/brainchop-v0.1.20261124/brainchop-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "d77be66ba39e92aec4f6b716818b48111c0236b7abbf18875bd7aa7594409880",
+          "bytes": 58776470,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/brainchop-v0.1.20261124/brainchop-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf brainchop-0.1.20261124-linux-x64.tar.gz\n./brainchop-0.1.20261124-linux-x64/brainchop t1.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/brainchop-v0.1.20261124/brainchop-0.1.20261124-macos-arm64.pkg",
+          "sha256": "700a5a946ed4c188c6a95085e205ced340221b0eecef49c3e2cd2a7487c63cad",
+          "bytes": 52527817,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/brainchop-v0.1.20261124/brainchop-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg brainchop-0.1.20261124-macos-arm64.pkg -target /\nbrainchop self-check\nbrainchop t1.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/brainchop-v0.1.20261124/brainchop-0.1.20261124-windows-x64.zip",
+          "sha256": "ce1157a4fc7cbd2657aad4773aa359e5b12ff3215d95a1717ef002809f009795",
+          "bytes": 49604627,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/brainchop-v0.1.20261124/brainchop-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\brainchop-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\brainchop-0.1.20261124-windows-x64\\brainchop.exe t1.nii.gz results"
+        }
+      ],
       "containers": []
     },
     "stardist": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.2.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/stardist-v0.2.20261124/stardist-0.2.20261124-linux-x64.tar.gz",
+          "sha256": "3e53f421a5558b31866c55170c45b5f66d5ad2ac362ab9ba6f1884513836b8ea",
+          "bytes": 86822754,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/stardist-v0.2.20261124/stardist-0.2.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf stardist-0.2.20261124-linux-x64.tar.gz\n./stardist-0.2.20261124-linux-x64/stardist image.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.2.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/stardist-v0.2.20261124/stardist-0.2.20261124-macos-arm64.pkg",
+          "sha256": "452a075f60c1e01a51b4bf130ca10bbc6655c912bcf69a57b5c79002068097b5",
+          "bytes": 88447067,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/stardist-v0.2.20261124/stardist-0.2.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg stardist-0.2.20261124-macos-arm64.pkg -target /\nstardist self-check\nstardist image.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.2.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/stardist-v0.2.20261124/stardist-0.2.20261124-windows-x64.zip",
+          "sha256": "aebe76c953ea35d814108d87983cbd71084b100b5db470355e71ad5348b10655",
+          "bytes": 89168092,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/stardist-v0.2.20261124/stardist-0.2.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\stardist-0.2.20261124-windows-x64.zip -DestinationPath .\n.\\stardist-0.2.20261124-windows-x64\\stardist.exe image.tif results"
+        }
+      ],
       "containers": []
     },
     "calcium-imaging": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/calcium-imaging-v0.1.20261124/calcium-imaging-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "d6484b4a17bb1acf1264edf6db07348d11aef14e997db2e65776a1e84ee486d8",
+          "bytes": 47645879,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/calcium-imaging-v0.1.20261124/calcium-imaging-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf calcium-imaging-0.1.20261124-linux-x64.tar.gz\n./calcium-imaging-0.1.20261124-linux-x64/calcium-imaging movie.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/calcium-imaging-v0.1.20261124/calcium-imaging-0.1.20261124-macos-arm64.pkg",
+          "sha256": "e818bb3a2667ac87af2ca0df43061d388b05c3bf375dab45eb57c11e860badfd",
+          "bytes": 41337695,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/calcium-imaging-v0.1.20261124/calcium-imaging-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg calcium-imaging-0.1.20261124-macos-arm64.pkg -target /\ncalcium-imaging self-check\ncalcium-imaging movie.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/calcium-imaging-v0.1.20261124/calcium-imaging-0.1.20261124-windows-x64.zip",
+          "sha256": "c8ee46ddb79d3fab499f9a3d18be421497525fc7b11b6e47c068ede357bb4d33",
+          "bytes": 38425476,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/calcium-imaging-v0.1.20261124/calcium-imaging-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\calcium-imaging-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\calcium-imaging-0.1.20261124-windows-x64\\calcium-imaging.exe movie.tif results"
+        }
+      ],
       "containers": []
     },
     "spot-detection": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/spot-detection-v0.1.20261124/spot-detection-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "051c1b528eacb31c234d85e4f9f2bcb20ce0002cac3928481f3641ed2f89bf92",
+          "bytes": 47650239,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/spot-detection-v0.1.20261124/spot-detection-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf spot-detection-0.1.20261124-linux-x64.tar.gz\n./spot-detection-0.1.20261124-linux-x64/spot-detection stack.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/spot-detection-v0.1.20261124/spot-detection-0.1.20261124-macos-arm64.pkg",
+          "sha256": "d0e2c8eb30a780e880ec70f94022989cc97f7d3b12ff3fd22e7d683adbcdb794",
+          "bytes": 41337087,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/spot-detection-v0.1.20261124/spot-detection-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg spot-detection-0.1.20261124-macos-arm64.pkg -target /\nspot-detection self-check\nspot-detection stack.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/spot-detection-v0.1.20261124/spot-detection-0.1.20261124-windows-x64.zip",
+          "sha256": "00c2d54c9dc1e35534a468d625fbbe108ce2f96703e9ca4f2f9e0a8e4ed81408",
+          "bytes": 38420948,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/spot-detection-v0.1.20261124/spot-detection-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\spot-detection-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\spot-detection-0.1.20261124-windows-x64\\spot-detection.exe stack.tif results"
+        }
+      ],
       "containers": []
     },
     "gliomoda": {
@@ -2477,23 +2613,125 @@
     },
     "neuromorph": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/neuromorph-v0.1.20261124/neuromorph-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "b755360f1e97c548a9e828ef4e35a4bd73e8c950097d0a9da46c4372c9911af4",
+          "bytes": 43290020,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/neuromorph-v0.1.20261124/neuromorph-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf neuromorph-0.1.20261124-linux-x64.tar.gz\n./neuromorph-0.1.20261124-linux-x64/neuromorph cell.swc results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/neuromorph-v0.1.20261124/neuromorph-0.1.20261124-macos-arm64.pkg",
+          "sha256": "2ffb277a37b53125467661aca6bbecc3a378fdc2876e83c73d8f004e0fa47925",
+          "bytes": 36737895,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/neuromorph-v0.1.20261124/neuromorph-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg neuromorph-0.1.20261124-macos-arm64.pkg -target /\nneuromorph self-check\nneuromorph cell.swc results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/neuromorph-v0.1.20261124/neuromorph-0.1.20261124-windows-x64.zip",
+          "sha256": "4cdec1dd2721e2d863beda8d7300babbbe7895ef974a04d664f6db178d833ee7",
+          "bytes": 32956475,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/neuromorph-v0.1.20261124/neuromorph-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\neuromorph-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\neuromorph-0.1.20261124-windows-x64\\neuromorph.exe cell.swc results"
+        }
+      ],
       "containers": []
     },
     "stitching": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.2.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/stitching-v0.2.20261124/stitching-0.2.20261124-linux-x64.tar.gz",
+          "sha256": "7e9d0a79eb7a42e565685ae45f4696ab2d5316d98d025e5715f7931f94488ecd",
+          "bytes": 47635333,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/stitching-v0.2.20261124/stitching-0.2.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf stitching-0.2.20261124-linux-x64.tar.gz\n./stitching-0.2.20261124-linux-x64/stitching tiles/ results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.2.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/stitching-v0.2.20261124/stitching-0.2.20261124-macos-arm64.pkg",
+          "sha256": "d7b404b589d63982fe08deff93d3f7ed73f12b6963cb531b8e2be82b6277c89c",
+          "bytes": 41337709,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/stitching-v0.2.20261124/stitching-0.2.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg stitching-0.2.20261124-macos-arm64.pkg -target /\nstitching self-check\nstitching tiles/ results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.2.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/stitching-v0.2.20261124/stitching-0.2.20261124-windows-x64.zip",
+          "sha256": "6513301912657e10ccbed50509ee42223d2a686e31e0a7333ae90d7628bb3a74",
+          "bytes": 38402709,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/stitching-v0.2.20261124/stitching-0.2.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\stitching-0.2.20261124-windows-x64.zip -DestinationPath .\n.\\stitching-0.2.20261124-windows-x64\\stitching.exe tiles/ results"
+        }
+      ],
       "containers": []
     },
     "structure-tensor": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/structure-tensor-v0.1.20261124/structure-tensor-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "e389fc6c6afc2836cfd80030c8cce0c271fd7dd1fcd61251f9f56a77567ba29b",
+          "bytes": 47884880,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/structure-tensor-v0.1.20261124/structure-tensor-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf structure-tensor-0.1.20261124-linux-x64.tar.gz\n./structure-tensor-0.1.20261124-linux-x64/structure-tensor input.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/structure-tensor-v0.1.20261124/structure-tensor-0.1.20261124-macos-arm64.pkg",
+          "sha256": "1e54d3d4e6da6da14b6ca1738bd47a007b9e11bbab86a00818c6d53f46dc0522",
+          "bytes": 41584012,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/structure-tensor-v0.1.20261124/structure-tensor-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg structure-tensor-0.1.20261124-macos-arm64.pkg -target /\nstructure-tensor self-check\nstructure-tensor input.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/structure-tensor-v0.1.20261124/structure-tensor-0.1.20261124-windows-x64.zip",
+          "sha256": "a610ffa5d9fa9c6998000a7d0cfbffb31487f181ef5fc9d770ecb7ee3b98d389",
+          "bytes": 38722753,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/structure-tensor-v0.1.20261124/structure-tensor-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\structure-tensor-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\structure-tensor-0.1.20261124-windows-x64\\structure-tensor.exe input.tif results"
+        }
+      ],
       "containers": []
     },
     "microsam": {
@@ -2505,9 +2743,43 @@
     },
     "microscope-qc": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/microscope-qc-v0.1.20261124/microscope-qc-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "c44b56127125a566a74b187bac149c04c80a34596d4a62caa4cfc2dbf3b4d145",
+          "bytes": 47646184,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/microscope-qc-v0.1.20261124/microscope-qc-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf microscope-qc-0.1.20261124-linux-x64.tar.gz\n./microscope-qc-0.1.20261124-linux-x64/microscope-qc beads.ome.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/microscope-qc-v0.1.20261124/microscope-qc-0.1.20261124-macos-arm64.pkg",
+          "sha256": "8864486b8081e0f1b7ab6e4242e57645e968059bb95713cf576463f8bc56e136",
+          "bytes": 41333963,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/microscope-qc-v0.1.20261124/microscope-qc-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg microscope-qc-0.1.20261124-macos-arm64.pkg -target /\nmicroscope-qc self-check\nmicroscope-qc beads.ome.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/microscope-qc-v0.1.20261124/microscope-qc-0.1.20261124-windows-x64.zip",
+          "sha256": "9e7415dd73f527f19507893970f1ce05cc7c070c20dccfe5531dd5b2496dba2c",
+          "bytes": 38413918,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/microscope-qc-v0.1.20261124/microscope-qc-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\microscope-qc-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\microscope-qc-0.1.20261124-windows-x64\\microscope-qc.exe beads.ome.tif results"
+        }
+      ],
       "containers": []
     },
     "cryo-em": {
@@ -2541,30 +2813,558 @@
     },
     "lightsheet-atlas": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/lightsheet-atlas-v0.1.20261124/lightsheet-atlas-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "87eed518793e5e618ebfdbfb8752b24a022fa5128a5cabba336200cc39d51670",
+          "bytes": 54950012,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/lightsheet-atlas-v0.1.20261124/lightsheet-atlas-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf lightsheet-atlas-0.1.20261124-linux-x64.tar.gz\n./lightsheet-atlas-0.1.20261124-linux-x64/lightsheet-atlas brain.ome.tif out"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/lightsheet-atlas-v0.1.20261124/lightsheet-atlas-0.1.20261124-macos-arm64.pkg",
+          "sha256": "e6a7d7f9b92c24725b84ce2046f44811d4668d3b83156f29663da74d6fe0c28a",
+          "bytes": 48641828,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/lightsheet-atlas-v0.1.20261124/lightsheet-atlas-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg lightsheet-atlas-0.1.20261124-macos-arm64.pkg -target /\nlightsheet-atlas self-check\nlightsheet-atlas brain.ome.tif out"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/lightsheet-atlas-v0.1.20261124/lightsheet-atlas-0.1.20261124-windows-x64.zip",
+          "sha256": "37ec457a68a29fe6320d8f412a67621ceceef4c36effbef56fd82376b0b9e3fd",
+          "bytes": 45742920,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/lightsheet-atlas-v0.1.20261124/lightsheet-atlas-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\lightsheet-atlas-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\lightsheet-atlas-0.1.20261124-windows-x64\\lightsheet-atlas.exe brain.ome.tif out"
+        }
+      ],
       "containers": []
     },
     "omezarr-convert": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/omezarr-convert-v0.1.20261124/omezarr-convert-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "f733b06fcd9982d32280f98d950bd78a83fc185a00e7903a3e4dea93bfb9d44a",
+          "bytes": 65823292,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/omezarr-convert-v0.1.20261124/omezarr-convert-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf omezarr-convert-0.1.20261124-linux-x64.tar.gz\n./omezarr-convert-0.1.20261124-linux-x64/omezarr-convert input.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/omezarr-convert-v0.1.20261124/omezarr-convert-0.1.20261124-macos-arm64.pkg",
+          "sha256": "8d3dff3558830b7c01fc4cd0458734fb7dd46c0ff399595dc5339a73ede0b8a1",
+          "bytes": 59923589,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/omezarr-convert-v0.1.20261124/omezarr-convert-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg omezarr-convert-0.1.20261124-macos-arm64.pkg -target /\nomezarr-convert self-check\nomezarr-convert input.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/omezarr-convert-v0.1.20261124/omezarr-convert-0.1.20261124-windows-x64.zip",
+          "sha256": "8e0979153413744e84cab7e1bb4ca9cd6e139ecb23c3cd021890b605500386bb",
+          "bytes": 58640800,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/omezarr-convert-v0.1.20261124/omezarr-convert-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\omezarr-convert-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\omezarr-convert-0.1.20261124-windows-x64\\omezarr-convert.exe input.tif results"
+        }
+      ],
       "containers": []
     },
     "histo2mri": {
       "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/histo2mri-v0.1.20261124/histo2mri-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "00e5c7f979460761701a70f51c047c69f47625adb3e199dff2f8781947db43f3",
+          "bytes": 47951124,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/histo2mri-v0.1.20261124/histo2mri-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf histo2mri-0.1.20261124-linux-x64.tar.gz\n./histo2mri-0.1.20261124-linux-x64/histo2mri mri.nii.gz section.tif out --slice 50"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/histo2mri-v0.1.20261124/histo2mri-0.1.20261124-macos-arm64.pkg",
+          "sha256": "017c1208e326dc5c12a102ec91382629638b636e1a946dacd348abeafcfaae88",
+          "bytes": 41650930,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/histo2mri-v0.1.20261124/histo2mri-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg histo2mri-0.1.20261124-macos-arm64.pkg -target /\nhisto2mri self-check\nhisto2mri mri.nii.gz section.tif out --slice 50"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/histo2mri-v0.1.20261124/histo2mri-0.1.20261124-windows-x64.zip",
+          "sha256": "28877d7b9dc589274193fbc29cc6001c3847ae0374ee2c258354e620af8c4609",
+          "bytes": 38734126,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/histo2mri-v0.1.20261124/histo2mri-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\histo2mri-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\histo2mri-0.1.20261124-windows-x64\\histo2mri.exe mri.nii.gz section.tif out --slice 50"
+        }
+      ],
+      "containers": []
+    },
+    "deconvolution": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/deconvolution-v0.1.20261124/deconvolution-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "75f393216de5f27f0b34b5747ab2fa4b935d841e3e3616593ee90d455178d8d0",
+          "bytes": 47802853,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/deconvolution-v0.1.20261124/deconvolution-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf deconvolution-0.1.20261124-linux-x64.tar.gz\n./deconvolution-0.1.20261124-linux-x64/deconvolution stack.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/deconvolution-v0.1.20261124/deconvolution-0.1.20261124-macos-arm64.pkg",
+          "sha256": "ae1773dc705822fd2ab6f75efe7c637d8ee56f9fbd8c45ccd5a1c51d6e265168",
+          "bytes": 41504968,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/deconvolution-v0.1.20261124/deconvolution-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg deconvolution-0.1.20261124-macos-arm64.pkg -target /\ndeconvolution self-check\ndeconvolution stack.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/deconvolution-v0.1.20261124/deconvolution-0.1.20261124-windows-x64.zip",
+          "sha256": "052e229b1a3e5f45b62652c0800a237a4d3b4d3f08584ddf91b0a58b840a19a9",
+          "bytes": 38585997,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/deconvolution-v0.1.20261124/deconvolution-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\deconvolution-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\deconvolution-0.1.20261124-windows-x64\\deconvolution.exe stack.tif results"
+        }
+      ],
+      "containers": []
+    },
+    "tumour-report": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/tumour-report-v0.1.20261124/tumour-report-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "820bad674b56a74e933e24ae9d86b337a85f2c6bd1249add34d7d2f7107b0692",
+          "bytes": 163660793,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/tumour-report-v0.1.20261124/tumour-report-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf tumour-report-0.1.20261124-linux-x64.tar.gz\n./tumour-report-0.1.20261124-linux-x64/tumour-report t1c.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/tumour-report-v0.1.20261124/tumour-report-0.1.20261124-macos-arm64.pkg",
+          "sha256": "a280d88f863bcc59a26c3de72dc0470002df05c089731d9d4a4ddb07fb0b5e47",
+          "bytes": 165389205,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/tumour-report-v0.1.20261124/tumour-report-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg tumour-report-0.1.20261124-macos-arm64.pkg -target /\ntumour-report self-check\ntumour-report t1c.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/tumour-report-v0.1.20261124/tumour-report-0.1.20261124-windows-x64.zip",
+          "sha256": "955103f4795e98660074750706950f68b1ccd0c127abeb70d0fe8c0c2a1cb8ad",
+          "bytes": 166138978,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/tumour-report-v0.1.20261124/tumour-report-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\tumour-report-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\tumour-report-0.1.20261124-windows-x64\\tumour-report.exe t1c.nii.gz results"
+        }
+      ],
+      "containers": []
+    },
+    "denoise": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "totalsegmentator": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/totalsegmentator-v0.1.20261124/totalsegmentator-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "460ed6af57f4387399b4c45bf2efc05082260d3aff2937c2f1caeb6dca9ff9e6",
+          "bytes": 648551591,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/totalsegmentator-v0.1.20261124/totalsegmentator-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf totalsegmentator-0.1.20261124-linux-x64.tar.gz\n./totalsegmentator-0.1.20261124-linux-x64/totalsegmentator scan.nii.gz out"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/totalsegmentator-v0.1.20261124/totalsegmentator-0.1.20261124-macos-arm64.pkg",
+          "sha256": "8423f2c39ba49d3f3f3d2795de03744013a303a1607cbd2659d3cacc117a3237",
+          "bytes": 650154907,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/totalsegmentator-v0.1.20261124/totalsegmentator-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg totalsegmentator-0.1.20261124-macos-arm64.pkg -target /\ntotalsegmentator self-check\ntotalsegmentator scan.nii.gz out"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/totalsegmentator-v0.1.20261124/totalsegmentator-0.1.20261124-windows-x64.zip",
+          "sha256": "8821af92b30f311911e83cd6746a379dea4390a8b279aecb66d454e70ad40af9",
+          "bytes": 650891919,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/totalsegmentator-v0.1.20261124/totalsegmentator-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\totalsegmentator-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\totalsegmentator-0.1.20261124-windows-x64\\totalsegmentator.exe scan.nii.gz out"
+        }
+      ],
+      "containers": [
+        {
+          "id": "totalsegmentator",
+          "label": "totalsegmentator 2.18.0 (20261012)",
+          "url": "https://hub.docker.com/r/vnmd/totalsegmentator_2.18.0",
+          "dockerImage": "vnmd/totalsegmentator_2.18.0:20261012",
+          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/totalsegmentator_2.18.0_20261012.simg",
+          "apptainerName": "totalsegmentator_2.18.0_20261012"
+        }
+      ]
+    },
+    "cellpose": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.2.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/cellpose-v0.2.20261124/cellpose-0.2.20261124-linux-x64.tar.gz",
+          "sha256": "afa2ba4bbadd491cece902145a886614829588bcbba765076afca277d7a0f299",
+          "bytes": 114331955,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/cellpose-v0.2.20261124/cellpose-0.2.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf cellpose-0.2.20261124-linux-x64.tar.gz\n./cellpose-0.2.20261124-linux-x64/cellpose image.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.2.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/cellpose-v0.2.20261124/cellpose-0.2.20261124-macos-arm64.pkg",
+          "sha256": "7f9453ce0a5c72fb36c2a558a646509854cc3ad78fdd3dc3a38012fb4b431fd2",
+          "bytes": 115954496,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/cellpose-v0.2.20261124/cellpose-0.2.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg cellpose-0.2.20261124-macos-arm64.pkg -target /\ncellpose self-check\ncellpose image.tif results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.2.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/cellpose-v0.2.20261124/cellpose-0.2.20261124-windows-x64.zip",
+          "sha256": "f6309c82a6529e3014a9240ab545cbac633e978e78643ff615c495e3570800ff",
+          "bytes": 116671658,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/cellpose-v0.2.20261124/cellpose-0.2.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\cellpose-0.2.20261124-windows-x64.zip -DestinationPath .\n.\\cellpose-0.2.20261124-windows-x64\\cellpose.exe image.tif results"
+        }
+      ],
+      "containers": []
+    },
+    "medsam2": {
+      "desktop": true,
       "profile": "interactive",
       "assets": [],
       "downloads": [],
       "containers": []
     },
-    "deconvolution": {
+    "brainchomp": {
       "desktop": true,
-      "profile": "interactive",
+      "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/brainchomp-v0.1.20261124/brainchomp-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "af00860cbf6101578c5984af8b8fe821088fbb12a41041768288327210a125cc",
+          "bytes": 48025944,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/brainchomp-v0.1.20261124/brainchomp-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf brainchomp-0.1.20261124-linux-x64.tar.gz\n./brainchomp-0.1.20261124-linux-x64/brainchomp rodent.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/brainchomp-v0.1.20261124/brainchomp-0.1.20261124-macos-arm64.pkg",
+          "sha256": "a38c7f7ec745668ac7b0e7bda544bbdbd706a37e5fb29c89e3b7cff83069cabe",
+          "bytes": 41728893,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/brainchomp-v0.1.20261124/brainchomp-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg brainchomp-0.1.20261124-macos-arm64.pkg -target /\nbrainchomp self-check\nbrainchomp rodent.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/brainchomp-v0.1.20261124/brainchomp-0.1.20261124-windows-x64.zip",
+          "sha256": "eea3babd00330c4bb26815c5092db2ca0c4816e5bcab3370124af6aafdfae63e",
+          "bytes": 38802279,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/brainchomp-v0.1.20261124/brainchomp-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\brainchomp-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\brainchomp-0.1.20261124-windows-x64\\brainchomp.exe rodent.nii.gz results"
+        }
+      ],
+      "containers": []
+    },
+    "dermoscope": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dermoscope-v0.1.20261124/dermoscope-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "6c8887ca6608e5c36012730a93c675871dd652cdf746431c86f2ab0ecfa71d64",
+          "bytes": 47883762,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dermoscope-v0.1.20261124/dermoscope-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf dermoscope-0.1.20261124-linux-x64.tar.gz\n./dermoscope-0.1.20261124-linux-x64/dermoscope lesion.jpg out"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dermoscope-v0.1.20261124/dermoscope-0.1.20261124-macos-arm64.pkg",
+          "sha256": "5b6d77e365763f2517a77764bc4fedf51949bb5d5e027e8e89617743d5b8f92a",
+          "bytes": 41583122,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dermoscope-v0.1.20261124/dermoscope-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg dermoscope-0.1.20261124-macos-arm64.pkg -target /\ndermoscope self-check\ndermoscope lesion.jpg out"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dermoscope-v0.1.20261124/dermoscope-0.1.20261124-windows-x64.zip",
+          "sha256": "e5dc3bdb2eca53fdf80692922229b10f77ec0b0b24cb9cf06f525236d53771aa",
+          "bytes": 38697722,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dermoscope-v0.1.20261124/dermoscope-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\dermoscope-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\dermoscope-0.1.20261124-windows-x64\\dermoscope.exe lesion.jpg out"
+        }
+      ],
+      "containers": []
+    },
+    "skin-chromophore": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/skin-chromophore-v0.1.20261124/skin-chromophore-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "6023bb2c24225b9efafdc48ebf580dafc69ace6e9dca008829939ac3588e7db4",
+          "bytes": 47884757,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/skin-chromophore-v0.1.20261124/skin-chromophore-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf skin-chromophore-0.1.20261124-linux-x64.tar.gz\n./skin-chromophore-0.1.20261124-linux-x64/skin-chromophore skin.jpg out"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/skin-chromophore-v0.1.20261124/skin-chromophore-0.1.20261124-macos-arm64.pkg",
+          "sha256": "6ecd20cdc80b053ae29353709ea6e6cb15e1236f42bf2a3c23e7fe0af5657c9a",
+          "bytes": 41582412,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/skin-chromophore-v0.1.20261124/skin-chromophore-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg skin-chromophore-0.1.20261124-macos-arm64.pkg -target /\nskin-chromophore self-check\nskin-chromophore skin.jpg out"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/skin-chromophore-v0.1.20261124/skin-chromophore-0.1.20261124-windows-x64.zip",
+          "sha256": "ff1177483b483deeb7de3c206ce730ff3199e557b2ab23457db229ed21a92330",
+          "bytes": 38721550,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/skin-chromophore-v0.1.20261124/skin-chromophore-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\skin-chromophore-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\skin-chromophore-0.1.20261124-windows-x64\\skin-chromophore.exe skin.jpg out"
+        }
+      ],
+      "containers": []
+    },
+    "wound-planimetry": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/wound-planimetry-v0.1.20261124/wound-planimetry-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "87b921b2ee2fc1e493ed4ae2730e13013c994746dc32680506e1b80368378599",
+          "bytes": 47885887,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/wound-planimetry-v0.1.20261124/wound-planimetry-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf wound-planimetry-0.1.20261124-linux-x64.tar.gz\n./wound-planimetry-0.1.20261124-linux-x64/wound-planimetry wound.jpg out"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/wound-planimetry-v0.1.20261124/wound-planimetry-0.1.20261124-macos-arm64.pkg",
+          "sha256": "bfce018221c0c3939efd6ddfdcc6a96d200dd203822c9bbdb1e3033dbf8252e4",
+          "bytes": 41574603,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/wound-planimetry-v0.1.20261124/wound-planimetry-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg wound-planimetry-0.1.20261124-macos-arm64.pkg -target /\nwound-planimetry self-check\nwound-planimetry wound.jpg out"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/wound-planimetry-v0.1.20261124/wound-planimetry-0.1.20261124-windows-x64.zip",
+          "sha256": "08c5bd6a0e4d24e46730ac402adccb8d4627710e480eb785acc01665625bf88b",
+          "bytes": 38716324,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/wound-planimetry-v0.1.20261124/wound-planimetry-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\wound-planimetry-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\wound-planimetry-0.1.20261124-windows-x64\\wound-planimetry.exe wound.jpg out"
+        }
+      ],
+      "containers": []
+    },
+    "derm-compare": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/derm-compare-v0.1.20261124/derm-compare-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "6e57fcb90a7c798490ca3d8e07b95bbb9d486f87e5309fc6f52765bf8a339bf8",
+          "bytes": 47883611,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/derm-compare-v0.1.20261124/derm-compare-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false,
+          "command": "tar -xzf derm-compare-0.1.20261124-linux-x64.tar.gz\n./derm-compare-0.1.20261124-linux-x64/derm-compare t0.jpg t1.jpg out"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/derm-compare-v0.1.20261124/derm-compare-0.1.20261124-macos-arm64.pkg",
+          "sha256": "f3f6ac013e79390394f9e2782242e4eb56b297ea095be8b21f611d93eb3c2f19",
+          "bytes": 41589962,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/derm-compare-v0.1.20261124/derm-compare-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false,
+          "command": "sudo installer -pkg derm-compare-0.1.20261124-macos-arm64.pkg -target /\nderm-compare self-check\nderm-compare t0.jpg t1.jpg out"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/derm-compare-v0.1.20261124/derm-compare-0.1.20261124-windows-x64.zip",
+          "sha256": "771c58ca7b7240489ad45e15395c4f3438b6ac5a322ff1eaddb083090dbda3a4",
+          "bytes": 38710612,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/derm-compare-v0.1.20261124/derm-compare-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": false,
+          "command": "Expand-Archive -Path .\\derm-compare-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\derm-compare-0.1.20261124-windows-x64\\derm-compare.exe t0.jpg t1.jpg out"
+        }
+      ],
+      "containers": []
+    },
+    "dermvit": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dermvit-v0.1.20261124/dermvit-0.1.20261124-linux-x64.tar.gz",
+          "sha256": "52286ff64dc7e10b888e1148156b0df7d924eae18408586b034c20b193dfba27",
+          "bytes": 126415642,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dermvit-v0.1.20261124/dermvit-0.1.20261124-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf dermvit-0.1.20261124-linux-x64.tar.gz\n./dermvit-0.1.20261124-linux-x64/dermvit lesion.jpg out"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dermvit-v0.1.20261124/dermvit-0.1.20261124-macos-arm64.pkg",
+          "sha256": "498b48ba51cacf4aa1c64df0d4a86f797934f6b214c6f08ca2ffe3129329dfea",
+          "bytes": 128038360,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dermvit-v0.1.20261124/dermvit-0.1.20261124-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg dermvit-0.1.20261124-macos-arm64.pkg -target /\ndermvit self-check\ndermvit lesion.jpg out"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.1.20261124",
+          "url": "https://github.com/neurodesk/webapps/releases/download/dermvit-v0.1.20261124/dermvit-0.1.20261124-windows-x64.zip",
+          "sha256": "8b0b5a2f8095b18e17b96f091fa68eb667e9c89f0abded93a5cfac66b6868ee1",
+          "bytes": 128770975,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/dermvit-v0.1.20261124/dermvit-0.1.20261124-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\dermvit-0.1.20261124-windows-x64.zip -DestinationPath .\n.\\dermvit-0.1.20261124-windows-x64\\dermvit.exe lesion.jpg out"
+        }
+      ],
       "containers": []
     },
     "openads": {

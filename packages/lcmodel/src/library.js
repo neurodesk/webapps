@@ -13,10 +13,11 @@ export function basisLibrary(manifest) {
       sequence: set.sequence,
       hzpppm: set.hzpppm,
       teMs: set.teMs,
+      tmMs: set.simulation?.tm_ms ?? null,
       shapedPulses: set.pulses === "shaped",
       coEditedMM: set.coEditedMM === true,
       mmSuppressed: set.mmSuppressed === true,
-      library: { url: manifest.base_url + set.file, file: set.file, bytes: asset.bytes, sha256: asset.sha256, label: set.label },
+      library: { url: asset.url ?? manifest.base_url + set.file, file: set.file, bytes: asset.bytes, sha256: asset.sha256, label: set.label },
     };
   });
 }

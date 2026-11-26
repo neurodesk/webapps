@@ -1,0 +1,40 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "lightsheet-atlas-v",
+  "displayName": "Light-sheet atlas",
+  "app": "lightsheet-atlas",
+  "bundleModels": true,
+  "run": "brain.ome.tif out",
+  "readme": {
+    "run": "Register a cleared mouse brain stack to the Allen CCFv3 50 um atlas",
+    "notes": [
+      "Input is a single-channel TIFF, OME-TIFF, folder of TIFF planes or OME-Zarr folder.",
+      "Pass --orientation CODE (e.g. psl) and --voxel-z/--voxel-y/--voxel-x when needed.",
+      "Add --detect to run cellfinder candidate detection; add --no-register for detection only.",
+      "Add --help for every option.",
+      "",
+      "The 50 um Allen Mouse Brain CCFv3 atlas is bundled in models/ for offline execution.",
+      "Research and noncommercial use only (Allen Institute terms of use).",
+      "Please cite Wang et al. 2020 (Allen CCFv3), Tyson et al. 2022 (brainreg),",
+      "Tyson et al. 2021 (cellfinder), and Yushkevich et al. (Greedy)."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "lightsheet-atlas"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "lightsheet-atlas.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "lightsheet-atlas"
+    }
+  }
+}

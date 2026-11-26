@@ -6,7 +6,8 @@ import { templateAsset } from '../ui/templates.js';
 import { fetchModel } from '../worker/fetchModel.js';
 
 export const IMAGE_SLOTS = Object.freeze(['fixed', 'moving']);
-const TITLES = { fixed: 'Fixed image', moving: 'Moving image' };
+const DEFAULT_LABELS = { fixed: 'Fixed', moving: 'Moving' };
+const DEFAULT_ROLES = { fixed: 'fixed', moving: 'moving' };
 const TEMPLATE_CACHE = 'neurodesk-templates';
 
 /**
@@ -31,6 +32,9 @@ export function defineImagePair(view = globalThis.window) {
     #error = '';
     #initialized = false;
     #drops = [];
+    #dropGen = { fixed: 0, moving: 0 };
+    #loading = 0;
+    #loadingExample = false;
     #example;
     #queue = Promise.resolve();
 
@@ -39,7 +43,7 @@ export function defineImagePair(view = globalThis.window) {
     }
 
     connectedCallback() {
-      upgradeProperties(this, ['examples', 'templates', 'lockedFixed', 'slotHelp', 'read', 'open', 'clear', 'validatePair', 'perform', 'onChange', 'onStatus', 'fetchTemplate', 'disabled']);
+      upgradeProperties(this, ['examples', 'templates', 'lockedFixed', 'slotHelp', 'slotLabels', 'exampleRoles', 'showFolder', 'read', 'open', 'clear', 'validatePair', 'perform', 'onChange', 'onStatus', 'fetchTemplate', 'disabled']);
       this.#initialize();
     }
 
@@ -48,7 +52,10 @@ export function defineImagePair(view = globalThis.window) {
       this.#initialized = false;
     }
 
-    attributeChangedCallback() {
+    attributeChangedCallback(name, oldValue, newValue) {
+      if (name === 'disabled' && oldValue === null && newValue !== null && this.#loading === 0 && !this.#loadingExample) {
+        this.#report({ cancelPending: true });
+      }
       this.#refresh();
     }
 
@@ -61,14 +68,35 @@ export function defineImagePair(view = globalThis.window) {
     get error() { return this.#error; }
     get exampleControl() { return this.#example; }
 
+    #slotLabel(slot) {
+      return this.slotLabels?.[slot] || DEFAULT_LABELS[slot];
+    }
+
+    #slotRole(slot) {
+      return this.exampleRoles?.[slot] || DEFAULT_ROLES[slot];
+    }
+
+    #hasFolderPicker() {
+      return this.showFolder !== false;
+    }
+
     /** Read files into a slot, as the picker and a drop do. */
-    load(slot, files) {
-      return this.#operation(`Reading the ${slot} image · converting DICOM if needed…`, signal => this.#loadFiles(slot, files, signal));
+    load(slot, files, { force = false } = {}) {
+      this.#dropGen[slot] += 1;
+      const name = this.#slotLabel(slot).toLowerCase();
+      const message = this.#hasFolderPicker()
+        ? `Reading the ${name} image · converting DICOM if needed…`
+        : `Reading the ${name} image…`;
+      return this.#operation(message, signal => this.#loadFiles(slot, files, signal), { force, allowReplace: true });
     }
 
     /** Put one already-read candidate into a slot, as automation and an app action do. */
     use(slot, candidate) {
-      return this.#operation(`Loading the ${slot} image…`, signal => this.#commit(slot, [candidate], 0, signal));
+      if (this.disabled) return Promise.resolve();
+      this.#dropGen[slot] += 1;
+      this.#report({ cancelPending: true });
+      const name = this.#slotLabel(slot).toLowerCase();
+      return this.#operation(`Loading the ${name} image…`, signal => this.#commit(slot, [candidate], 0, signal));
     }
 
     /**
@@ -76,24 +104,35 @@ export function defineImagePair(view = globalThis.window) {
      * such as an automation run: no second `perform`, and failures throw.
      */
     async useWithin(slot, candidate, signal) {
+      this.#dropGen[slot] += 1;
+      this.#report({ cancelPending: true });
       await this.#commit(slot, [candidate], 0, signal);
     }
 
     async loadWithin(slot, files, signal) {
+      this.#dropGen[slot] += 1;
+      this.#report({ cancelPending: true });
       await this.#loadFiles(slot, files, signal);
     }
 
-    reset(slot) {
+    reset(slot, { cancelPending = false } = {}) {
       if (slot === 'fixed' && this.lockedFixed) return;
+      this.#dropGen[slot] += 1;
       this.#example?.reset();
       this.#state[slot] = null;
       this.clear?.(slot);
-      this.#changed(slot);
+      this.#changed(slot, { cancelPending });
     }
 
     swap() {
-      if (this.lockedFixed) return Promise.resolve();
-      return this.#operation('Swapping the fixed and moving images…', signal => this.#swap(signal));
+      if (this.disabled || this.lockedFixed) return Promise.resolve();
+      if (!this.#state.fixed && !this.#state.moving) return Promise.resolve();
+      this.#dropGen.fixed += 1;
+      this.#dropGen.moving += 1;
+      this.#report({ cancelPending: true });
+      const fixedName = this.#slotLabel('fixed').toLowerCase();
+      const movingName = this.#slotLabel('moving').toLowerCase();
+      return this.#operation(`Swapping the ${fixedName} and ${movingName} images…`, signal => this.#swap(signal));
     }
 
     #initialize() {
@@ -103,7 +142,26 @@ export function defineImagePair(view = globalThis.window) {
       for (const slot of IMAGE_SLOTS) {
         const parts = this.#parts[slot];
         if (parts.section && !this.#isLocked(slot)) {
-          this.#drops.push(bindFileDrop(parts.section, files => void this.load(slot, files), this.ownerDocument, () => this.disabled));
+          this.#drops.push(bindFileDrop(parts.section, filesPromise => {
+            const gen = ++this.#dropGen[slot];
+            void Promise.resolve(filesPromise).then(async files => {
+              if (gen !== this.#dropGen[slot] || !files?.length || this.disabled) return;
+              const previousState = this.#state[slot];
+              const previousFile = previousState?.candidate?.file ?? null;
+              this.#report({ cancelPending: true });
+              const loadPromise = this.load(slot, Promise.resolve(files));
+              const activeGen = this.#dropGen[slot];
+              await loadPromise;
+              if (activeGen === this.#dropGen[slot] && this.#state[slot] !== previousState && parts.input) {
+                parts.input.dispatchEvent(new window.CustomEvent('nd-slot-drop', {
+                  bubbles: true,
+                  detail: { previousFiles: previousFile ? [previousFile] : [] },
+                }));
+              }
+            }, error => {
+              if (gen === this.#dropGen[slot]) this.onStatus?.(error?.message || String(error), true);
+            });
+          }, this.ownerDocument, () => this.disabled));
         }
       }
       if (this.lockedFixed && !this.#state.fixed) this.#state.fixed = lockedState(this.lockedFixed);
@@ -130,7 +188,9 @@ export function defineImagePair(view = globalThis.window) {
         this.#parts[slot] = this.#renderSlot(slot);
         children.push(this.#parts[slot].section);
         if (slot === 'fixed' && !this.lockedFixed) {
-          this.#parts.swap = element(doc, 'button', { id: 'swapButton', className: 'nd-btn nd-btn-secondary nd-btn-sm', type: 'button' }, '⇅ Swap fixed and moving');
+          const fixedName = this.#slotLabel('fixed').toLowerCase();
+          const movingName = this.#slotLabel('moving').toLowerCase();
+          this.#parts.swap = element(doc, 'button', { id: 'swapButton', className: 'nd-btn nd-btn-secondary nd-btn-sm', type: 'button' }, `⇅ Swap ${fixedName} and ${movingName}`);
           this.#parts.swap.addEventListener('click', () => void this.swap());
           children.push(this.#parts.swap);
         }
@@ -145,17 +205,19 @@ export function defineImagePair(view = globalThis.window) {
     #renderSlot(slot) {
       const doc = this.ownerDocument;
       const locked = this.#isLocked(slot);
+      const label = this.#slotLabel(slot);
+      const lower = label.toLowerCase();
       const section = element(doc, 'section', { id: `${slot}Slot`, className: 'nd-image-slot', 'aria-labelledby': `${slot}SlotTitle` });
       section.dataset.slot = slot;
       // The card takes its own drops; the page drop leaves it alone.
       if (!locked) section.dataset.dropTarget = '';
       const header = element(doc, 'div', { className: 'nd-image-slot-header' });
-      const title = element(doc, 'span', { id: `${slot}SlotTitle`, className: 'nd-image-slot-title' }, TITLES[slot]);
+      const title = element(doc, 'span', { id: `${slot}SlotTitle`, className: 'nd-image-slot-title' }, `${label} image`);
       header.append(title);
-      if (this.slotHelp?.[slot]) header.append(' ', renderInfoIcon(this.slotHelp[slot], { label: `About the ${slot} image` }, doc));
-      const clear = element(doc, 'button', { id: `${slot}Clear`, className: 'nd-btn-icon nd-btn-icon-sm nd-image-slot-clear', type: 'button', 'aria-label': `Clear the ${slot} image`, title: `Clear the ${slot} image` }, '×');
+      if (this.slotHelp?.[slot]) header.append(' ', renderInfoIcon(this.slotHelp[slot], { label: `About the ${lower} image` }, doc));
+      const clear = element(doc, 'button', { id: `${slot}Clear`, className: 'nd-btn-icon nd-btn-icon-sm nd-image-slot-clear', type: 'button', 'aria-label': `Clear the ${lower} image`, title: `Clear the ${lower} image` }, '×');
       clear.hidden = true;
-      clear.addEventListener('click', () => this.reset(slot));
+      clear.addEventListener('click', () => this.reset(slot, { cancelPending: true }));
       header.append(clear);
       const info = element(doc, 'p', { id: `${slot}Info`, className: 'nd-file-info', 'aria-live': 'polite' });
       info.hidden = true;
@@ -168,8 +230,10 @@ export function defineImagePair(view = globalThis.window) {
         return parts;
       }
       const actions = element(doc, 'div', { className: 'nd-row nd-image-slot-actions' });
-      parts.input = this.#picker(actions, `${slot}Input`, `Load ${slot} image…`, `Load ${slot} image`, slot, false);
-      parts.folder = this.#picker(actions, `${slot}FolderInput`, 'Folder…', `Load ${slot} image folder`, slot, true);
+      parts.input = this.#picker(actions, `${slot}Input`, `Load ${lower} image…`, `Load ${lower} image`, slot, false);
+      if (this.#hasFolderPicker()) {
+        parts.folder = this.#picker(actions, `${slot}FolderInput`, 'Folder…', `Load ${lower} image folder`, slot, true);
+      }
       section.append(header, info, actions);
       if (slot === 'fixed' && this.templates?.length) {
         const field = element(doc, 'div', { id: 'fixedTemplateField', className: 'nd-field' });
@@ -181,7 +245,10 @@ export function defineImagePair(view = globalThis.window) {
         for (const entry of this.templates) select.append(new window.Option(entry.label, entry.id));
         select.addEventListener('change', () => {
           const entry = this.templates.find(item => item.id === select.value);
-          if (entry) void this.#operation(`Loading the ${entry.label} template…`, signal => this.#loadTemplate(entry, signal));
+          if (entry && !this.disabled) {
+            this.#report({ cancelPending: true });
+            void this.#operation(`Loading the ${entry.label} template…`, signal => this.#loadTemplate(entry, signal));
+          }
         });
         field.append(label, select);
         section.append(field);
@@ -193,7 +260,8 @@ export function defineImagePair(view = globalThis.window) {
       seriesField.append(element(doc, 'label', { htmlFor: `${slot}Series` }, `${slot === 'fixed' ? 'Fixed' : 'Moving'} series`), series);
       series.addEventListener('change', () => {
         const state = this.#state[slot];
-        if (!state) return;
+        if (!state || this.disabled) return;
+        this.#report({ cancelPending: true });
         const index = Number(series.value);
         void this.#operation(`Loading the ${slot} series…`, signal => this.#commit(slot, state.series, index, signal));
       });
@@ -211,10 +279,25 @@ export function defineImagePair(view = globalThis.window) {
         input.setAttribute('webkitdirectory', '');
         input.setAttribute('directory', '');
       }
+      let replacing = false;
+      input.addEventListener('nd-replace', () => { replacing = true; });
       input.addEventListener('change', () => {
         const files = Array.from(input.files || []);
         input.value = '';
-        if (files.length && !this.disabled) void this.load(slot, Promise.resolve(files));
+        const fromReplace = replacing;
+        replacing = false;
+        const canQueueWhileBusy = fromReplace && this.#loading > 0;
+        if (this.disabled && !canQueueWhileBusy) {
+          this.#report();
+          return;
+        }
+        if (files.length) {
+          void this.load(slot, Promise.resolve(files), { force: canQueueWhileBusy });
+        } else if (canQueueWhileBusy) {
+          void this.#enqueue(() => this.reset(slot));
+        } else {
+          this.reset(slot);
+        }
       });
       wrapper.append(input, element(doc, 'span', {}, text));
       parent.append(wrapper);
@@ -233,15 +316,17 @@ export function defineImagePair(view = globalThis.window) {
       return run;
     }
 
-    #operation(message, task) {
-      if (this.disabled) return Promise.resolve();
+    #operation(message, task, { force = false, allowReplace = false } = {}) {
+      if (this.disabled && !force) return Promise.resolve();
       this.#example?.reset();
+      if (allowReplace) this.#loading += 1;
       return this.#enqueue(async () => {
         try {
           await this.#perform(message, task);
         } catch (error) {
           if (error?.name !== 'AbortError') this.onStatus?.(error?.message || String(error), true);
         } finally {
+          if (allowReplace) this.#loading = Math.max(0, this.#loading - 1);
           this.#refresh();
           this.#report();
         }
@@ -249,12 +334,13 @@ export function defineImagePair(view = globalThis.window) {
     }
 
     // Tell the page drop which slots hold an image, so a dropped scan goes to an empty one.
-    #report() {
+    #report({ cancelPending = false } = {}) {
       for (const slot of IMAGE_SLOTS) {
         const input = this.#parts[slot]?.input;
         if (!input) continue;
         const file = this.#state[slot]?.candidate?.file;
-        input.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail: { files: file ? [file] : [] } }));
+        const detail = cancelPending ? { files: file ? [file] : [], cancelPending: true } : { files: file ? [file] : [] };
+        input.dispatchEvent(new window.CustomEvent('nd-files', { bubbles: true, detail }));
       }
     }
 
@@ -279,28 +365,49 @@ export function defineImagePair(view = globalThis.window) {
     }
 
     async #loadExample(example, { fetchFiles, assertCurrent, signal }) {
-      const files = await fetchFiles();
-      assertCurrent();
-      const byRole = Object.fromEntries(example.files.map((asset, index) => [asset.role, { asset, file: files[index] }]));
-      const slots = IMAGE_SLOTS.filter(slot => byRole[slot] && !this.#isLocked(slot));
-      if (!slots.length) throw new Error(`${example.label} has no fixed or moving image.`);
+      this.#dropGen.fixed += 1;
+      this.#dropGen.moving += 1;
       // The selector reports a failure itself, so this task rethrows instead of reporting.
-      await this.#enqueue(() => this.#perform(`Loading ${example.label}…`, async taskSignal => {
-        const loadSignal = taskSignal ? AbortSignal.any([taskSignal, signal]) : signal;
-        for (const slot of slots) {
-          const { asset, file } = byRole[slot];
-          const read = this.read ?? (list => list.map(item => ({ name: item.name, file: item })));
-          const candidates = await read([file], { slot, signal: loadSignal });
-          assertCurrent();
-          if (!candidates?.length) throw new Error(`The example ${slot} image could not be read.`);
-          if (asset.brainExtracted !== undefined) candidates[0].brainExtracted = asset.brainExtracted;
-          await this.#commit(slot, candidates, 0, loadSignal);
-          assertCurrent();
+      await this.#enqueue(async () => {
+        this.#loadingExample = true;
+        try {
+          await this.#perform(`Loading ${example.label}…`, async taskSignal => {
+            const loadSignal = taskSignal ? AbortSignal.any([taskSignal, signal]) : signal;
+            const onAppAbort = () => this.#example?.cancel();
+            taskSignal?.addEventListener('abort', onAppAbort, { once: true });
+            try {
+              const files = await fetchFiles();
+              loadSignal?.throwIfAborted();
+              assertCurrent();
+              const byRole = Object.fromEntries(example.files.map((asset, index) => [asset.role, { asset, file: files[index] }]));
+              const slots = IMAGE_SLOTS.filter(slot => byRole[this.#slotRole(slot)] && !this.#isLocked(slot));
+              if (!slots.length) {
+                const fixedName = this.#slotLabel('fixed').toLowerCase();
+                const movingName = this.#slotLabel('moving').toLowerCase();
+                throw new Error(`${example.label} has no ${fixedName} or ${movingName} image.`);
+              }
+              for (const slot of slots) {
+                const { asset, file } = byRole[this.#slotRole(slot)];
+                const read = this.read ?? (list => list.map(item => ({ name: item.name, file: item })));
+                const candidates = await read([file], { slot, signal: loadSignal });
+                loadSignal?.throwIfAborted();
+                assertCurrent();
+                if (!candidates?.length) throw new Error(`The example ${this.#slotLabel(slot).toLowerCase()} image could not be read.`);
+                if (asset.brainExtracted !== undefined) candidates[0].brainExtracted = asset.brainExtracted;
+                await this.#commit(slot, candidates, 0, loadSignal);
+                loadSignal?.throwIfAborted();
+                assertCurrent();
+              }
+            } finally {
+              taskSignal?.removeEventListener('abort', onAppAbort);
+            }
+          });
+        } finally {
+          this.#loadingExample = false;
+          this.#refresh();
+          this.#report();
         }
-      }).finally(() => {
-        this.#refresh();
-        this.#report();
-      }));
+      });
     }
 
     async #commit(slot, series, index, signal) {
@@ -351,13 +458,13 @@ export function defineImagePair(view = globalThis.window) {
         throw error;
       }
       this.#state = { fixed: moving, moving: fixed };
-      this.#changed('fixed');
+      this.#changed('fixed', { cancelPending: true });
     }
 
-    #changed(slot) {
+    #changed(slot, { cancelPending = false } = {}) {
       this.#error = this.#validate();
       this.#refresh();
-      this.#report();
+      this.#report({ cancelPending });
       const detail = { slot, fixed: this.#state.fixed, moving: this.#state.moving, ready: this.ready, error: this.#error };
       this.onChange?.(detail);
       this.dispatchEvent(new window.CustomEvent('nd-image-pair-change', { bubbles: true, composed: true, detail }));
@@ -396,7 +503,7 @@ export function defineImagePair(view = globalThis.window) {
         parts.clear.disabled = disabled;
         if (this.#isLocked(slot)) continue;
         parts.input.disabled = disabled;
-        parts.folder.disabled = disabled;
+        if (parts.folder) parts.folder.disabled = disabled;
         const series = state?.series ?? [];
         parts.seriesField.hidden = series.length < 2;
         if (series.length >= 2) {
@@ -488,7 +595,7 @@ export async function fetchTemplateFile(entry, { signal, window = globalThis, fe
 export function createImagePair(config = {}, doc = globalThis.document) {
   defineImagePair(doc.defaultView);
   const pair = doc.createElement('nd-image-pair');
-  for (const key of ['examples', 'templates', 'lockedFixed', 'slotHelp', 'read', 'open', 'clear', 'validatePair', 'perform', 'onChange', 'onStatus', 'fetchTemplate']) {
+  for (const key of ['examples', 'templates', 'lockedFixed', 'slotHelp', 'slotLabels', 'exampleRoles', 'showFolder', 'read', 'open', 'clear', 'validatePair', 'perform', 'onChange', 'onStatus', 'fetchTemplate']) {
     if (config[key] !== undefined) pair[key] = config[key];
   }
   if (config.id) pair.id = config.id;

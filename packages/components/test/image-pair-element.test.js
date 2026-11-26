@@ -3,6 +3,7 @@ import test from 'node:test';
 import { gzipSync } from 'node:zlib';
 import { JSDOM } from 'jsdom';
 import { createImagePair, fetchTemplateFile } from '../src/elements/image-pair.js';
+import { bindPageDrop } from '../src/ui/pageDrop.js';
 import { describeNiftiFile } from '../src/file-io/NiftiUtils.js';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -452,3 +453,226 @@ for (const unavailable of ['file stream', 'DecompressionStream']) {
     }
   });
 }
+
+test('createImagePair supports raster slotLabels, exampleRoles, showFolder:false, and empty-change Undo reset', async () => {
+  const { window } = new JSDOM('<!doctype html><body></body>');
+  const cleared = [];
+  const pair = createImagePair({
+    slotLabels: { fixed: 'Baseline', moving: 'Follow-up' },
+    exampleRoles: { fixed: 'baseline', moving: 'followup' },
+    showFolder: false,
+    open: async (_slot, candidate) => ({ name: candidate.name, dims: [64, 64], dimensionality: 2 }),
+    clear: slot => cleared.push(slot),
+  }, window.document);
+  window.document.body.append(pair);
+
+  assert.equal(pair.querySelector('#fixedSlotTitle').textContent, 'Baseline image');
+  assert.equal(pair.querySelector('#movingSlotTitle').textContent, 'Follow-up image');
+  assert.equal(pair.querySelector('#fixedFolderInput'), null);
+  assert.equal(pair.querySelector('#swapButton').textContent, '⇅ Swap baseline and follow-up');
+
+  const input = pair.querySelector('#fixedInput');
+  Object.defineProperty(input, 'files', { get: () => input._files ?? [], set: files => { input._files = files; } });
+  input.files = [new window.File(['a'], 't0.png')];
+  input.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(pair.fixed?.image.name, 't0.png');
+
+  // Shell Undo delivering an empty FileList resets the slot cleanly.
+  input.files = [];
+  input.dispatchEvent(new window.Event('change', { bubbles: true }));
+  assert.equal(pair.fixed, null);
+  assert.deepEqual(cleared, ['fixed']);
+});
+
+test('nd-replace Undo queued while a decode holds the pair disabled still runs once decode finishes', async () => {
+  let releaseDecode;
+  let decodeStarted;
+  const started = new Promise(resolve => { decodeStarted = resolve; });
+  const gate = new Promise(resolve => { releaseDecode = resolve; });
+  const { pair, $, window } = setup({
+    perform: async (_msg, task) => {
+      pair.disabled = true;
+      try { return await task(undefined); } finally { pair.disabled = false; }
+    },
+    open: async (_slot, candidate) => {
+      if (candidate.name === 'dropped.png') {
+        decodeStarted();
+        await gate;
+      }
+      return { name: candidate.name, dims: [32, 32], dimensionality: 2 };
+    },
+  });
+  await pair.use('fixed', { name: 'original.png', file: new window.File(['a'], 'original.png') });
+  assert.equal(pair.fixed?.image.name, 'original.png');
+
+  const input = $('fixedInput');
+  Object.defineProperty(input, 'files', { get: () => input._files ?? [], set: files => { input._files = files; } });
+  // Start a dropped load that holds decode open (pair.disabled === true).
+  input.files = [new window.File(['b'], 'dropped.png')];
+  input.dispatchEvent(new window.CustomEvent('nd-replace', { bubbles: true }));
+  input.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await started;
+  assert.equal(pair.disabled, true);
+
+  // Click Undo while decode is held open -> shell fires nd-replace + change with original file.
+  input.files = [new window.File(['a'], 'original.png')];
+  input.dispatchEvent(new window.CustomEvent('nd-replace', { bubbles: true }));
+  input.dispatchEvent(new window.Event('change', { bubbles: true }));
+
+  releaseDecode();
+  await settle();
+  assert.equal(pair.fixed?.image.name, 'original.png');
+});
+
+test('example downloads enter perform before fetch resolves so app footer cancel aborts download', async () => {
+  let fetchAborted = false;
+  let enteredPerform = false;
+  const controller = new AbortController();
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (_url, init = {}) => new Promise((_resolve, reject) => {
+    init.signal?.addEventListener('abort', () => {
+      fetchAborted = true;
+      reject(new DOMException('Aborted', 'AbortError'));
+    }, { once: true });
+  });
+  try {
+    const { pair, window } = setup({
+      examples: [{ id: 'pair', label: 'Pair', files: [{ role: 'fixed', name: 'f.png', url: 'https://example.test/f.png' }] }],
+      perform: (_msg, task) => {
+        enteredPerform = true;
+        return task(controller.signal);
+      },
+      open: async (_slot, candidate) => ({ name: candidate.name, dimensionality: 2 }),
+    });
+    const select = pair.exampleControl.select;
+    select.value = 'pair';
+    select.dispatchEvent(new window.Event('change'));
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(enteredPerform, true, 'perform started before fetch resolved');
+    controller.abort();
+    await settle();
+    assert.equal(fetchAborted, true, 'aborting perform signal cancels example fetch');
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test('external disable blocks nd-replace Undo and Swap withdraws pending Undo via cancelPending', async () => {
+  const { pair, $, window } = setup();
+  const fileA = new window.File(['a'], 'a.png');
+  const fileB = new window.File(['b'], 'b.png');
+  await pair.use('fixed', { name: 'a.png', file: fileA });
+  await pair.use('moving', { name: 'b.png', file: fileB });
+
+  // External disable (e.g. active processing worker, #busy === 0) must block nd-replace Undo clears.
+  pair.disabled = true;
+  const fixedInput = $('fixedInput');
+  Object.defineProperty(fixedInput, 'files', { get: () => fixedInput._files ?? [], set: files => { fixedInput._files = files; } });
+  fixedInput.files = [];
+  fixedInput.dispatchEvent(new window.CustomEvent('nd-replace', { bubbles: true }));
+  fixedInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await settle();
+  assert.equal(pair.fixed?.image.name, 'a.png', 'external disable preserves inputs against stale Undo');
+
+  // Swap reports cancelPending: true so pageDrop withdraws any stale Undo button.
+  pair.disabled = false;
+  const cancelFlags = [];
+  fixedInput.addEventListener('nd-files', event => cancelFlags.push(Boolean(event.detail?.cancelPending)));
+  await pair.swap();
+  assert.equal(pair.fixed?.image.name, 'b.png');
+  assert.equal(pair.moving?.image.name, 'a.png');
+  assert.ok(cancelFlags.includes(true), 'Swap emits cancelPending: true to withdraw stale Undo');
+});
+
+test('Swap withdraws page-drop Undo immediately and blocks nd-replace while Swap is in progress', async (t) => {
+  const { window } = new JSDOM('<!doctype html><body><footer id="status"><span id="statusText"></span></footer></body>');
+  const { document } = window;
+  const saved = { Event: globalThis.Event, CustomEvent: globalThis.CustomEvent, DataTransfer: globalThis.DataTransfer };
+  Object.assign(globalThis, {
+    Event: window.Event,
+    CustomEvent: window.CustomEvent,
+    DataTransfer: class {
+      items = { list: [], add: file => this.items.list.push(file) };
+      get files() { return this.items.list; }
+    },
+  });
+  t.after(() => Object.assign(globalThis, saved));
+
+  let releaseSwap;
+  let swapStarted;
+  const enteredSwap = new Promise(resolve => { swapStarted = resolve; });
+  const swapGate = new Promise(resolve => { releaseSwap = resolve; });
+  let swapping = false;
+
+  const pair = createImagePair({
+    read: files => files.map(file => ({ name: file.name, file })),
+    perform: async (_msg, task) => {
+      pair.disabled = true;
+      try { return await task(undefined); } finally { pair.disabled = false; }
+    },
+    open: async (_slot, candidate) => {
+      if (swapping && candidate.name === 'moving.nii') {
+        swapStarted();
+        await swapGate;
+      }
+      return { name: candidate.name, dims: [4, 4, 4], dimensionality: 3 };
+    },
+    clear: () => {},
+  }, document);
+  document.body.prepend(pair);
+  for (const field of document.querySelectorAll('input[type="file"]')) {
+    Object.defineProperty(field, 'files', { get: () => field._files ?? [], set: files => { field._files = files; } });
+  }
+  const binding = bindPageDrop(document);
+  t.after(() => binding.destroy());
+
+  const fixedFile = new window.File(['a'], 'fixed.nii');
+  const movingFile = new window.File(['b'], 'moving.nii');
+  await pair.use('fixed', { name: 'fixed.nii', file: fixedFile });
+
+  // Drop moving.nii on the page -> fills empty moving slot and offers Undo.
+  const dropEvent = new window.Event('drop', { bubbles: true, cancelable: true });
+  dropEvent.dataTransfer = {
+    types: ['Files'],
+    items: [{ kind: 'file', getAsFile: () => movingFile }],
+    files: [movingFile],
+  };
+  document.body.dispatchEvent(dropEvent);
+  await settle();
+  assert.equal(pair.moving?.image.name, 'moving.nii');
+  assert.ok(document.querySelector('.nd-status-undo'), 'page drop offers Undo');
+
+  // Start async Swap -> Undo must disappear synchronously before Swap resolves.
+  swapping = true;
+  const swapPromise = pair.swap();
+  assert.equal(document.querySelector('.nd-status-undo'), null, 'Swap withdraws Undo immediately');
+  await enteredSwap;
+  assert.equal(pair.disabled, true);
+
+  // Even a synthetic nd-replace clear during Swap must be rejected (not queued behind Swap).
+  const movingInput = document.getElementById('movingInput');
+  movingInput.files = [];
+  movingInput.dispatchEvent(new window.CustomEvent('nd-replace', { bubbles: true }));
+  movingInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+
+  releaseSwap();
+  await swapPromise;
+  await settle();
+  assert.equal(pair.fixed?.image.name, 'moving.nii');
+  assert.equal(pair.moving?.image.name, 'fixed.nii');
+
+  // External disable (e.g. Compare button or automation run) also withdraws page-drop Undo immediately.
+  const thirdFile = new window.File(['c'], 'third.nii');
+  const drop2 = new window.Event('drop', { bubbles: true, cancelable: true });
+  drop2.dataTransfer = {
+    types: ['Files'],
+    items: [{ kind: 'file', getAsFile: () => thirdFile }],
+    files: [thirdFile],
+  };
+  document.body.dispatchEvent(drop2);
+  await settle();
+  assert.ok(document.querySelector('.nd-status-undo'), 'second page drop offers Undo');
+  pair.disabled = true;
+  assert.equal(document.querySelector('.nd-status-undo'), null, 'external disable withdraws Undo immediately');
+});

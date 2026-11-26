@@ -1,5 +1,15 @@
 # @neurodesk/white-matter-lesions
 
+## 0.5.20261124
+
+### Patch Changes
+
+- Updated dependencies [dce0e7f]
+- Updated dependencies [94d6e09]
+  - @neurodesk/webapp-components@0.29.0
+  - @neurodesk/synthsr@0.6.20261124
+  - @neurodesk/synthstrip@0.2.0
+
 ## 0.5.20261119
 
 ### Patch Changes

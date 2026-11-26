@@ -67,14 +67,14 @@
           "default": "webgpu",
           "description": "SynthSR inference backend"
         },
-        "brainExtractor": {
+        "mindgrabBackend": {
           "type": "string",
           "enum": [
-            "mindgrab",
-            "synthstrip"
+            "auto",
+            "cpu"
           ],
-          "default": "mindgrab",
-          "description": "Brain extraction engine"
+          "default": "auto",
+          "description": "MindGrab brain extraction backend"
         },
         "normalization": {
           "type": "string",
@@ -132,6 +132,12 @@
         "details": {
           "type": "neuro:provenance",
           "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "commands": {
+          "type": "neuro:provenance",
+          "mediaType": "text/plain",
           "minimum": 1,
           "maximum": 1
         }

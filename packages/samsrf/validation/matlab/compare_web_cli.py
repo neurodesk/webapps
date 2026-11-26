@@ -66,7 +66,6 @@ from compare_cli import expected_results, read_gifti, read_mat
 SOURCE_MODE = 'source-samsrfanalysis-cli'
 RECEIPT_EXECUTION = {'source': 'source', 'compiled-runtime': 'compiled-runtime'}
 ARITHMETIC_REFERENCES = ('current', 'matlab-amd', 'matlab-intel')
-INTEL_SINGLE_REFUSAL = "model: matlab-intel arithmetic requires Data_Precision 'double'; Intel single-precision kernels are not implemented"
 IMAGE_ID = re.compile(r'^sha256:[0-9a-f]{64}$')
 SHA256 = re.compile(r'^[0-9a-f]{64}$')
 MATLAB_EXTRA = re.compile(r'^(SamSrf_defaults\.json|hrf_custom\.mat|src_.+\.mat|reg_.+\.mat)$')
@@ -119,14 +118,11 @@ def expected_web_outcome(run, runner, reference='current'):
     expected refusal; run_web_matrix.mjs's expectedEngineOutcome says the same."""
     model = run['model']
     single = run['precision'] == 'single'
-    # exes/samsrf/core/src/model.rs: Error::NotImplemented comes before ArithmeticReference::validate.
     if single and run['algorithm'] == 'rc' and model.get('Prf_Function', 0) != 0:
         return {'status': 'refused',
                 'message': 'Data_Precision=single with a Prf_Function fit is not supported by this port'}
     if single and run['algorithm'] == 'cf' and model.get('Fit_pRF') == 1:
         return {'status': 'refused', 'message': 'Data_Precision=single with Fit_pRF=1 is not supported by this port'}
-    if single and reference == 'matlab-intel':
-        return {'status': 'refused', 'message': INTEL_SINGLE_REFUSAL}
     return {'status': 'succeeded'}
 
 

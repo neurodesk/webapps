@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createGitHubClient, logExcerpt, reportNightlyFailure, sanitize } from '../scripts/lib/nightly-failures.mjs';
+import { closeRecoveredNightlyIssue, createGitHubClient, logExcerpt, reportNightlyFailure, sanitize } from '../scripts/lib/nightly-failures.mjs';
 
 const run = {
   id: 123, workflow_id: 45, run_attempt: 2, event: 'schedule', status: 'completed', conclusion: 'failure',
@@ -12,7 +12,7 @@ const failedJob = {
   steps: [{ number: 3, name: 'Test app', conclusion: 'failure' }],
 };
 
-function fakeClient({ jobs = [failedJob], issues = [], comments = [], artifacts = [], logs = { text: 'first\nerror: scientific parity failed\nlast', truncated: false }, logError, artifactError } = {}) {
+function fakeClient({ jobs = [failedJob], issues = [], comments = [], events = [], artifacts = [], logs = { text: 'first\nerror: scientific parity failed\nlast', truncated: false }, logError, artifactError } = {}) {
   const calls = [];
   return {
     calls,
@@ -21,6 +21,7 @@ function fakeClient({ jobs = [failedJob], issues = [], comments = [], artifacts 
       if (path.includes('/jobs')) return jobs;
       if (path.startsWith('/issues?')) return issues.map(issue => ({ user: { login: 'github-actions[bot]' }, ...issue }));
       if (path.endsWith('/comments')) return comments.map(comment => ({ user: { login: 'github-actions[bot]' }, ...comment }));
+      if (path.endsWith('/events')) return events;
       if (path.endsWith('/artifacts')) {
         if (artifactError) throw artifactError;
         return artifacts;
@@ -432,4 +433,132 @@ test('explicit assertion diagnostics outrank later failed-test duration summarie
   assert.match(excerpt, /Expected: enabled/);
   assert.match(excerpt, /Received: disabled/);
   assert.doesNotMatch(excerpt, /6.8s failed labels/);
+});
+
+test('closeRecoveredNightlyIssue comments and closes an open workflow issue after a clean passing run', async () => {
+  const passing = {
+    ...run, id: 124, run_attempt: 1, conclusion: 'success',
+    created_at: '2026-10-16T00:00:00Z', run_started_at: '2026-10-16T00:00:00Z', updated_at: '2026-10-16T00:10:00Z',
+  };
+  const client = fakeClient({
+    jobs: [{ id: 700, name: 'report', conclusion: 'success' }],
+    issues: [{
+      number: 8, state: 'open', created_at: '2026-10-15T06:00:00Z',
+      body: '<!-- nightly-workflow:45 -->\n<!-- nightly-run:123:attempt:2 -->\n- Updated: 2026-10-15T00:10:00Z.',
+    }],
+  });
+  assert.deepEqual(
+    await closeRecoveredNightlyIssue({ run: passing, repository: 'owner/repo', defaultBranch: 'main', client }),
+    { issue: 8, closed: true },
+  );
+  assert.equal(writes(client).length, 2);
+  assert.equal(writes(client)[0].path, '/issues/8/comments');
+  assert.match(writes(client)[0].body.body, /^<!-- nightly-recovery:124:attempt:1 -->/);
+  assert.match(writes(client)[0].body.body, /Run 124, attempt 1/);
+  assert.match(writes(client)[0].body.body, /1 job passed/);
+  assert.deepEqual(writes(client)[1], { path: '/issues/8', method: 'PATCH', body: { state: 'closed', state_reason: 'completed' } });
+});
+
+test('closeRecoveredNightlyIssue skips non-qualifying, stale, partial, all-skipped, and already-recovered runs', async () => {
+  const passing = {
+    ...run, id: 124, run_attempt: 1, conclusion: 'success',
+    created_at: '2026-10-16T00:00:00Z', updated_at: '2026-10-16T00:10:00Z',
+  };
+  const openIssue = {
+    number: 8, state: 'open', created_at: '2026-10-15T06:00:00Z',
+    body: '<!-- nightly-workflow:45 -->\n<!-- nightly-run:123:attempt:2 -->\n- Updated: 2026-10-15T00:10:00Z.',
+  };
+  for (const overrides of [{ conclusion: 'failure' }, { event: 'workflow_dispatch' }, { status: 'in_progress' }, { head_branch: 'feature' }]) {
+    const client = fakeClient({ jobs: [{ id: 1, name: 'ok', conclusion: 'success' }], issues: [openIssue] });
+    assert.ok((await closeRecoveredNightlyIssue({ run: { ...passing, ...overrides }, repository: 'owner/repo', defaultBranch: 'main', client })).skipped);
+    assert.deepEqual(writes(client), []);
+  }
+  // No open issue.
+  const closedClient = fakeClient({ jobs: [{ id: 1, name: 'ok', conclusion: 'success' }], issues: [{ ...openIssue, state: 'closed' }] });
+  assert.ok((await closeRecoveredNightlyIssue({ run: passing, repository: 'owner/repo', defaultBranch: 'main', client: closedClient })).skipped);
+  // Passing run older than a later failure comment.
+  const staleClient = fakeClient({
+    jobs: [{ id: 1, name: 'ok', conclusion: 'success' }],
+    issues: [openIssue],
+    comments: [{ body: '<!-- nightly-run:125:attempt:1 -->\n- Updated: 2026-10-16T01:00:00Z.', created_at: '2026-10-16T06:00:00Z' }],
+  });
+  assert.ok((await closeRecoveredNightlyIssue({ run: passing, repository: 'owner/repo', defaultBranch: 'main', client: staleClient })).skipped);
+  // Failed continue-on-error job inside a passing run.
+  const partialClient = fakeClient({
+    jobs: [{ id: 1, name: 'ok', conclusion: 'success' }, { id: 2, name: 'soft', conclusion: 'failure' }],
+    issues: [openIssue],
+  });
+  assert.ok((await closeRecoveredNightlyIssue({ run: passing, repository: 'owner/repo', defaultBranch: 'main', client: partialClient })).skipped);
+  // All-skipped run with zero passing jobs.
+  const allSkipped = fakeClient({ jobs: [{ id: 1, name: 'skipped', conclusion: 'skipped' }], issues: [openIssue] });
+  assert.ok((await closeRecoveredNightlyIssue({ run: passing, repository: 'owner/repo', defaultBranch: 'main', client: allSkipped })).skipped);
+  // Already recovered by this passing attempt and subsequently reopened by a human.
+  const reopenedClient = fakeClient({
+    jobs: [{ id: 1, name: 'ok', conclusion: 'success' }],
+    issues: [openIssue],
+    comments: [{ body: '<!-- nightly-recovery:124:attempt:1 -->\nRecovered', created_at: '2026-10-16T06:00:00Z' }],
+    events: [
+      { event: 'closed', created_at: '2026-10-16T06:00:01Z' },
+      { event: 'reopened', created_at: '2026-10-16T07:00:00Z' },
+    ],
+  });
+  assert.deepEqual(
+    await closeRecoveredNightlyIssue({ run: passing, repository: 'owner/repo', defaultBranch: 'main', client: reopenedClient }),
+    { duplicate: true, issue: 8 },
+  );
+  assert.deepEqual(writes(reopenedClient), []);
+  // Interrupted close (recovery comment landed, PATCH never completed): retries PATCH without duplicating the comment.
+  const interruptedClose = fakeClient({
+    jobs: [{ id: 1, name: 'ok', conclusion: 'success' }],
+    issues: [openIssue],
+    comments: [{ body: '<!-- nightly-recovery:124:attempt:1 -->\nRecovered', created_at: '2026-10-16T06:00:00Z' }],
+    events: [{ event: 'closed', created_at: '2026-10-14T06:00:00Z' }],
+  });
+  assert.deepEqual(
+    await closeRecoveredNightlyIssue({ run: passing, repository: 'owner/repo', defaultBranch: 'main', client: interruptedClose }),
+    { issue: 8, closed: true },
+  );
+  assert.deepEqual(writes(interruptedClose), [{ path: '/issues/8', method: 'PATCH', body: { state: 'closed', state_reason: 'completed' } }]);
+  // Older run rerun passing after a newer recorded failure does not close the issue.
+  const oldRerun = {
+    ...run, id: 120, run_attempt: 2, conclusion: 'success',
+    created_at: '2026-10-14T00:00:00Z', run_started_at: '2026-10-16T00:00:00Z', updated_at: '2026-10-16T00:10:00Z',
+  };
+  const newerRecordedIssue = {
+    number: 8, state: 'open', created_at: '2026-10-15T06:00:00Z',
+    body: '<!-- nightly-workflow:45 -->\n<!-- nightly-run:123:attempt:1 -->\n- Started: 2026-10-15T00:00:00Z. Updated: 2026-10-15T00:10:00Z.',
+  };
+  const staleRerunClient = fakeClient({ jobs: [{ id: 1, name: 'ok', conclusion: 'success' }], issues: [newerRecordedIssue] });
+  assert.ok((await closeRecoveredNightlyIssue({ run: oldRerun, repository: 'owner/repo', defaultBranch: 'main', client: staleRerunClient })).skipped);
+  assert.deepEqual(writes(staleRerunClient), []);
+  // Queue delay: failed run created first (02:00), started late (02:30), finished (02:40);
+  // newer passing run queued at 02:15 and finished at 02:45 closes both new (Created:) and legacy reports.
+  const queuedPass = {
+    ...run, id: 124, run_attempt: 1, conclusion: 'success',
+    created_at: '2026-10-15T02:15:00Z', run_started_at: '2026-10-15T02:15:00Z', updated_at: '2026-10-15T02:45:00Z',
+  };
+  for (const body of [
+    '<!-- nightly-workflow:45 -->\n<!-- nightly-run:123:attempt:1 -->\n- Created: 2026-10-15T02:00:00Z. Started: 2026-10-15T02:30:00Z. Updated: 2026-10-15T02:40:00Z.',
+    '<!-- nightly-workflow:45 -->\n<!-- nightly-run:123:attempt:1 -->\n- Started: 2026-10-15T02:30:00Z. Updated: 2026-10-15T02:40:00Z.',
+  ]) {
+    const queuedClient = fakeClient({
+      jobs: [{ id: 1, name: 'ok', conclusion: 'success' }],
+      issues: [{ number: 8, state: 'open', created_at: '2026-10-15T06:00:00Z', body }],
+    });
+    assert.deepEqual(
+      await closeRecoveredNightlyIssue({ run: queuedPass, repository: 'owner/repo', defaultBranch: 'main', client: queuedClient }),
+      { issue: 8, closed: true },
+    );
+  }
+  // Human-authored recovery marker cannot suppress auto-close; dryRun makes no writes.
+  const humanMarker = fakeClient({
+    jobs: [{ id: 1, name: 'ok', conclusion: 'success' }],
+    issues: [openIssue],
+    comments: [{ user: { login: 'someone' }, body: '<!-- nightly-recovery:124:attempt:1 -->' }],
+  });
+  const preview = await closeRecoveredNightlyIssue({ run: passing, repository: 'owner/repo', defaultBranch: 'main', client: humanMarker, dryRun: true });
+  assert.equal(preview.dryRun, true);
+  assert.equal(preview.closed, true);
+  assert.equal(preview.issue, 8);
+  assert.deepEqual(writes(humanMarker), []);
 });

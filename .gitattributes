@@ -41,3 +41,6 @@ packages/synthseg/test/fixtures/brainquant_norms.json -text
 packages/synthseg/test/fixtures/brainquant_norms_7t.json -text
 packages/synthseg/test/fixtures/brainquant_norms_normal.json -text
 packages/synthseg/test/fixtures/brainquant_norms_7t_normal.json -text
+
+# Golden command logs compare byte for byte on every platform, Windows checkouts included.
+exes/syncro/core/tests/goldens/*.sh text eol=lf

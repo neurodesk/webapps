@@ -140,6 +140,29 @@ const nodeSpec = {
   },
 };
 const split = nativeReleases(new Map([['synthseg', { packageDir: 'packages/synthseg', spec: nodeSpec }]]));
+
+test('a tag from before the Rust SYNcro keeps its portable release source', () => {
+  const targets = { 'linux-x64': { archive: 'tar.gz', executable: 'syncro' }, 'windows-x64': { archive: 'zip', executable: 'syncro.exe' }, 'macos-arm64': { archive: 'tar.gz', executable: 'syncro' } };
+  const historical = nativeReleases(new Map([['syncro', { packageDir: 'packages/syncro', spec: { app: 'syncro', run: 'input.nii.gz results', targets } }]]));
+  assert.deepEqual(historical.get('syncro').map((source) => source.portable), [true]);
+  assert.deepEqual(nativeReleases(new Map()).get('syncro').map((source) => source.workflow), ['syncro-native.yml']);
+  assert.equal(split.get('synthseg').length, 2, 'SynthSeg keeps both sources');
+});
+test('native SYNcro requires the installer and retains the catalog commands', async () => {
+  const rust = nativeReleases(new Map());
+  const catalog = { apps: { syncro: { downloads: [] } } };
+  const tag = 'syncro-v1.0.20261124';
+  const archives = ['syncro-1.0.20261124-linux-x64.tar.gz', 'syncro-1.0.20261124-windows-x64.zip'];
+  const receipt = async () => `sha256: ${'a'.repeat(64)}\n`;
+  await assert.rejects(update(catalog, verifiedRelease([...archives, 'syncro-1.0.20261124-macos-arm64.tar.gz'], tag),
+    rust, 'syncro@1.0.20261124', receipt), /lacks macos-arm64/);
+  const installer = 'syncro-1.0.20261124-macos-arm64.pkg';
+  applyCatalogUpdate(catalog, await update(catalog, verifiedRelease([...archives, installer], tag),
+    rust, 'syncro@1.0.20261124', receipt));
+  const macos = catalog.apps.syncro.downloads.find((download) => download.platform === 'macos-arm64');
+  assert.equal(macos.modelsIncluded, true);
+  assert.equal(macos.command, `sudo installer -pkg ${installer} -target /\nsyncro self-check\nsyncro input.nii.gz results --threads 4`);
+});
 const rustMacos = Object.freeze({
   kind: 'cli',
   platform: 'macos-arm64',
@@ -310,7 +333,7 @@ test('a released desktop suite replaces its catalogue suite entry, never with an
   const first = { apps: {} };
   applyCatalogUpdate(first, [{ id: 'msk-webapps', version: '0.31.20261021', catalog: 'msk', suite: msk }]);
   assert.deepEqual(first.suites, { msk });
-  assert.deepEqual(registrySuiteReleases(await loadAppsRegistry()), new Map([['webapps', 'neuro'], ['msk-webapps', 'msk'], ['microscopy-webapps', 'microscopy'], ['preclinical-webapps', 'preclinical']]));
+  assert.deepEqual(registrySuiteReleases(await loadAppsRegistry()), new Map([['webapps', 'neuro'], ['msk-webapps', 'msk'], ['microscopy-webapps', 'microscopy'], ['preclinical-webapps', 'preclinical'], ['dermatology-webapps', 'dermatology']]));
 });
 
 test('a suite release is read for its own catalogue only', async () => {
@@ -366,12 +389,13 @@ test('the nightly suite release announces every succeeded suite in one catalog d
 });
 
 test('a release.json from before exes/node-cli lists its targets without install commands', async () => {
-  const legacy = nativeReleases(new Map([['syncro', { packageDir: 'packages/syncro', spec: { targets: { 'linux-x64': { archive: 'tar.gz' } } }, legacy: true }]]));
-  const names = ['syncro-0.3.20260915-linux-x64.tar.gz'];
-  const catalog = { apps: { syncro: { downloads: [] } } };
-  applyCatalogUpdate(catalog, await update(catalog, verifiedRelease(names, 'syncro-v0.3.20260915'), legacy, 'syncro@0.3.20260915'));
-  assert.equal(catalog.apps.syncro.downloads[0].platform, 'linux-x64');
-  assert.equal(catalog.apps.syncro.downloads[0].command, undefined);
+  // SYNcro's release.json before 0.4 had this shape; topofit stands in, since SYNcro is now a Rust release.
+  const legacy = nativeReleases(new Map([['topofit', { packageDir: 'packages/topofit', spec: { targets: { 'linux-x64': { archive: 'tar.gz' } } }, legacy: true }]]));
+  const names = ['topofit-0.3.20260915-linux-x64.tar.gz'];
+  const catalog = { apps: { topofit: { downloads: [] } } };
+  applyCatalogUpdate(catalog, await update(catalog, verifiedRelease(names, 'topofit-v0.3.20260915'), legacy, 'topofit@0.3.20260915'));
+  assert.equal(catalog.apps.topofit.downloads[0].platform, 'linux-x64');
+  assert.equal(catalog.apps.topofit.downloads[0].command, undefined);
 });
 
 test('release tags name the app and version; specs are read from the tag itself', async () => {

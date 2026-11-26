@@ -67,6 +67,10 @@ export async function loadLcmodel(source, { onProgress = () => {} } = {}) {
     process(dataset, options = {}) {
       return call(wasm.mrs_process, { dataset, options });
     },
+    /** Functional MRS preprocessing: binning, transient QC, BOLD linewidth matching. */
+    processFmrs(dataset, options = {}) {
+      return call(wasm.mrs_process_fmrs, { dataset, options });
+    },
   };
 }
 

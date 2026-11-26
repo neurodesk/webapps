@@ -1,0 +1,24 @@
+[
+  {
+    "id": "isic-nevus-pair",
+    "label": "Paired dermoscopy captures of nevus IL_7114869 (ISIC)",
+    "description": "Paired dermoscopic captures of the same benign nevus (ISIC Archive lesion IL_7114869: ISIC_0011414 and ISIC_0011415, CC-0; capture timing unspecified; downsampled from 6668 px to 1024 px wide) with shift, hair and lighting differences.",
+    "expectedResult": "Aligns the follow-up capture to the baseline, improves cross-correlation and highlights alignment and chromatic differences via curtain, flicker, checkerboard and ΔE2000 maps.",
+    "files": [
+      {
+        "role": "baseline",
+        "name": "ISIC_0011414_1024.jpg",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0011414_1024.jpg",
+        "sha256": "519c6d516470221e837307532771c59644ef941adba09de8554bd3affcae4401",
+        "bytes": 145916
+      },
+      {
+        "role": "followup",
+        "name": "ISIC_0011415_1024.jpg",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0011415_1024.jpg",
+        "sha256": "3b49df2fdd3b755a9a56ebae7f44f6a0d95f008083d279bd337df1b2d3aab77d",
+        "bytes": 196049
+      }
+    ]
+  }
+]

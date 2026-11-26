@@ -215,6 +215,7 @@ test('catalog assigns task categories and shares apps across related categories'
     'omezarr-convert': ['conversion'],
     'calcium-imaging': ['calcium-imaging'],
     stardist: ['segmentation'],
+    cellpose: ['segmentation'],
     microsam: ['segmentation'],
     neuromorph: ['morphometry'],
     'structure-tensor': ['fibre-orientation'],
@@ -253,7 +254,7 @@ test('registry rejects unknown or missing facets', async () => {
   const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
   const path = join(await mkdtemp(join(tmpdir(), 'apps-facets-')), 'apps.yml');
   for (const [field, value, message] of [
-    ['inputs', ['png'], /inputs for musclemap must be a non-empty array of unique values/],
+    ['inputs', ['bmp'], /inputs for musclemap must be a non-empty array of unique values/],
     ['anatomy', [], /anatomy for musclemap must be a non-empty array/],
     ['modalities', ['mri', 'mri'], /modalities for musclemap must be a non-empty array of unique values/],
     ['hardware', 'gpu', /hardware for musclemap must be one of/],
@@ -294,7 +295,7 @@ test('every app belongs to exactly one declared catalogue', async () => {
   for (const app of registry.apps) assert.ok(ids.has(app.catalog), `${app.id} must name a declared catalogue`);
   assert.deepEqual(
     registry.apps.filter(({ catalog }) => catalog === 'msk').map(({ id }) => id).sort(),
-    ['carotid-flow', 'musclemap', 'seedseg'],
+    ['carotid-flow', 'musclemap', 'seedseg', 'totalsegmentator'],
   );
 });
 

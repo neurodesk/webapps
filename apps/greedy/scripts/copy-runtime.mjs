@@ -6,18 +6,17 @@ const require = createRequire(import.meta.url);
 const publicRoot = new URL("../public/", import.meta.url);
 const greedySource = new URL("../../../packages/greedy/wasm/", import.meta.url);
 const greedyTarget = new URL("greedy-wasm/", publicRoot);
-const mindgrabRoot = dirname(require.resolve("@brainchop/mindgrab/package.json"));
+const mindgrabRoot = dirname(require.resolve("@brainchop/core/package.json"));
 const mindgrabTarget = new URL("brainchop/", publicRoot);
 
 await rm(greedyTarget, { recursive: true, force: true });
 await rm(mindgrabTarget, { recursive: true, force: true });
 await mkdir(greedyTarget, { recursive: true });
 await cp(greedySource, greedyTarget, { recursive: true });
-await mkdir(mindgrabTarget, { recursive: true });
+await mkdir(new URL("models/", mindgrabTarget), { recursive: true });
 for (const name of [
   "worker.js",
-  "brainchop-mindgrab-gpu.js",
-  "brainchop-mindgrab-gpu.wasm",
+  "models/mindgrab.bin",
   "brainchop-mindgrab-gl.js",
   "brainchop-mindgrab-gl.wasm",
   "brainchop-mindgrab.js",

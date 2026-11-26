@@ -21,6 +21,7 @@ pub struct RdaHeader {
     pub study_date: Option<String>,
     pub sequence_description: Option<String>,
     pub te: Option<f64>,
+    pub tm: Option<f64>,
     pub tr: Option<f64>,
     pub dwell_time: Option<f64>,
     pub number_of_averages: Option<f64>,
@@ -70,6 +71,7 @@ pub fn load(data: &[u8]) -> Res<Spectra> {
                 "StudyDate" => h.study_date = Some(value.to_string()),
                 "SequenceDescription" => h.sequence_description = Some(value.to_string()),
                 "TE" => h.te = first_num(value),
+                "TM" => h.tm = first_num(value),
                 "TR" => h.tr = first_num(value),
                 "DwellTime" => h.dwell_time = first_num(value),
                 "NumberOfAverages" => h.number_of_averages = first_num(value),
@@ -129,6 +131,7 @@ pub fn load(data: &[u8]) -> Res<Spectra> {
         dwelltime,
         txfrq,
         te: need(h.te, "TE")?,
+        tm: h.tm.filter(|&v| v.is_finite() && v > 0.0),
         tr: need(h.tr, "TR")?,
         bo,
         seq: h.sequence_description.clone().ok_or("The .rda header has no SequenceDescription.")?,
@@ -152,5 +155,43 @@ mod tests {
         assert!(load(b"").is_err());
         assert!(load(b"hello\nworld\n").is_err());
         assert!(load(b">>> Begin of header <<<\r\nVectorSize: 4\r\n>>> End of header <<<\r\n").is_err());
+    }
+
+    fn minimal_rda(tm: Option<f64>) -> Vec<u8> {
+        let mut hdr = String::from(
+            ">>> Begin of header <<<\r\n\
+             StudyDate: 20240101\r\n\
+             SequenceDescription: svs_st\r\n\
+             TE: 8.0\r\n\
+             TR: 5000.0\r\n\
+             DwellTime: 250.0\r\n\
+             NumberOfAverages: 64\r\n\
+             MRFrequency: 297.22\r\n\
+             MagneticFieldStrength: 7.0\r\n\
+             VectorSize: 4\r\n\
+             CSIMatrixSize[0]: 1\r\n\
+             CSIMatrixSize[1]: 1\r\n\
+             CSIMatrixSize[2]: 1\r\n",
+        );
+        if let Some(tm) = tm {
+            hdr.push_str(&format!("TM: {tm}\r\n"));
+        }
+        hdr.push_str(">>> End of header <<<\r\n");
+        let mut bytes = hdr.into_bytes();
+        for k in 0..4 {
+            bytes.extend_from_slice(&(1.0f64 / (k as f64 + 1.0)).to_le_bytes());
+            bytes.extend_from_slice(&0.0f64.to_le_bytes());
+        }
+        bytes
+    }
+
+    #[test]
+    fn reads_mixing_time_when_positive() {
+        let s = load(&minimal_rda(Some(32.0))).unwrap();
+        assert_eq!(s.te, 8.0);
+        assert_eq!(s.tm, Some(32.0));
+
+        assert_eq!(load(&minimal_rda(Some(0.0))).unwrap().tm, None);
+        assert_eq!(load(&minimal_rda(None)).unwrap().tm, None);
     }
 }

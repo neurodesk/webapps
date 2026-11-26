@@ -97,6 +97,36 @@
     }
   },
   {
+    "id": "siemens-steam",
+    "label": "Siemens STEAM 7 T, TE 11 ms, TM 32 ms (in vivo)",
+    "description": "Siemens raw data (twix) from the NIfTI-MRS example collection (CC-BY-4.0, William T. Clarke, University of Oxford): STEAM at 6.98 T, TE 11 ms, TM 32 ms, 32 channels, 64 averages, with a paired water reference. 74 MB.",
+    "expectedResult": "FID-A combines coils using the water reference, corrects drift and averages; LCModel fits with the 7 T STEAM TE 8 ms (TM 32 ms) basis and reports water-scaled concentrations for NAA+NAAG, Cr+PCr, Glu+Gln, Ins, Cho, GSH and GABA.",
+    "files": [
+      {
+        "role": "spectrum",
+        "name": "steam7t.dat",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b181b231d9e7686b364e78995efdce9768a57438/lcmodel/examples/siemens-steam/steam7t.dat",
+        "sha256": "3fcec0fb6619dab4829a2062ba06419cb800a70838a59f53bdbc24e01ee2d563",
+        "license": "CC-BY-4.0",
+        "bytes": 70011424
+      },
+      {
+        "role": "water",
+        "name": "steam7t_w.dat",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b181b231d9e7686b364e78995efdce9768a57438/lcmodel/examples/siemens-steam/steam7t_w.dat",
+        "sha256": "5d4ac6d386d106c56914ef35d06330fa4bf13b32be53afd470f328f48375ae04",
+        "license": "CC-BY-4.0",
+        "bytes": 3682624
+      }
+    ],
+    "automation": {
+      "roles": {
+        "spectrum": "spectra",
+        "water": "spectra"
+      }
+    }
+  },
+  {
     "id": "siemens-megapress",
     "label": "Siemens MEGA-PRESS 3 T, TE 68 ms (GABA)",
     "description": "Siemens raw data (twix) from FID-A: GABA-edited MEGA-PRESS at 2.89 T, TE 68 ms, 32 channels, 80 edit-ON/OFF pairs, left DLPFC. 86 MB.",

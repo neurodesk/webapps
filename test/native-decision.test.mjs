@@ -9,7 +9,7 @@ import test from 'node:test';
 import YAML from 'yaml';
 import { loadAppsRegistry, registryPath, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { publishNative, pullRequestSelection, sweepSelection } from '../scripts/lib/native-decision.mjs';
-import { WITHHELD_CONDITION, callCondition, dispatchedWorkflows } from '../scripts/lib/native-workflow.mjs';
+import { WITHHELD_CONDITION, callCondition, dispatchedWorkflows, shardWorkflows } from '../scripts/lib/native-workflow.mjs';
 import { certainOwnStart, dispatchDecision, reachesSharedPaths, readChangedPaths, swept } from '../scripts/lib/workflow-gate.mjs';
 import { loadConservativeWorkspaceGraph } from '../scripts/lib/workspace-graph.mjs';
 
@@ -224,12 +224,16 @@ function evaluate(condition, { result, skips, withheld, event = 'pull_request', 
 }
 
 test('native.yml runs a call unless a successful gate names it in its skip list', async () => {
-  const native = (await workflow('native')).jobs;
-  for (const [name, flow] of calls) assert.equal(native[name].if, callCondition(name, { sweep: swept(flow) }), name);
-  assert.equal(native['full-plan-withheld'].if, WITHHELD_CONDITION);
-  // The gate may name only the workflows native.yml lists, all of them for a draft.
-  assert.deepEqual(native.gate.with.calls.split(' '), callNames);
-  assert.deepEqual(native.gate.with.sweeps.split(' '), sweepNames);
+  for (const [shardName, shardCalls] of shardWorkflows(calls)) {
+    const native = (await workflow(shardName)).jobs;
+    const shardCallNames = shardCalls.map(([name]) => name);
+    const shardSweepNames = shardCalls.filter(([, flow]) => swept(flow)).map(([name]) => name);
+    for (const [name, flow] of shardCalls) assert.equal(native[name].if, callCondition(name, { sweep: swept(flow) }), `${shardName}/${name}`);
+    assert.equal(native['full-plan-withheld'].if, WITHHELD_CONDITION, shardName);
+    // The gate may name only the workflows this dispatcher shard lists, all of them for a draft.
+    assert.deepEqual(native.gate.with.calls.split(' ').filter(Boolean), shardCallNames, shardName);
+    assert.deepEqual(native.gate.with.sweeps.split(' ').filter(Boolean), shardSweepNames, shardName);
+  }
   assert.ok(!sweepNames.includes('synthseg-native') && callNames.includes('synthseg-native'));
   const bison = callCondition('bison-native', { sweep: true });
   const outcomes = [

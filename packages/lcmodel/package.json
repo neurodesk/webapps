@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/lcmodel",
-  "version": "0.8.20261119",
+  "version": "0.9.20261124",
   "description": "FID-A preprocessing and LCModel fitting of MR spectroscopy for browsers and the command line (Rust ports compiled to WebAssembly)",
   "type": "module",
   "license": "BSD-3-Clause",
@@ -15,6 +15,8 @@
     "./wasm": "./src/lcmodel.wasm",
     "./pipeline": "./src/pipeline.js",
     "./basis-select": "./src/basis-select.js",
+    "./fmrs": "./src/fmrs.js",
+    "./fmrs-plot": "./src/fmrs-plot.js",
     "./group": "./src/group.js",
     "./inputs": "./src/inputs.js",
     "./lcmodel-io": "./src/lcmodel-io.js",
@@ -46,7 +48,7 @@
     "directory": "packages/lcmodel"
   },
   "dependencies": {
-    "@brainchop/mindgrab": "0.1.20260925",
+    "@brainchop/core": "1.0.0",
     "@neurodesk/node-drivers": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/dcm2niix": "1.4.20261029"

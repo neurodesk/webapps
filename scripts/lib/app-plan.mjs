@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { parse } from 'yaml';
+import sourceParser from '@neurodesk/code-quality';
+import { isAlias, isMap, isScalar, isSeq, parse, parseDocument } from 'yaml';
 import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
 import { onlyAddsExports } from './module-closure.mjs';
 import { EMBEDDED_VERSION_FILES, releaseBookkeeping } from './release-bookkeeping.mjs';
@@ -14,8 +15,7 @@ const NON_CODE_PREFIXES = ['docs/', '.changeset/'];
 // Changes there select no catalog apps. Shared homepage files directly under
 // site/ still count as shared changes.
 const SELF_CONTAINED_PREFIXES = ['site/easter-eggs/'];
-// Paths no app build or browser test reads. Lint and quality tooling run in
-// workspace-contracts or their own workflows; every workflow other than ci.yml
+// Paths no app build or browser test reads. Every workflow other than ci.yml
 // runs itself when it changes; the app template is checked by contract tests.
 const INDEPENDENT_CHECK_PATHS = [
   /^[^/]+\.md$/,
@@ -25,12 +25,19 @@ const INDEPENDENT_CHECK_PATHS = [
   /^config\/dependency-/,
   /^templates\//,
 ];
+// Lint and quality tooling run in workspace-contracts or quality.yml rather
+// than app builds; exempt them only when the workspace graph confirms neither
+// CATALOG, SITE nor any app (outside the lint runner itself) reaches them.
+const LINT_RUNNER = /^scripts\/lint\.mjs$/;
+const LINT_TOOLING_PATHS = [LINT_RUNNER, /^scripts\/quality\//];
 // Root files the workspace graph follows. Without a graph they count as shared.
 const ROOT_FILE = /^(?:scripts|test-utils|registry|test)\//;
 // An app's model manifest belongs to that app alone.
 const MODEL_MANIFEST = /^models\/([^/]+)\.manifest\.json$/;
 const NON_CODE_FILES = new Set(['README.md', 'LICENSES.md']);
 const LOCKFILE = 'pnpm-lock.yaml';
+const WORKSPACE_CONFIG = 'pnpm-workspace.yaml';
+const E2E_TEST_DATA = 'scripts/lib/e2e-test-data.mjs';
 const REGISTRY = 'registry/apps.yml';
 const STANDALONE = 'registry/standalone.json';
 const APP_INFORMATION = 'registry/app-information.yml';
@@ -367,6 +374,309 @@ export function ciImpact({ before, after }) {
   }
 }
 
+const EXACT_PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
+const SEMVER_NUM = '(?:0|[1-9]\\d*)';
+const SEMVER_PRE = '(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)';
+// Strict SemVer 2.0.0 without build metadata (+build), which pnpm normalizes
+// away when matching minimumReleaseAgeExclude against locked versions.
+const EXACT_SEMVER = new RegExp(`^${SEMVER_NUM}\\.${SEMVER_NUM}\\.${SEMVER_NUM}(?:-${SEMVER_PRE}(?:\\.${SEMVER_PRE})*)?$`);
+
+function unsafeYamlReason(node) {
+  if (!node || typeof node !== 'object') return null;
+  if (isAlias(node) || Boolean(node.anchor)) return 'it uses YAML anchors or aliases';
+  if (node.tag) return 'it uses explicit YAML tags';
+  if (isMap(node)) {
+    for (const pair of node.items) {
+      if (!isScalar(pair.key) || typeof pair.key.value !== 'string') return 'it uses non-string YAML keys';
+      if (pair.key.tag || pair.key.anchor) return 'it uses tagged or anchored YAML keys';
+      if (pair.key.value === '<<' || pair.key.value === '__proto__') return 'it uses YAML merge or prototype keys';
+      const nested = unsafeYamlReason(pair.value);
+      if (nested) return nested;
+    }
+    return null;
+  }
+  if (isSeq(node)) {
+    for (const item of node.items) {
+      const nested = unsafeYamlReason(item);
+      if (nested) return nested;
+    }
+  }
+  return null;
+}
+
+function parseSafeWorkspaceYaml(text) {
+  if (typeof text !== 'string') return { error: 'its workspace configuration is missing' };
+  const doc = parseDocument(text, { uniqueKeys: true });
+  if (doc.errors.length) return { error: `it does not parse (${doc.errors[0].message.split('\n')[0]})` };
+  if (doc.warnings.length) return { error: `it has YAML warnings (${doc.warnings[0].message.split('\n')[0]})` };
+  if (doc.directives.yaml.explicit || Object.entries(doc.directives.tags).some(([handle, prefix]) => handle !== '!!' || prefix !== 'tag:yaml.org,2002:')) {
+    return { error: 'it uses explicit YAML directives' };
+  }
+  if (!isMap(doc.contents)) return { error: 'it is not a YAML mapping' };
+  const unsafe = unsafeYamlReason(doc.contents);
+  if (unsafe) return { error: unsafe };
+  return { doc, value: doc.toJS() };
+}
+
+function outsideReleaseAgeSection(text, doc) {
+  const pair = doc.contents.items.find((item) => isScalar(item.key) && item.key.value === 'minimumReleaseAgeExclude');
+  if (!pair) return { outside: text };
+  if (!pair.key.range || !pair.value?.range) return { error: 'its minimumReleaseAgeExclude range cannot be determined' };
+  const [start] = pair.key.range;
+  const end = pair.value.range[2];
+  if ((start > 0 && text[start - 1] !== '\n') || (end < text.length && text[end - 1] !== '\n')) {
+    return { error: 'its minimumReleaseAgeExclude section is not on clean line boundaries' };
+  }
+  return { outside: text.slice(0, start) + text.slice(end) };
+}
+
+function parseReleaseAgeExclusions(value) {
+  if (value === undefined) return new Set();
+  if (!Array.isArray(value)) return null;
+  const seenNames = new Set();
+  const specs = new Set();
+  for (const entry of value) {
+    if (typeof entry !== 'string' || entry !== entry.trim()) return null;
+    const at = entry.indexOf('@', 1);
+    if (at < 0) return null;
+    const name = entry.slice(0, at);
+    if (!EXACT_PACKAGE_NAME.test(name) || seenNames.has(name)) return null;
+    seenNames.add(name);
+    const rawVersionSpec = entry.slice(at + 1);
+    if (!rawVersionSpec || /^\s/.test(rawVersionSpec)) return null;
+    const rawParts = rawVersionSpec.split('||');
+    if (!rawParts.length || !rawParts.every((part) => EXACT_SEMVER.test(part.trim()))) return null;
+    for (const part of rawParts) specs.add(`${name}@${part.trim()}`);
+  }
+  return specs;
+}
+
+// Whether a pnpm-workspace.yaml change is confined to valid exact-version
+// minimumReleaseAgeExclude entries whose removals (if any) are no longer
+// resolved in pnpm-lock.yaml at head. Adding exact-version exclusions only
+// relaxes pnpm's release-age gate while pnpm-lock.yaml pins and scopes every
+// resolved dependency; removing an exclusion still resolved in head
+// pnpm-lock.yaml falls back conservatively to the complete catalog.
+export function workspaceConfigImpact({ before, after, lockAfter }) {
+  const [oldDoc, nowDoc] = [parseSafeWorkspaceYaml(before), parseSafeWorkspaceYaml(after)];
+  if (oldDoc.error) return { shared: oldDoc.error };
+  if (nowDoc.error) return { shared: nowDoc.error };
+  const [old, now] = [oldDoc.value, nowDoc.value];
+  try {
+    const key = [...new Set([...Object.keys(old), ...Object.keys(now)])].find((name) => name !== 'minimumReleaseAgeExclude' && !same(old[name], now[name]));
+    if (key) return { shared: `its ${key} setting changed` };
+  } catch (error) {
+    return { shared: `its settings cannot be compared (${error.message.split('\n')[0]})` };
+  }
+  const [oldOutside, nowOutside] = [outsideReleaseAgeSection(before, oldDoc.doc), outsideReleaseAgeSection(after, nowDoc.doc)];
+  if (oldOutside.error) return { shared: oldOutside.error };
+  if (nowOutside.error) return { shared: nowOutside.error };
+  if (oldOutside.outside !== nowOutside.outside) return { shared: 'raw YAML outside minimumReleaseAgeExclude changed' };
+  const [oldSpecs, nowSpecs] = [parseReleaseAgeExclusions(old.minimumReleaseAgeExclude), parseReleaseAgeExclusions(now.minimumReleaseAgeExclude)];
+  if (!oldSpecs || !nowSpecs) return { shared: 'its minimumReleaseAgeExclude entries must be unique exact package@version specs' };
+  const removed = [...oldSpecs].filter((spec) => !nowSpecs.has(spec));
+  if (removed.length) {
+    if (!lockAfter) return { shared: `removed minimumReleaseAgeExclude entries (${removed.join(', ')}) without a head lockfile to verify` };
+    let lock;
+    try {
+      lock = parse(lockAfter);
+    } catch (error) {
+      return { shared: `head pnpm-lock.yaml does not parse (${error.message.split('\n')[0]})` };
+    }
+    const packages = lock?.packages && typeof lock.packages === 'object' && !Array.isArray(lock.packages) ? Object.keys(lock.packages) : null;
+    if (!packages) return { shared: 'head pnpm-lock.yaml has no packages section to verify removed release-age exclusions' };
+    const stillLocked = removed.find((spec) => packages.some((key) => key === spec || key.startsWith(`${spec}(`)));
+    if (stillLocked) return { shared: `removed minimumReleaseAgeExclude entry ${stillLocked} is still resolved by pnpm-lock.yaml` };
+  }
+  return { scoped: true };
+}
+
+const AST_META = new Set(['loc', 'range', 'start', 'end', 'tokens', 'comments', 'parent']);
+const TABLE_NAMES = new Set(['provisioners', 'unpublished']);
+
+function stripAst(value, cleared) {
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'bigint') return `${value}n`;
+  if (value instanceof RegExp) return value.toString();
+  if (typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map((item) => stripAst(item, cleared));
+  const out = {};
+  for (const key of Object.keys(value)) {
+    if (AST_META.has(key)) continue;
+    if (key === 'properties' && cleared?.has(value)) {
+      out[key] = [];
+      continue;
+    }
+    out[key] = stripAst(value[key], cleared);
+  }
+  return out;
+}
+
+function referencesTable(value) {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some(referencesTable);
+  if (value.type === 'Identifier' && TABLE_NAMES.has(value.name)) return true;
+  return Object.keys(value).some((key) => !AST_META.has(key) && referencesTable(value[key]));
+}
+
+function plainPropKey(prop) {
+  if (prop.type !== 'Property' || prop.computed || prop.kind !== 'init') return null;
+  const key = prop.key?.type === 'Identifier' ? prop.key.name : prop.key?.type === 'Literal' && typeof prop.key.value === 'string' ? prop.key.value : null;
+  return key === null || key === '__proto__' ? null : key;
+}
+
+function isPureFlagHelper(declarator) {
+  const fn = declarator.init;
+  if (fn?.type !== 'ArrowFunctionExpression' || fn.async || fn.params.length !== 1 || fn.params[0]?.type !== 'Identifier') return false;
+  const param = fn.params[0].name;
+  if (fn.body?.type !== 'ObjectExpression') return false;
+  const props = new Map();
+  for (const prop of fn.body.properties) {
+    const key = plainPropKey(prop);
+    if (!key || prop.method || props.has(key)) return false;
+    props.set(key, prop.value);
+  }
+  if (props.size !== 2 || !props.has('env') || !props.has('provision')) return false;
+  const env = props.get('env');
+  const provision = props.get('provision');
+  return env?.type === 'ArrayExpression'
+    && env.elements.length === 1
+    && env.elements[0]?.type === 'Identifier'
+    && env.elements[0].name === param
+    && (provision?.type === 'ArrowFunctionExpression' || provision?.type === 'FunctionExpression');
+}
+
+function isPureProvisionerObject(node, { allowCpu, topLevelFunctions }) {
+  if (node?.type !== 'ObjectExpression') return false;
+  const seen = new Set();
+  for (const prop of node.properties) {
+    const key = plainPropKey(prop);
+    if (!key || prop.method || seen.has(key)) return false;
+    seen.add(key);
+    if (key === 'env') {
+      if (prop.value?.type !== 'ArrayExpression') return false;
+      if (!prop.value.elements.every((el) => el && el.type === 'Literal' && typeof el.value === 'string')) return false;
+    } else if (key === 'provision') {
+      const value = prop.value;
+      const isFn = value?.type === 'ArrowFunctionExpression'
+        || value?.type === 'FunctionExpression'
+        || (value?.type === 'Identifier' && topLevelFunctions.has(value.name));
+      if (!isFn) return false;
+    } else if (key === 'cpu' && allowCpu) {
+      if (!isPureProvisionerObject(prop.value, { allowCpu: false, topLevelFunctions })) return false;
+    } else {
+      return false;
+    }
+  }
+  return seen.has('env') && seen.has('provision');
+}
+
+function isPureProvisionerEntry(node, context) {
+  if (context.hasPureFlag
+    && node?.type === 'CallExpression'
+    && !node.optional
+    && node.callee?.type === 'Identifier'
+    && node.callee.name === 'flag'
+    && node.arguments.length === 1
+    && node.arguments[0]?.type === 'Literal'
+    && typeof node.arguments[0].value === 'string') {
+    return true;
+  }
+  return isPureProvisionerObject(node, { allowCpu: true, topLevelFunctions: context.topLevelFunctions });
+}
+
+function checkNodeEsmSyntax(source) {
+  execFileSync(process.execPath, ['--input-type=module', '--check'], {
+    input: source,
+    stdio: ['pipe', 'ignore', 'pipe'],
+  });
+}
+
+function parseE2eTables(source) {
+  const ast = sourceParser.parse(source, { filePath: E2E_TEST_DATA, sourceType: 'module' });
+  const tables = new Map();
+  // Function declarations are hoisted; const bindings are only initialized if
+  // declared strictly before `export const provisioners` (no TDZ hazard).
+  const hoistedFunctions = new Set();
+  const initializedConsts = new Set();
+  let seenProvisioners = false;
+  let hasPureFlag = false;
+  for (const statement of ast.body) {
+    if (statement.type === 'FunctionDeclaration' && statement.id?.type === 'Identifier') {
+      hoistedFunctions.add(statement.id.name);
+      continue;
+    }
+    if (statement.type === 'VariableDeclaration' && statement.kind === 'const') {
+      if (!seenProvisioners) {
+        for (const declarator of statement.declarations) {
+          if (declarator.id?.type !== 'Identifier') continue;
+          if (declarator.id.name === 'flag' && isPureFlagHelper(declarator)) hasPureFlag = true;
+          if (declarator.init?.type === 'ArrowFunctionExpression' || declarator.init?.type === 'FunctionExpression') {
+            initializedConsts.add(declarator.id.name);
+          }
+        }
+      }
+      continue;
+    }
+    if (statement.type !== 'ExportNamedDeclaration' || statement.declaration?.type !== 'VariableDeclaration' || statement.declaration.kind !== 'const') continue;
+    for (const declarator of statement.declaration.declarations) {
+      if (declarator.id?.type !== 'Identifier' || !TABLE_NAMES.has(declarator.id.name)) continue;
+      if (tables.has(declarator.id.name) || declarator.init?.type !== 'ObjectExpression') return null;
+      tables.set(declarator.id.name, declarator.init);
+      if (declarator.id.name === 'provisioners') seenProvisioners = true;
+    }
+  }
+  if (!tables.has('provisioners')) return null;
+  const context = { hasPureFlag, topLevelFunctions: new Set([...hoistedFunctions, ...initializedConsts]) };
+  const entries = new Map();
+  for (const [tableName, objectNode] of tables) {
+    const map = new Map();
+    for (const prop of objectNode.properties) {
+      const key = plainPropKey(prop);
+      if (key === null || prop.method || map.has(key)) return null;
+      if (tableName === 'unpublished') {
+        if (prop.value?.type !== 'Literal' || typeof prop.value.value !== 'string') return null;
+      } else {
+        if (!isPureProvisionerEntry(prop.value, context) || referencesTable(prop.value)) return null;
+      }
+      map.set(key, JSON.stringify(stripAst(prop.value)));
+    }
+    entries.set(tableName, map);
+  }
+  const cleared = new Set(tables.values());
+  return { skeleton: JSON.stringify(stripAst(ast.body, cleared)), provisioners: entries.get('provisioners') };
+}
+
+// The apps whose provisioner entries changed in scripts/lib/e2e-test-data.mjs,
+// or why the change reaches every app. Edits confined to reviewed pure-at-load
+// entries of `provisioners` (or plain string entries of `unpublished`, checked
+// by workspace-contracts) affect only those apps; any change to imports, shared
+// helpers, `provisionTestData`, side-effectful initializers, prototype keys,
+// TDZ-unsafe bindings, or Node ESM syntax errors falls back to the complete catalog.
+export function e2eTestDataImpact({ before, after }) {
+  let old;
+  let now;
+  try {
+    old = parseE2eTables(before);
+    now = parseE2eTables(after);
+  } catch (error) {
+    return { shared: `it does not parse (${error.message.split('\n')[0]})` };
+  }
+  if (!old || !now) return { shared: 'its provisioners table cannot be isolated safely' };
+  if (old.skeleton !== now.skeleton) return { shared: 'shared code outside provisioners and unpublished changed' };
+  // Validate the head module with Node's own V8 ESM parser so strict-mode early
+  // errors accepted by @typescript-eslint/parser (such as duplicate parameters)
+  // cannot silently break the shared module for unselected apps.
+  try {
+    checkNodeEsmSyntax(after);
+  } catch (error) {
+    const detail = String(error.stderr || error.message).trim().split('\n').find((line) => /SyntaxError/.test(line)) ?? 'Node rejected ESM syntax';
+    return { shared: `it fails Node ESM syntax validation (${detail})` };
+  }
+  const ids = [...new Set([...old.provisioners.keys(), ...now.provisioners.keys()])];
+  return { changed: ids.filter((id) => old.provisioners.get(id) !== now.provisioners.get(id)) };
+}
+
 // The workspace graph nodes a changed file belongs to. A package's tests
 // reach only those that read them and a document only those that read that
 // file; any other file reaches its package's users and, if a root file names
@@ -390,8 +700,8 @@ function shardedEntries(app) {
 // dispatch of every app, an unknown base). An app reached only through shared
 // code leaves them to the nightly run, also when the planner selected every
 // app for a change it could not narrow (ci.yml, an unresolved lockfile).
-function editsApp(app, changedPaths, edited, carried) {
-  if (!changedPaths.length || carried.has(app.id)) return true;
+function editsApp(app, changedPaths, edited, carried, editedApps = new Set()) {
+  if (!changedPaths.length || carried.has(app.id) || editedApps.has(app.id)) return true;
   return edited.some((path) => [`apps/${app.id}/`, `packages/${app.id}/`, `exes/${app.id}/`].some((prefix) => path.startsWith(prefix))
     || path === `models/${app.id}.manifest.json`);
 }
@@ -473,6 +783,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   const catalog = graph && reachableFrom(graph, CATALOG);
   const site = graph && reachableFrom(graph, SITE);
   const appReasons = new Map();
+  const editedApps = new Set();
   const siteReasons = [];
   const bookkeeping = [];
   let fallback = null;
@@ -489,6 +800,19 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     siteReasons.push(reason);
   };
   const siteData = (reason) => siteReasons.push(reason);
+  const reachableWithout = (node, excludedPattern) => {
+    const seen = new Set([node]);
+    const pending = [node];
+    while (pending.length) {
+      for (const next of graph.edges.get(pending.pop()) ?? []) {
+        if (excludedPattern.test(next) || seen.has(next)) continue;
+        seen.add(next);
+        pending.push(next);
+      }
+    }
+    return seen;
+  };
+
   // Selects whatever reaches `node` or a file below it.
   const selectReaching = (node, reason) => {
     const within = (candidate) => candidate === node || candidate.startsWith(`${node}/`);
@@ -496,6 +820,16 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     if ([...site].some(within)) siteBuild(reason);
     for (const candidate of registry.apps) {
       if ([...reach.get(candidate.id)].some(within)) select(candidate.id, reason);
+    }
+  };
+  const selectLintTooling = (node, reason) => {
+    const within = (candidate) => candidate === node || candidate.startsWith(`${node}/`);
+    if ([...catalog].some(within)) shared(`${reason}; ci.yml's per-app jobs run ${node}`);
+    if ([...site].some(within)) siteBuild(reason);
+    if (!LINT_RUNNER.test(node)) {
+      for (const candidate of registry.apps) {
+        if ([...reachableWithout(`apps/${candidate.id}`, LINT_RUNNER)].some(within)) select(candidate.id, reason);
+      }
     }
   };
 
@@ -524,6 +858,11 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     ) {
       continue;
     }
+    if (LINT_TOOLING_PATHS.some((pattern) => pattern.test(path))) {
+      if (!graph) shared(`${path}: there is no workspace graph to confirm lint tooling is unreached`);
+      else selectLintTooling(path, path);
+      continue;
+    }
     if (path === LOCKFILE) {
       const impact = manifests.get(path) ? analyseLockfile(manifests.get(path)) : { shared: 'the base or head lockfile is unavailable' };
       if (impact.shared) {
@@ -535,8 +874,38 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         if (appIds.has(importerApp)) select(importerApp, `${path}: ${reason}`);
         else if (importer === '.') shared(`${path}: ${reason}; the root's dependencies resolve for every workspace member`);
         else if (SELF_CONTAINED_PREFIXES.some((prefix) => `${importer}/`.startsWith(prefix))) continue;
+        else if (INDEPENDENT_CHECK_PATHS.some((pattern) => pattern.test(`${importer}/`))) continue;
         else if (!graph) shared(`${path}: ${reason}, and there is no workspace graph to find its users`);
+        else if (LINT_TOOLING_PATHS.some((pattern) => pattern.test(`${importer}/`))) selectLintTooling(importer, `${path}: ${reason}`);
         else selectReaching(importer, `${path}: ${reason}`);
+      }
+      continue;
+    }
+    if (path === WORKSPACE_CONFIG) {
+      const entry = manifests.get(path);
+      const impact = entry
+        ? workspaceConfigImpact({ ...entry, lockAfter: manifests.get(LOCKFILE)?.after })
+        : { shared: 'the base or head workspace configuration is unavailable' };
+      if (impact.shared) shared(`${path}: ${impact.shared}`);
+      continue;
+    }
+    if (path === E2E_TEST_DATA && manifests.get(path)) {
+      const impact = e2eTestDataImpact(manifests.get(path));
+      if (impact.shared) {
+        shared(`${path}: ${impact.shared}`);
+        continue;
+      }
+      if (graph && site.has(path)) siteBuild(path);
+      if (graph) {
+        for (const candidate of registry.apps) {
+          if (reach.get(candidate.id).has(path)) select(candidate.id, path);
+        }
+      }
+      for (const id of impact.changed) {
+        if (appIds.has(id)) {
+          select(id, `${path}: the ${id} provisioner changed`);
+          editedApps.add(id);
+        }
       }
       continue;
     }
@@ -704,7 +1073,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     shared(graph ? `${path}: no rule classifies it` : `${path}: there is no workspace graph to find its users`);
   }
 
-  if (fallback) return { ...everything(fallback), bookkeeping };
+  if (fallback) return { ...everything(fallback), editedApps, bookkeeping };
   for (const [id, jobs] of carried) {
     if (appIds.has(id)) select(id, `failed in the base run (${jobs.join(', ')})`);
   }
@@ -712,6 +1081,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   const apps = registry.apps.filter((app) => appReasons.has(app.id));
   return {
     apps,
+    editedApps,
     site: siteReasons.length > 0,
     siteCode,
     reasons: { fallback: null, apps: Object.fromEntries(apps.map((app) => [app.id, appReasons.get(app.id)])), site: siteReasons },
@@ -795,7 +1165,8 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
   const { site, reasons } = affected;
   const releasable = selected.filter((app) => app.ci.release);
   const edited = changedPaths.filter((path) => !(affected.bookkeeping ?? []).includes(path));
-  const heavy = (entry) => ({ ...entry, heavy_tests: editsApp(registry.apps.find((app) => app.id === entry.app), changedPaths, edited, carried) });
+  const editedApps = affected.editedApps ?? new Set();
+  const heavy = (entry) => ({ ...entry, heavy_tests: editsApp(registry.apps.find((app) => app.id === entry.app), changedPaths, edited, carried, editedApps) });
   const browserTested = selected.filter((app) => app.ci.browser_test);
   const gpuTested = selected.filter((app) => app.ci.hardware_gpu);
   // What a pull request's homepage-easter-egg job does; a draft plans it as a ready pull request does.
@@ -857,7 +1228,7 @@ export function changedPathsFromGit({ base, head = 'HEAD', cwd }) {
   return [...paths];
 }
 
-const MANIFEST = /^(?:(?:packages|apps|exes)\/[^/]+\/)?package\.json$|^registry\/(?:offline-assets\.lock\.json|apps\.yml|app-information\.yml|standalone\.json)$|^pnpm-lock\.yaml$|^\.gitattributes$|^\.github\/workflows\/ci\.yml$/;
+const MANIFEST = /^(?:(?:packages|apps|exes)\/[^/]+\/)?package\.json$|^registry\/(?:offline-assets\.lock\.json|apps\.yml|app-information\.yml|standalone\.json)$|^pnpm-(?:lock\.yaml|workspace\.yaml)$|^\.gitattributes$|^\.github\/workflows\/ci\.yml$|^scripts\/lib\/e2e-test-data\.mjs$/;
 
 // The text of each changed manifest (ci.yml included) and the lockfile for
 // root manifest edits, at the merge base (changedPathsFromGit diffs from there)
@@ -867,7 +1238,7 @@ const MANIFEST = /^(?:(?:packages|apps|exes)\/[^/]+\/)?package\.json$|^registry\
 export function changedManifests({ base, head = 'HEAD', cwd, changedPaths }) {
   const manifests = new Map();
   const paths = new Set(changedPaths.filter((path) => MANIFEST.test(path) || EMBEDDED_VERSION_FILES.has(path)));
-  if (changedPaths.includes('package.json')) paths.add(LOCKFILE);
+  if (changedPaths.includes('package.json') || changedPaths.includes(WORKSPACE_CONFIG)) paths.add(LOCKFILE);
   if (!paths.size) return manifests;
   const show = (args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 256 * 1024 * 1024 });
   let mergeBase;

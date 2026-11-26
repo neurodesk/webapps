@@ -1,13 +1,21 @@
+// SYNcro in the browser: the Rust core (exes/syncro, WebAssembly) decides every step, exactly as the native
+// command does; this worker owns the files and runs each tool command on its browser driver
+// (@neurodesk/pipeline-drivers), one at a time.
 import { createRegistration } from '@neurodesk/registration';
-import { gzip, gunzip, isGzip, loadGreedy, registerAffineGreedy, registerGreedy, resliceAffineGreedy, resliceGreedy } from '@neurodesk/greedy';
-import { Niimath } from '@neurodesk/runtime-support/niimath';
-import { runSyncro } from '../../../packages/syncro/src/pipeline.js';
+import { loadGreedy } from '@neurodesk/greedy';
+import { Files } from '@neurodesk/pipeline-drivers/files';
+import { createHost } from '@neurodesk/pipeline-drivers/host';
+import { antsDrivers, greedyDriver, mindgrabDriver, niimathDriver, synthsrDriver } from '@neurodesk/pipeline-drivers/drivers';
+import { readVolume, writeVolume } from '@neurodesk/synthsr';
+import initCore, { runSyncro } from '@neurodesk/syncro/core';
 
 const sha = async (buffer) => Array.from(
   new Uint8Array(await crypto.subtle.digest('SHA-256', buffer)),
   (value) => value.toString(16).padStart(2, '0'),
 ).join('');
 const progress = (stage, value, message) => self.postMessage({ type: 'progress', stage, value, message });
+const log = (message) => self.postMessage({ type: 'log', message });
+const asBuffer = (bytes) => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 
 // A fresh worker per neural network releases ORT's WebAssembly arena between stages.
 function infer(job, onProgress) {
@@ -28,127 +36,55 @@ function infer(job, onProgress) {
   });
 }
 
-async function representation(buffer, compressed) {
-  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-  if (compressed) return isGzip(bytes) ? bytes.slice() : gzip(bytes);
-  return gunzip(bytes);
-}
-
-function createImageMath() {
-  const niimath = new Niimath();
-  let ready;
-  const init = async () => {
-    if (!ready) ready = niimath.init();
-    await ready;
-  };
-  return {
-    async smoothLesion({ buffer, name }) {
-      await init();
-      niimath.setOutputDataType('float');
-      const file = new File([buffer], name);
-      return new Uint8Array(await (await niimath.image(file).s(3 / 2.354820045).gz(0).run('lesion-smoothed.nii')).arrayBuffer());
-    },
-    async thresholdLesion({ buffer, name }) {
-      await init();
-      niimath.setOutputDataType('char');
-      const compressed = name.toLowerCase().endsWith('.gz');
-      const file = new File([buffer], name);
-      return new Uint8Array(await (await niimath.image(file).thr(0.5).bin().gz(compressed ? 1 : 0).run(name)).arrayBuffer());
-    },
-    async mask({ image, mask, name }) {
-      await init();
-      niimath.setOutputDataType('input');
-      const compressed = name.toLowerCase().endsWith('.gz');
-      const source = new File([image], `source-${name}`);
-      const brain = new File([mask], `mask-${name}`);
-      return new Uint8Array(await (await niimath.image(source).maskImage(brain).gz(compressed ? 1 : 0).run(name)).arrayBuffer());
-    },
-    dispose() {
-      niimath.dispose();
-    },
-  };
-}
-
-function createGreedyLoader(moduleURL) {
+// Each runtime starts when its first command needs it.
+function once(load) {
   let promise;
-  return () => {
-    if (!promise) {
-      const threads = Math.min(8, navigator.hardwareConcurrency || 1);
-      self.postMessage({ type: 'log', message: `Starting ${threads} Greedy CPU workers` });
-      promise = loadGreedy(moduleURL, threads);
-    }
-    return promise;
-  };
+  return () => (promise ??= load());
 }
 
-function greedyRegistration(load) {
-  let fixed;
+function drivers(job, threads, runtime) {
+  const greedy = once(() => {
+    log(`Starting ${threads} Greedy CPU workers`);
+    return loadGreedy(job.greedyURL, threads);
+  });
+  // The drivers call the Greedy exports by name; each call waits for the module.
+  const greedyApi = new Proxy({}, { get: (_, name) => async (...args) => (await greedy())[name](...args) });
+  const niimath = once(async () => (await import(/* @vite-ignore */ job.niimathURL)).default);
+  const kernel = once(async () => {
+    const { default: createModule } = await import(/* @vite-ignore */ job.registrationURL);
+    return createRegistration({ createModule, onLog: log });
+  });
   return {
-    provenance: { engine: 'Greedy', method: 'affine + NMI stationary velocity field', threads: Math.min(8, navigator.hardwareConcurrency || 1) },
-    async registerAffine({ fixed: affineFixed, moving }) {
-      const api = await load();
-      return registerAffineGreedy({ api, fixed: affineFixed, moving });
-    },
-    async register({ fixed: registrationFixed, moving, compressed }) {
-      const api = await load();
-      fixed = new Uint8Array(registrationFixed);
-      const result = registerGreedy({
-        api,
-        fixed,
-        moving,
-        mode: 'deformable',
-        onProgress: (message) => progress('registration', null, message),
-      });
-      return {
-        matrix: result.matrix,
-        warp: result.warp,
-        warped: await representation(result.image, compressed),
-      };
-    },
-    async apply({ registration, moving, compressed, interpolation, fill, precedingMatrix }) {
-      const api = await load();
-      const output = resliceGreedy({ api, fixed, moving, registration, precedingMatrix, interpolation, fill });
-      return representation(output, compressed);
-    },
-    release() {},
-  };
-}
-
-function antsRegistration(loadGreedyApi, moduleURL) {
-  let engine;
-  return {
-    provenance: { engine: 'ANTs 2.6.2', method: 'SyN', seed: 42, precision: 'float', threads: 1 },
-    async registerAffine({ fixed, moving }) {
-      const api = await loadGreedyApi();
-      return registerAffineGreedy({ api, fixed, moving });
-    },
-    async register({ fixed, moving, compressed }) {
-      const { default: createModule } = await import(/* @vite-ignore */ moduleURL);
-      engine = await createRegistration({ createModule, onLog: (message) => self.postMessage({ type: 'log', message }) });
-      const result = engine.register({ fixed, moving });
-      return { ...result, warped: await representation(result.warped, compressed) };
-    },
-    async apply({ registration, moving, compressed, interpolation, fill, precedingMatrix, precedingFixed }) {
-      let prepared = moving;
-      if (precedingMatrix) {
-        const api = await loadGreedyApi();
-        prepared = resliceAffineGreedy({ api, fixed: precedingFixed, moving, matrix: precedingMatrix, interpolation, fill });
-      }
-      return representation(engine.apply({ registration, moving: prepared, interpolation, fill }), compressed);
-    },
-    release(registration) {
-      engine.release(registration);
-    },
+    niimath: niimathDriver(async (options) => (await niimath())(options)),
+    'greedy-rs': greedyDriver(greedyApi),
+    synthsr: synthsrDriver(async (bytes, { ct }) => {
+      const result = await infer(
+        { stage: 'synthsr', buffer: asBuffer(bytes), ct, backend: job.synthsrBackend ?? 'webgpu', modelBase: job.modelBase },
+        (value, message) => progress('synthsr', value, message),
+      );
+      runtime.synthsr = result.provenance;
+      return new Uint8Array(result.buffer);
+    }),
+    'brainchop-mindgrab': mindgrabDriver({
+      async segment(bytes) {
+        const result = await infer(
+          { stage: 'mindgrab', volume: readVolume(asBuffer(bytes)), assetPath: job.mindgrabAssetPath, brainBackend: job.mindgrabBackend ?? 'auto' },
+          (value, message) => progress('mindgrab', value, message),
+        );
+        runtime.mindgrab = result.provenance;
+        return { image: writeVolume(result.brain, 'MindGrab brain'), mask: writeVolume(result.mask, 'MindGrab mask') };
+      },
+    }),
+    ...antsDrivers(kernel),
   };
 }
 
 self.onmessage = async ({ data: job }) => {
-  const imageMath = createImageMath();
   try {
     if (!self.crossOriginIsolated) throw new Error('Reload this page to enable isolated WebAssembly processing.');
     const templateResponse = await fetch(job.templateURL);
     if (!templateResponse.ok) throw new Error('Could not load the MNI template.');
-    const template = await templateResponse.arrayBuffer();
+    const template = new Uint8Array(await templateResponse.arrayBuffer());
     // Some static servers mark .nii.gz as Content-Encoding: gzip, so fetch
     // returns the decompressed NIfTI. Both representations are independently pinned.
     const templateHash = await sha(template);
@@ -157,39 +93,46 @@ self.onmessage = async ({ data: job }) => {
       '18576c0190c0f6496f3d4a6bf40cfd6e9cddb4b6eaa8517bb0af2b88ff67c0c5': 14442416,
     };
     if (templateRepresentations[templateHash] !== template.byteLength) throw new Error('MNI template checksum mismatch.');
-    const input = await job.input.arrayBuffer();
-    const lesion = job.lesion ? { name: job.lesion.name, buffer: await job.lesion.arrayBuffer() } : null;
-    const pathological = job.pathological ? { name: job.pathological.name, buffer: await job.pathological.arrayBuffer() } : null;
-    const loadGreedyApi = createGreedyLoader(job.greedyURL);
-    const registration = job.normalization === 'ants'
-      ? antsRegistration(loadGreedyApi, job.registrationURL)
-      : greedyRegistration(loadGreedyApi);
-    const result = await runSyncro({
-      input,
-      inputName: job.input.name,
-      lesion,
-      pathological,
+    const files = new Files();
+    const templatePath = template[0] === 0x1f && template[1] === 0x8b ? 'template/MNI152_T1_1mm_brain.nii.gz' : 'template/MNI152_T1_1mm_brain.nii';
+    files.put(templatePath, template);
+    const place = (file) => {
+      if (!file) return undefined;
+      files.put(`in/${file.name}`, file);
+      return `in/${file.name}`;
+    };
+    const threads = Math.min(8, navigator.hardwareConcurrency || 1);
+    const runtime = {};
+    const host = createHost(files, drivers(job, threads, runtime), { onLog: log, onStep: (argv) => log(`$ ${argv.join(' ')}`) });
+    await initCore();
+    const provenance = JSON.parse(await runSyncro(host, {
+      input: place(job.input),
+      lesion: place(job.lesion),
+      pathological: place(job.pathological),
+      template: templatePath,
+      out: '',
+      work: 'work',
       ct: job.ct,
-      keepSynth: job.keepSynth,
-      template,
-      brainExtractor: job.brainExtractor,
       normalization: job.normalization,
-      synthesize: (args) => infer({ stage: 'synthsr', buffer: args.buffer, ct: job.ct, backend: job.synthsrBackend ?? 'webgpu', modelBase: job.modelBase }, args.onProgress),
-      extractBrain: (args) => infer(job.brainExtractor === 'mindgrab'
-        ? { stage: 'mindgrab', volume: args.volume, assetPath: job.mindgrabAssetPath }
-        : { stage: 'synthstrip', volume: args.volume, modelBase: job.modelBase }, args.onProgress),
-      registration,
-      imageMath,
-      represent: ({ buffer, compressed }) => representation(buffer, compressed),
-      onProgress: progress,
-    });
-    result.provenance.templateHash = await sha(template);
-    result.provenance.inputHash = await sha(input);
-    result.outputs['provenance.json'] = new TextEncoder().encode(`${JSON.stringify(result.provenance, null, 2)}\n`);
-    self.postMessage({ type: 'result', ...result }, [...new Set(Object.values(result.outputs).map((bytes) => bytes.buffer))]);
+      threads,
+      keepSynth: job.keepSynth,
+      software: { host: 'browser' },
+    }, (stage) => progress(stage, 0)));
+    // The browser runtimes' own provenance, in the shape the web app has always written.
+    provenance.stages = {
+      synthsr: runtime.synthsr,
+      mindgrab: runtime.mindgrab,
+      registration: job.normalization === 'ants'
+        ? { engine: 'ANTs 2.6.2', method: 'SyN', seed: 42, precision: 'float', threads: 1 }
+        : { engine: 'Greedy', method: 'affine + NMI stationary velocity field', threads },
+    };
+    const outputs = {};
+    for (const name of provenance.outputs) outputs[name] = (await files.bytes(name)).slice();
+    outputs['commands.sh'] = (await files.bytes('work/commands.sh')).slice();
+    outputs['provenance.json'] = new TextEncoder().encode(`${JSON.stringify(provenance, null, 2)}\n`);
+    progress('complete', 1, 'Normalization complete');
+    self.postMessage({ type: 'result', outputs, provenance }, Object.values(outputs).map((bytes) => bytes.buffer));
   } catch (error) {
     self.postMessage({ type: 'error', message: error.message || String(error) });
-  } finally {
-    imageMath.dispose();
   }
 };

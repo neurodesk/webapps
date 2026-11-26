@@ -1,5 +1,7 @@
 # @neurodesk/qsmbly
 
+## 0.31.20261124
+
 ## 0.31.20261119
 
 ### Patch Changes

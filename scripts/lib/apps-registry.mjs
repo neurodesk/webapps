@@ -27,6 +27,7 @@ export const ANATOMY = new Map([
   ['whole-body', 'Whole body'],
   ['prostate', 'Prostate'],
   ['neck', 'Neck'],
+  ['skin', 'Skin'],
   ['any', 'Any anatomy'],
 ]);
 export const MODALITIES = new Map([
@@ -34,6 +35,8 @@ export const MODALITIES = new Map([
   ['ct', 'CT'],
   ['mrs', 'MRS'],
   ['microscopy', 'Microscopy'],
+  ['dermoscopy', 'Dermoscopy'],
+  ['photography', 'Clinical photography'],
   ['surface', 'Surfaces'],
 ]);
 export const INPUT_FORMATS = new Map([
@@ -42,6 +45,8 @@ export const INPUT_FORMATS = new Map([
   ['mgz', 'MGZ'],
   ['ome-zarr', 'OME-Zarr'],
   ['tiff', 'TIFF'],
+  ['png', 'PNG'],
+  ['jpeg', 'JPEG'],
   ['mrc', 'MRC'],
   ['itk', 'NRRD/MHA/MINC'],
   ['gifti', 'GIfTI'],

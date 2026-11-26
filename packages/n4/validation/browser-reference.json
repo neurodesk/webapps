@@ -19,42 +19,42 @@
     "path": "n4 command line: MindGrab CPU modules on the mean b0 (or the image)",
     "provenance": {
       "model": "mindgrab",
-      "version": "0.1.20260925",
+      "version": "1.0.0",
       "backend": "cpu"
     },
     "examples": {
       "ds005134-slab": {
         "name": "sub-01_dir-AP_desc-brain_mask.nii.gz",
-        "bytes": 1730,
-        "sha256": "65ce72773b6c99d3f2a95a75e5807c2f072ac845bda886cdde8c8e14247f34c1",
-        "decompressedSha256": "094853ac9434743da18e02bb1247de27371f237a9505181051394d54d756dd97",
+        "bytes": 1761,
+        "sha256": "de1dd353cb074520df2eebc337238807defc1132435766c179581a7de2031380",
+        "decompressedSha256": "65739fc3087edcd0becd19c16e440da135443e9b5a498fd9f66710aa0c5836b0",
         "nonFinite": 0,
-        "nonzero": 45965,
-        "mean": 0.7457008436080467
+        "nonzero": 45717,
+        "mean": 0.7416774821544452
       },
       "t1-head": {
         "name": "T1_desc-brain_mask.nii.gz",
-        "bytes": 54635,
-        "sha256": "56d4fb99ce2acf489f237ace76556f7a4785de98c778d3a89ca7935db8861733",
-        "decompressedSha256": "6cfac231606bb52e7d2b565928b4761a8f0c5c3d015501051d1c587274f99240",
+        "bytes": 55487,
+        "sha256": "b407e5435e25f8d4332df08ec39f4262743ed2b581bb5a957c277ab701afb97c",
+        "decompressedSha256": "b1ae9b793c4a409209633a10dd5d5578612634317e2de8c4c5f7f72509f336c6",
         "nonFinite": 0,
-        "nonzero": 1602690,
-        "mean": 0.28734401893287437
+        "nonzero": 1596893,
+        "mean": 0.28630468301778544
       },
       "dwi": {
         "name": "dwi_desc-brain_mask.nii.gz",
-        "bytes": 3342,
-        "sha256": "03e2eaa92e8d18be72b736f6bf0d292c69a0928d43f61128b2132d0133e87323",
-        "decompressedSha256": "5e10ea425004791fadf7ee16120e096cc8e0367ac0ac02bb5b324dd4b38bc965",
+        "bytes": 3414,
+        "sha256": "9aa2d97d08c6650bb6a3fd7da16217f4c2c9dc7cf0b6c8e8d67154c2bc661982",
+        "decompressedSha256": "146ba0952e3d3d01d9010a37c6c3fd4e8ab4d56987c05209e467cb7b0875e637",
         "nonFinite": 0,
-        "nonzero": 48259,
-        "mean": 0.23869796612852168
+        "nonzero": 47987,
+        "mean": 0.2373526036720481
       }
     }
   },
   "browser": {
     "path": "apps/n4/e2e/reference.spec.js: the app's correct automation with the mask input, N4 worker, built assets",
-    "app": "n4 0.4.20261022",
+    "app": "n4 0.6.20261119",
     "browser": "Chromium 156.0.8078.4",
     "cases": {
       "ds005134-slab": {
@@ -108,34 +108,34 @@
             }
           }
         },
-        "seconds": 4,
+        "seconds": 13,
         "outputs": {
           "image": {
             "name": "sub-01_dir-AP_desc-n4_dwi.nii.gz",
-            "bytes": 30161080,
-            "sha256": "d8c25478b2be064014c064602d2b581828f39bab615bb47c74461991f5b0d685",
-            "decompressedSha256": "664a53cc4eda075909f376a3d1f43d26b82617cc339da5c0c3d2fb3f207f7f3a",
+            "bytes": 30162578,
+            "sha256": "c04f101cc5af6946d0f889ac23baffa5653875e2e09dcacd61038878001d25fd",
+            "decompressedSha256": "a3bc0edf40b1676779050fae367fb61adcf88d6a2792644bdd225e1fd1486c51",
             "nonFinite": 0,
             "nonzero": 8366923,
-            "mean": 46.331574958709275
+            "mean": 46.32340002237277
           },
           "bias": {
             "name": "sub-01_dir-AP_desc-n4_biasfield.nii.gz",
-            "bytes": 208041,
-            "sha256": "d7e01df4f436f469e89db0eded819e303cfe5a060077117d3d80d8b626d2483f",
-            "decompressedSha256": "7421642ece6b170cfc53e2c2f987cd78c199c944c6a72c5e71cbef5ceea590f2",
+            "bytes": 208007,
+            "sha256": "9609d448aa10b615166a7a7276eade94d0891e31d4c484591bcdf85de3068e6a",
+            "decompressedSha256": "e3e7cb744aa07e277fb2de2eed45a87d2830b248572108d0a20a24721689aa32",
             "nonFinite": 0,
             "nonzero": 61640,
-            "mean": 0.944355807815528
+            "mean": 0.9459112088559202
           },
           "mask": {
             "name": "sub-01_dir-AP_desc-brain_mask.nii.gz",
-            "bytes": 1781,
-            "sha256": "14d4ac3bfeeafa2bd0089b0035ee1749719700e649aafaf4912b798eadb01cde",
-            "decompressedSha256": "094853ac9434743da18e02bb1247de27371f237a9505181051394d54d756dd97",
+            "bytes": 1761,
+            "sha256": "de1dd353cb074520df2eebc337238807defc1132435766c179581a7de2031380",
+            "decompressedSha256": "65739fc3087edcd0becd19c16e440da135443e9b5a498fd9f66710aa0c5836b0",
             "nonFinite": 0,
-            "nonzero": 45965,
-            "mean": 0.7457008436080467
+            "nonzero": 45717,
+            "mean": 0.7416774821544452
           },
           "bval": {
             "name": "sub-01_dir-AP_desc-n4_dwi.bval",
@@ -189,34 +189,34 @@
             }
           }
         },
-        "seconds": 42,
+        "seconds": 121,
         "outputs": {
           "image": {
             "name": "T1_desc-n4_head.nii.gz",
-            "bytes": 19990693,
-            "sha256": "e6ff8fef5033ea8178be93286b4da3def2e8c87913d981ab5d92a5f69fce804c",
-            "decompressedSha256": "b66c3c420e3b21940a1d2e3f5f09e1d266c478ba93eaf268b550432fc0d3c681",
+            "bytes": 19992200,
+            "sha256": "0c4a6b327b2e4f82afc76c9a7514c4a7ddbb8ab9eb56df6ad836addada618853",
+            "decompressedSha256": "8e712555ebef077ccc2526c445ab5a418c803c2557e5a1bf6857c35718265102",
             "nonFinite": 0,
             "nonzero": 5566702,
-            "mean": 2591.575222757519
+            "mean": 2608.971184105929
           },
           "bias": {
             "name": "T1_desc-n4_biasfield.nii.gz",
-            "bytes": 19015336,
-            "sha256": "f4a22002f858ce4f152b5207dc4e4796a93af3083066660d57b59919235979ee",
-            "decompressedSha256": "48e060e518b88374f9982d62d77ca02ebf666d3444ab6d27a216909fe724d63d",
+            "bytes": 19021003,
+            "sha256": "b16ca233557f6cfc644080a19372b030e35a18de15c647232dcd44e7bbec2597",
+            "decompressedSha256": "cf6055c3906d4654426d4415fb6260f6dd0e94d543413b501ba348a0822f6707",
             "nonFinite": 0,
             "nonzero": 5577600,
-            "mean": 0.03484128974893095
+            "mean": 0.03463038435778477
           },
           "mask": {
             "name": "T1_desc-brain_mask.nii.gz",
-            "bytes": 55516,
-            "sha256": "3c677b15722a9ee570ad4de34fc09030f0c0b1ff66d8e948ed7dca7001034bae",
-            "decompressedSha256": "6cfac231606bb52e7d2b565928b4761a8f0c5c3d015501051d1c587274f99240",
+            "bytes": 55487,
+            "sha256": "b407e5435e25f8d4332df08ec39f4262743ed2b581bb5a957c277ab701afb97c",
+            "decompressedSha256": "b1ae9b793c4a409209633a10dd5d5578612634317e2de8c4c5f7f72509f336c6",
             "nonFinite": 0,
-            "nonzero": 1602690,
-            "mean": 0.28734401893287437
+            "nonzero": 1596893,
+            "mean": 0.28630468301778544
           }
         }
       },
@@ -256,34 +256,34 @@
             }
           }
         },
-        "seconds": 3,
+        "seconds": 10,
         "outputs": {
           "image": {
             "name": "dwi_desc-n4.nii.gz",
-            "bytes": 8848987,
-            "sha256": "37f950c1f20d1770fdf27b63d492227fe7aa8b6c916499812957003bba4eb5b7",
-            "decompressedSha256": "be808248e164403faea0e0c40b5daade269283c55de456ec33ff828e20700a1d",
+            "bytes": 8849578,
+            "sha256": "a184b964128613583ba0828bc6ae3277d418df73fe164986dd6ab7204d82a719",
+            "decompressedSha256": "2474b4c5366f986f97d9b569c3ab4b021f95bcce8bd944010bcf5001b7908f8f",
             "nonFinite": 0,
             "nonzero": 2354072,
-            "mean": 34.81519723579301
+            "mean": 34.77098377690112
           },
           "bias": {
             "name": "dwi_desc-n4_biasfield.nii.gz",
-            "bytes": 694116,
-            "sha256": "9bec9cc6d150227f1dafd4bcd22ab2a96c3b6aab0e2eed0985342a16c434d351",
-            "decompressedSha256": "cee00e70abdbd17b82d1c903063b2952f3856f4eaa0615f6ab8532a69fb5ce24",
+            "bytes": 694838,
+            "sha256": "77bcf4e6192b3c05af694cfb1cb665ae35c9a2f06866af0717befcc1bed8b4be",
+            "decompressedSha256": "9cbcf5e47b12fcb2a1278b822f70fb2b1c1f61a74dd454709eef436ff8663333",
             "nonFinite": 0,
             "nonzero": 202176,
-            "mean": 1.3422375013703913
+            "mean": 1.3463729874249495
           },
           "mask": {
             "name": "dwi_desc-brain_mask.nii.gz",
-            "bytes": 3448,
-            "sha256": "087fa07dc0a84e133f157fd0a5fbd26fffbf9fc59f3095e2b889657ab5d2b78a",
-            "decompressedSha256": "5e10ea425004791fadf7ee16120e096cc8e0367ac0ac02bb5b324dd4b38bc965",
+            "bytes": 3414,
+            "sha256": "9aa2d97d08c6650bb6a3fd7da16217f4c2c9dc7cf0b6c8e8d67154c2bc661982",
+            "decompressedSha256": "146ba0952e3d3d01d9010a37c6c3fd4e8ab4d56987c05209e467cb7b0875e637",
             "nonFinite": 0,
-            "nonzero": 48259,
-            "mean": 0.23869796612852168
+            "nonzero": 47987,
+            "mean": 0.2373526036720481
           },
           "bval": {
             "name": "dwi_desc-n4.bval",

@@ -7,11 +7,11 @@ import { mindgrabFromAssetPath } from '../../scripts/lib/mindgrab-asset-path-plu
 
 // Resolve MindGrab through the package that pins it, not the app's own install.
 const require = createRequire(import.meta.resolve('@neurodesk/brain-extraction/mindgrab'));
-const mindgrabRoot = dirname(require.resolve('@brainchop/mindgrab/package.json'));
+const mindgrabRoot = dirname(require.resolve('@brainchop/core/package.json'));
 const betRoot = new URL('../../packages/brain-extraction/wasm/', import.meta.url);
 const assets = new Map([
   ...['LICENSE', 'bet.wasm'].map(name => [`bet/${name}`, new URL(name, betRoot)]),
-  ...['brainchop-mindgrab-gpu.js', 'brainchop-mindgrab-gpu.wasm', 'brainchop-mindgrab-gl.js', 'brainchop-mindgrab-gl.wasm', 'brainchop-mindgrab.js', 'brainchop-mindgrab.wasm']
+  ...['models/mindgrab.bin', 'brainchop-mindgrab-gl.js', 'brainchop-mindgrab-gl.wasm', 'brainchop-mindgrab.js', 'brainchop-mindgrab.wasm']
     .map(name => [`mindgrab/${name}`, join(mindgrabRoot, 'dist', name)]),
   ['mindgrab/LICENSE', join(mindgrabRoot, 'LICENSE')],
 ]);
@@ -30,7 +30,7 @@ function extractionAssets() {
         const path = assets.get(key);
         if (!path) return next();
         try {
-          response.setHeader('Content-Type', key.endsWith('.wasm') ? 'application/wasm' : 'text/javascript');
+          response.setHeader('Content-Type', key.endsWith('.wasm') ? 'application/wasm' : key.endsWith('.bin') ? 'application/octet-stream' : 'text/javascript');
           response.end(await readFile(path));
         } catch (error) { next(error); }
       });
@@ -43,7 +43,7 @@ export default neurodeskViteConfig({
   // The worker always passes assetPath, so MindGrab loads its modules from the mindgrab/ copies above.
   worker: { plugins: () => [mindgrabFromAssetPath()] },
   build: { target: 'esnext', assetsInlineLimit: 0 },
-  optimizeDeps: { exclude: ['onnxruntime-web', '@brainchop/mindgrab'] },
+  optimizeDeps: { exclude: ['onnxruntime-web', '@brainchop/core'] },
   server: { host: '127.0.0.1' },
   preview: { host: '127.0.0.1' },
 });

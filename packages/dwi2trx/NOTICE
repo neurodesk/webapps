@@ -8,10 +8,10 @@ WebAssembly build also includes an Apache-2.0 N4 module) from
 app/node_modules/@niivue/niimath/LICENSE in a portable archive.
 https://github.com/rordenlab/niimath
 
-The brain mask runs MindGrab (@brainchop/mindgrab 0.1.20260925, MIT,
+The brain mask runs MindGrab (@brainchop/core 1.0.0, MIT,
 Copyright (c) 2024-2026 spikedoanz, Sergey Plis) on its CPU modules; see
-app/node_modules/@brainchop/mindgrab/LICENSE in a portable archive.
-https://github.com/neuroneural/brainchopC
+app/node_modules/@brainchop/core/LICENSE in a portable archive.
+https://github.com/neuroneural/brainchop-core
 
 Please cite: Basser PJ, Mattiello J, LeBihan D. MR diffusion tensor
 spectroscopy and imaging. Biophysical Journal. 1994;66(1):259-267.
