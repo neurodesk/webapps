@@ -137,12 +137,17 @@ test('schema validation, deterministic dedupe IDs, bounds, ref validation, and J
     note: false,
   }]), BeadsValidationError);
   assert.throws(() => validateBead({ ...bead, revision: 2 ** 53 }), BeadsValidationError);
+  assert.throws(() => validateBead({ ...bead, priority: null }), BeadsValidationError);
+  assert.throws(() => validateBead({ ...bead, createdAt: 'November 26, 2026' }), BeadsValidationError);
   assert.throws(() => validateBead({ ...bead, releasedLeases: ['junk'] }), BeadsValidationError);
-  // Legacy schema-v1 records carrying leaseReleasedAt load cleanly
+  assert.throws(() => validateBead({ ...bead, releasedLeases: ['November 26, 2026|November 27, 2026|abcdef123456'] }), BeadsValidationError);
+  // Legacy schema-v1 records carrying leaseReleasedAt or "<claimedAt>|<owner>" tombstones load cleanly
   const legacyNull = validateBead({ ...bead, leaseReleasedAt: null });
   assert.equal(legacyNull.leaseFloorAt, null);
   const legacyTs = validateBead({ ...bead, leaseReleasedAt: '2026-11-26T00:30:00.000Z' });
   assert.equal(legacyTs.leaseFloorAt, '2026-11-26T00:30:00.000Z');
+  const legacyTombstone = validateBead({ ...bead, releasedLeases: ['2026-11-26T00:00:00.000Z|alice'] });
+  assert.deepEqual(legacyTombstone.releasedLeases, ['2026-11-26T00:00:00.000Z|alice']);
   const maxSafeMap = new Map([[bead.id, { ...bead, revision: Number.MAX_SAFE_INTEGER }]]);
   assert.throws(() => applyOperations(maxSafeMap, [{ op: 'note', id: bead.id, note: 'overflow' }], { now }), BeadsValidationError);
 });
@@ -521,12 +526,35 @@ test('mergeBeadsMaps preserves closed status, bumps revision on merge, caps evid
   assert.equal(mergedBlockedAndNotes.get(idA).status, 'blocked');
   assert.ok(!readyBeads(mergedBlockedAndNotes, { now: t2 }).some((b) => b.id === idA));
 
-  // No-op update (sending existing title back) must NOT bump stateRevision or defeat concurrent dep_add
+  // No-op update (sending existing title back) must NOT bump stateRevision or defeat concurrent dep_add; priority: null is rejected
+  assert.throws(() => applyOperations(base, [{ op: 'update', id: idA, priority: null }], { actor: 'triage', now: t2 }), BeadsValidationError);
   const noopTitleBranch = applyOperations(base, [
     { op: 'update', id: idA, title: 'A' },
   ], { actor: 'triage', now: t2 }).beads;
   const mergedNoopAndDep = mergeBeadsMaps(noopTitleBranch, depBlockedBranch);
   assert.deepEqual(mergedNoopAndDep.get(idA).deps.blockedBy, [idB]);
+
+  // Three clones inheriting the SAME active lease and adding different notes must NEVER release that lease
+  const sameLeaseNote1 = applyOperations(claimedBranch, [{ op: 'note', id: idA, note: 'Same-lease note 1' }], { actor: 'n1', now: t2 }).beads;
+  const sameLeaseNote2 = applyOperations(claimedBranch, [{ op: 'note', id: idA, note: 'Same-lease note 2' }], { actor: 'n2', now: t2 }).beads;
+  const sameLeaseNote3 = applyOperations(claimedBranch, [{ op: 'note', id: idA, note: 'Same-lease note 3' }], { actor: 'n3', now: t3 }).beads;
+  const m12 = mergeBeadsMaps(sameLeaseNote1, sameLeaseNote2);
+  assert.equal(m12.get(idA).status, 'in_progress');
+  assert.equal(m12.get(idA).releasedLeases.length, 0);
+  const m123 = mergeBeadsMaps(m12, sameLeaseNote3);
+  assert.equal(m123.get(idA).status, 'in_progress');
+  assert.equal(m123.get(idA).lease?.owner, 'worker-a');
+
+  // Legacy "<claimedAt>|<owner>" tombstone still suppresses the released claim on merge
+  const legacyReleasedMap = new Map([[idA, validateBead({
+    ...structuredClone(base.get(idA)),
+    revision: 3,
+    stateRevision: 3,
+    releasedLeases: [`${claimedBranch.get(idA).lease.claimedAt}|worker-a`],
+  })]]);
+  const mergedLegacyTombstone = mergeBeadsMaps(legacyReleasedMap, claimedBranch);
+  assert.equal(mergedLegacyTombstone.get(idA).status, 'open');
+  assert.equal(mergedLegacyTombstone.get(idA).lease, null);
 
   // Adding audit notes to a tied branch must NEVER flip which scheduling edit wins
   const tiedTitle = applyOperations(base, [{ op: 'update', id: idA, title: 'Tied title' }], { actor: 'host-1', now: t1 }).beads;
@@ -793,6 +821,23 @@ test('git orphan-branch store handles subdirectories, CAS bootstrap, fast-forwar
     syncBeadsRef(mainRepo, { remote: 'origin', push: true });
     assert.equal(execFileSync('git', ['ls-remote', '--tags', 'origin'], { cwd: mainRepo, encoding: 'utf8' }).trim(), '');
     assert.equal(execFileSync('git', ['rev-parse', 'refs/heads/main'], { cwd: mainRepo, encoding: 'utf8' }).trim(), mainRepoHeadBefore);
+
+    // Relative push URL colliding with another configured remote name must push to the local path, not the other remote
+    const relRepo = join(root, 'rel-repo');
+    const relTargetBare = join(relRepo, 'backup');
+    const unrelatedBare = join(root, 'unrelated-backup.git');
+    mkdirSync(relRepo, { recursive: true });
+    mkdirSync(relTargetBare, { recursive: true });
+    mkdirSync(unrelatedBare, { recursive: true });
+    initGitRepo(relRepo);
+    execFileSync('git', ['init', '--bare', '-b', 'main', relTargetBare], { stdio: 'ignore' });
+    execFileSync('git', ['init', '--bare', '-b', 'main', unrelatedBare], { stdio: 'ignore' });
+    execFileSync('git', ['remote', 'add', 'origin', 'backup'], { cwd: relRepo, stdio: 'ignore' });
+    execFileSync('git', ['remote', 'add', 'backup', unrelatedBare], { cwd: relRepo, stdio: 'ignore' });
+    mutateBeadsRef(relRepo, [{ op: 'create', title: 'Relative remote test', scope: { type: 'repo', targets: [] } }], { actor: 'rel' });
+    syncBeadsRef(relRepo, { remote: 'origin', push: true });
+    assert.ok(execFileSync('git', ['rev-parse', '--verify', 'refs/heads/memory/beads'], { cwd: relTargetBare, encoding: 'utf8' }).trim());
+    assert.equal(execFileSync('git', ['for-each-ref', 'refs/heads/memory/beads'], { cwd: unrelatedBare, encoding: 'utf8' }).trim(), '');
 
     // Pull-only sync must ignore configured remote refmaps and fetch.recurseSubmodules=true
     const subUpstream = join(root, 'sub-upstream.git');

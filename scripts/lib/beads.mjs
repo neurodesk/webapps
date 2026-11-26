@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
 
 export const SCHEMA_VERSION = 1;
 export const DEFAULT_BEADS_REF = 'refs/heads/memory/beads';
@@ -12,6 +13,7 @@ export const SCOPE_TYPES = Object.freeze(['app', 'package', 'exe', 'shared', 're
 const MEMORY_REF_PATTERN = /^refs\/heads\/memory\/[a-z0-9][a-z0-9._/-]*$/;
 const REMOTE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const RELEASED_LEASE_HASH_PATTERN = /^[0-9a-f]{12}$/;
+const ISO_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
 const ZERO_OID = '0000000000000000000000000000000000000000';
 
 export const LIMITS = Object.freeze({
@@ -116,10 +118,18 @@ function assertOptionalString(value, field, maxLen) {
 }
 
 function assertIsoTimestamp(value, field) {
-  if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) {
+  if (typeof value !== 'string' || !ISO_TIMESTAMP_PATTERN.test(value)) {
     throw new BeadsValidationError(`${field} must be a valid ISO-8601 timestamp`);
   }
-  return new Date(value).toISOString();
+  const ms = Date.parse(value);
+  if (Number.isNaN(ms)) {
+    throw new BeadsValidationError(`${field} must be a valid ISO-8601 timestamp`);
+  }
+  const iso = new Date(ms).toISOString();
+  if (value.endsWith('Z') && iso.slice(0, 10) !== value.slice(0, 10)) {
+    throw new BeadsValidationError(`${field} must be a valid calendar ISO-8601 timestamp`);
+  }
+  return iso;
 }
 
 function uniqueSorted(values) {
@@ -302,6 +312,12 @@ function normalizeReleasedLeases(raw = []) {
       throw new BeadsValidationError(`releasedLeases[${idx}] must be a string`);
     }
     const parts = item.split('|');
+    if (parts.length === 2) {
+      // Legacy schema-v1 tombstone format: "<claimedAt>|<owner>"
+      const claimedAt = assertIsoTimestamp(parts[0], `releasedLeases[${idx}].claimedAt`);
+      const owner = assertNonEmptyString(parts[1], `releasedLeases[${idx}].owner`, LIMITS.actor);
+      return `${claimedAt}|${owner}`;
+    }
     if (parts.length !== 3) {
       throw new BeadsValidationError(`releasedLeases[${idx}] must have format "<claimedAt>|<expiresAt>|<hash>"`);
     }
@@ -344,7 +360,7 @@ export function validateBead(raw) {
   if (!BEAD_STATUSES.includes(raw.status)) {
     throw new BeadsValidationError(`status must be one of: ${BEAD_STATUSES.join(', ')}`);
   }
-  const priority = raw.priority ?? 2;
+  const priority = raw.priority === undefined ? 2 : raw.priority;
   if (!Number.isSafeInteger(priority) || priority < 0 || priority > 3) {
     throw new BeadsValidationError('priority must be an integer 0..3');
   }
@@ -910,7 +926,12 @@ export function applyOperations(beadsMap, operations, options = {}) {
           bead.lease = null;
         }
       }
-      if (op.priority !== undefined) bead.priority = op.priority;
+      if (op.priority !== undefined) {
+        if (!Number.isSafeInteger(op.priority) || op.priority < 0 || op.priority > 3) {
+          throw new BeadsValidationError('priority must be an integer 0..3');
+        }
+        bead.priority = op.priority;
+      }
       if (op.scope !== undefined) {
         bead.scope = normalizeScope(op.scope);
         if (singleAppOnly && !isSingleAppScope(bead)) {
@@ -1022,14 +1043,15 @@ export function applyOperations(beadsMap, operations, options = {}) {
     }
 
     bead.updatedAt = opNowIso;
-    if (stateSignature(bead) !== prevStateSig) {
-      bead.stateRevision = nextRevision(bead.stateRevision);
-      bead.stateUpdatedAt = opNowIso;
-    }
     bead.revision = nextRevision(bead.revision);
-    next.set(bead.id, validateBead(bead));
-    changedIds.add(bead.id);
-    updatedIds.push(bead.id);
+    const validated = validateBead(bead);
+    if (stateSignature(validated) !== prevStateSig) {
+      validated.stateRevision = nextRevision(validated.stateRevision);
+      validated.stateUpdatedAt = opNowIso;
+    }
+    next.set(validated.id, validated);
+    changedIds.add(validated.id);
+    updatedIds.push(validated.id);
   }
 
   validateBeadsGraph(next);
@@ -1169,9 +1191,16 @@ export function mergeBeadsMaps(localMap, remoteMap) {
     } else {
       const isSuperseded = (lease) =>
         releasedSet.has(leaseKey(lease))
+        || releasedSet.has(`${lease.claimedAt}|${lease.owner}`)
         || Boolean(maxLeaseFloorAt && lease.claimedAt <= maxLeaseFloorAt)
         || Boolean(maxReopenedAt && lease.claimedAt < maxReopenedAt);
-      const survivingLeases = [local.lease, remote.lease].filter((lease) => lease && !isSuperseded(lease));
+      const survivingByKey = new Map();
+      for (const lease of [local.lease, remote.lease]) {
+        if (!lease || isSuperseded(lease)) continue;
+        const key = leaseKey(lease);
+        if (!survivingByKey.has(key)) survivingByKey.set(key, lease);
+      }
+      const survivingLeases = [...survivingByKey.values()];
       if (survivingLeases.length === 0) {
         if (winner.lease !== null && winner.status === 'in_progress') {
           winner.status = other.status === 'blocked' ? 'blocked' : 'open';
@@ -1457,6 +1486,19 @@ function remoteBranchExists(repoTop, remote, ref) {
   }
 }
 
+function resolvePushTarget(repoTop, remote) {
+  const pushUrl = git(['remote', 'get-url', '--push', '--', remote], { cwd: repoTop }).trim();
+  if (!pushUrl) {
+    throw new BeadsValidationError(`Unable to resolve push URL for remote "${remote}"`);
+  }
+  const hasScheme = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(pushUrl);
+  const isScpStyle = /^[^/\\]+:/.test(pushUrl);
+  if (!hasScheme && !isScpStyle && !pushUrl.startsWith('/')) {
+    return resolve(repoTop, pushUrl);
+  }
+  return pushUrl;
+}
+
 export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', push = false, maxRetries = 5 } = {}) {
   assertMemoryRef(ref);
   const repoTop = resolveGitRoot(cwd);
@@ -1543,12 +1585,9 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
 
   let pushed = false;
   if (push && finalSha) {
-    const pushUrl = git(['remote', 'get-url', '--push', '--', remote], { cwd: repoTop }).trim();
-    if (!pushUrl) {
-      throw new BeadsValidationError(`Unable to resolve push URL for remote "${remote}"`);
-    }
+    const pushTarget = resolvePushTarget(repoTop, remote);
     const leaseArg = remoteState.sha ? `--force-with-lease=${ref}:${remoteState.sha}` : `--force-with-lease=${ref}:`;
-    git(['push', '--no-follow-tags', '--recurse-submodules=no', leaseArg, '--', pushUrl, `${finalSha}:${ref}`], { cwd: repoTop });
+    git(['push', '--no-follow-tags', '--recurse-submodules=no', leaseArg, '--', pushTarget, `${finalSha}:${ref}`], { cwd: repoTop });
     git(['update-ref', '--no-deref', trackingRef, finalSha], { cwd: repoTop });
     pushed = true;
   }
