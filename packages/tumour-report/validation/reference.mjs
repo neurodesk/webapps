@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import reference from './container-reference.json' with { type: 'json' };
 
 const FILES = Object.freeze({
-  'BEAMSTER_A_038_brain.nii.gz': '5a28bc0a77ba12f7d25c60d024b94a9d611a76a5de9b7b0c6ee50cef83889224',
-  'BEAMSTER_A_038_tumour.nii.gz': 'dd2b55afe782beb56774d0116f8a639a59754d82294581b688fbdb79b4615b7e',
+  'BEAMSTER_A_038_brain.nii.gz': 'c8fa4c18b3208c9a816cb2dfbc2e2a39e596cf327a0a23621216c4fe84cfa2b6',
+  'BEAMSTER_A_038_tumour.nii.gz': 'de7b345ad4ddcfb54f0f742f1fb2d194664261f3ae2043d0dfa6d9cb3b8b00ba',
   'BEAMSTER_A_038_tumour_mni.nii.gz': '32448d04f5302317091069a0406d216b31eaa93fafb290b437e0b65f67d7ce7a',
 });
 

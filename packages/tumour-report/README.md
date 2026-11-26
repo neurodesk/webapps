@@ -47,7 +47,8 @@ ICBM 2009a template, masks, Schaefer 7/17, NaN-cleaned resectability maps, and a
 
 Reference container:
 `dbouget/raidionics-rads:v1.3.2-py39-cpu@sha256:ef2861258f92e66c21ded1405ec5ffa856ffda9cd9bda38ae90e07ade01946ab`
-on `BEAMSTER Dataset_A_038.nii.gz` (CC BY 4.0, `512 × 512 × 250`, `1.37 × 1.37 × 1.25 mm`,
+on `BEAMSTER Dataset_A_038.nii.gz` (CC BY 4.0, `157 × 218 × 169` tightly cropped from the
+`512 × 512 × 250` radiotherapy FOV with exact RAS affine preserved, `1.37 × 1.37 × 1.25 mm`,
 LPS, defaced skull-intact multifocal metastases).
 
 | Comparison | Node (`@neurodesk/tumour-report`) | Reference Container | Agreement |
