@@ -193,7 +193,7 @@ export async function reportNightlyFailure({ run, repository, defaultBranch, cli
     '', `[Run ${runId}, attempt ${attempt}](${runUrl})`,
     `- Conclusion: ${plain(run.conclusion)}. Event: schedule.`,
     `- Commit: ${plain(run.head_sha)}. Branch: ${plain(run.head_branch)}.`,
-    `- Started: ${plain(run.run_started_at ?? run.created_at)}. Updated: ${plain(run.updated_at)}.`,
+    `- ${run.created_at ? `Created: ${plain(run.created_at)}. ` : ''}Started: ${plain(run.run_started_at ?? run.created_at)}. Updated: ${plain(run.updated_at)}.`,
     `- Jobs: ${failed.length} failed or timed out; ${cancelled.length} cancelled; ${jobs.filter(job => job.conclusion === 'skipped').length} skipped.`,
     ...affectedGroups([...failed, ...cancelled]),
     '', incomplete ? 'Coverage is incomplete. Cancellation does not establish that the cancelled checks passed.' : 'Investigate the failed jobs below.', ''];
@@ -256,13 +256,13 @@ export async function reportNightlyFailure({ run, repository, defaultBranch, cli
 function reportedFailureInfo(body, fallback) {
   const header = body?.slice(0, 1000) ?? '';
   const marker = header.match(/<!-- nightly-run:(\d+):attempt:(\d+) -->/);
-  const meta = header.match(/^- (?:Started: ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+-]+Z?)\. )?Updated: ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+-]+Z?)\.$/m);
-  const startedAt = meta?.[1] ? time(meta[1]) : Number.NaN;
+  const meta = header.match(/^- (?:Created: ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+-]+Z?)\. )?(?:Started: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+-]+Z?\. )?Updated: ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+-]+Z?)\.$/m);
+  const createdAt = meta?.[1] ? time(meta[1]) : Number.NaN;
   const updatedAt = meta?.[2] ? time(meta[2]) : time(fallback);
   return {
     runId: marker?.[1] ?? null,
     attempt: marker?.[2] ? Number(marker[2]) : null,
-    startedAt,
+    createdAt,
     updatedAt,
   };
 }
@@ -273,7 +273,7 @@ function runSupersedesReport({ runId, attempt, runCreatedAt, runCompletedAt }, r
     return report.attempt === null || Number(attempt) > report.attempt;
   }
   if (report.runId !== null && BigInt(runId) < BigInt(report.runId)) return false;
-  if (!Number.isNaN(report.startedAt) && !Number.isNaN(runCreatedAt) && runCreatedAt < report.startedAt) return false;
+  if (!Number.isNaN(report.createdAt) && !Number.isNaN(runCreatedAt) && runCreatedAt < report.createdAt) return false;
   return true;
 }
 
@@ -337,7 +337,7 @@ export async function closeRecoveredNightlyIssue({ run, repository, defaultBranc
     `## Scheduled workflow recovered: ${plain(run.name)}`,
     '',
     `[Run ${runId}, attempt ${attempt}](${runUrl}) passed cleanly on \`${plain(run.head_branch)}\` at commit \`${plain(run.head_sha)}\` (${succeeded.length} ${succeeded.length === 1 ? 'job' : 'jobs'} passed).`,
-    `- Started: ${plain(run.run_started_at ?? run.created_at)}. Updated: ${plain(run.updated_at)}.`,
+    `- ${run.created_at ? `Created: ${plain(run.created_at)}. ` : ''}Started: ${plain(run.run_started_at ?? run.created_at)}. Updated: ${plain(run.updated_at)}.`,
     '',
     'Closing this issue automatically. A future scheduled failure will reopen it.',
   ].join('\n');

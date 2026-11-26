@@ -189,13 +189,15 @@ function recoveryCandidates(ordered, { repository, defaultBranch, cutover, faile
   for (const [workflowId, list] of byWorkflow) {
     if (erroredWorkflows.has(workflowId)) continue;
     const isUnhealthy = attempt => attempt.conclusion !== 'success' || failedAttempts.has(attemptKey(attempt));
-    const passing = list.filter(attempt => completedAt(attempt) >= cutoverAt && !isUnhealthy(attempt));
-    if (!passing.length) continue;
-    const best = passing[passing.length - 1];
-    if ((maxAttemptByRun.get(best.id) ?? 1) > Number(best.run_attempt ?? 1)) continue;
-    const dominatedByUnhealthy = list.some(other => isUnhealthy(other) && (completedAt(other) >= completedAt(best) || time(other.created_at) > time(best.created_at)));
-    if (dominatedByUnhealthy) continue;
-    candidates.push({ workflowId, attempt: best });
+    const unhealthy = list.filter(isUnhealthy);
+    const qualifying = list.filter(attempt => (
+      completedAt(attempt) >= cutoverAt
+      && !isUnhealthy(attempt)
+      && (maxAttemptByRun.get(attempt.id) ?? 1) <= Number(attempt.run_attempt ?? 1)
+      && !unhealthy.some(other => completedAt(other) >= completedAt(attempt) || time(other.created_at) > time(attempt.created_at))
+    ));
+    if (!qualifying.length) continue;
+    candidates.push({ workflowId, attempt: qualifying[qualifying.length - 1] });
   }
   return candidates;
 }

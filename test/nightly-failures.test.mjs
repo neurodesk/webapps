@@ -531,6 +531,25 @@ test('closeRecoveredNightlyIssue skips non-qualifying, stale, partial, all-skipp
   const staleRerunClient = fakeClient({ jobs: [{ id: 1, name: 'ok', conclusion: 'success' }], issues: [newerRecordedIssue] });
   assert.ok((await closeRecoveredNightlyIssue({ run: oldRerun, repository: 'owner/repo', defaultBranch: 'main', client: staleRerunClient })).skipped);
   assert.deepEqual(writes(staleRerunClient), []);
+  // Queue delay: failed run created first (02:00), started late (02:30), finished (02:40);
+  // newer passing run queued at 02:15 and finished at 02:45 closes both new (Created:) and legacy reports.
+  const queuedPass = {
+    ...run, id: 124, run_attempt: 1, conclusion: 'success',
+    created_at: '2026-10-15T02:15:00Z', run_started_at: '2026-10-15T02:15:00Z', updated_at: '2026-10-15T02:45:00Z',
+  };
+  for (const body of [
+    '<!-- nightly-workflow:45 -->\n<!-- nightly-run:123:attempt:1 -->\n- Created: 2026-10-15T02:00:00Z. Started: 2026-10-15T02:30:00Z. Updated: 2026-10-15T02:40:00Z.',
+    '<!-- nightly-workflow:45 -->\n<!-- nightly-run:123:attempt:1 -->\n- Started: 2026-10-15T02:30:00Z. Updated: 2026-10-15T02:40:00Z.',
+  ]) {
+    const queuedClient = fakeClient({
+      jobs: [{ id: 1, name: 'ok', conclusion: 'success' }],
+      issues: [{ number: 8, state: 'open', created_at: '2026-10-15T06:00:00Z', body }],
+    });
+    assert.deepEqual(
+      await closeRecoveredNightlyIssue({ run: queuedPass, repository: 'owner/repo', defaultBranch: 'main', client: queuedClient }),
+      { issue: 8, closed: true },
+    );
+  }
   // Human-authored recovery marker cannot suppress auto-close; dryRun makes no writes.
   const humanMarker = fakeClient({
     jobs: [{ id: 1, name: 'ok', conclusion: 'success' }],

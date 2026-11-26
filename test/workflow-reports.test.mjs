@@ -639,4 +639,25 @@ test('auto-close retries an interrupted close, waits when a newer attempt is in 
   });
   await tick(acrossCutover, at(4), { cutover: at(0) });
   assert.equal(acrossCutover.issues[0].state, 'open');
+
+  // 4. A stale successful rerun finishing last must not mask a newer valid recovery run.
+  const oldRunFail = attempt({ id: 900, workflow_id: 24, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(1), run_started_at: at(1), updated_at: at(2) });
+  const newerFail = attempt({ id: 901, workflow_id: 24, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(25), run_started_at: at(25), updated_at: at(26) });
+  const validRecovery = attempt({ id: 902, workflow_id: 24, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', conclusion: 'success', created_at: at(49), run_started_at: at(49), updated_at: at(50) });
+  const lateOldRerunPass = { ...oldRunFail, run_attempt: 2, conclusion: 'success', run_started_at: at(51), updated_at: at(52) };
+  const unmasked = github({
+    runs: [oldRunFail, newerFail, validRecovery, lateOldRerunPass],
+    jobs: {
+      '900:1': [{ id: 9001, name: 'report', conclusion: 'failure', steps: [] }],
+      '901:1': [{ id: 9011, name: 'report', conclusion: 'failure', steps: [] }],
+      '902:1': [{ id: 9021, name: 'report', conclusion: 'success', steps: [] }],
+      '900:2': [{ id: 9002, name: 'report', conclusion: 'success', steps: [] }],
+    },
+  });
+  await tick(unmasked, at(28));
+  assert.equal(unmasked.issues[0].state, 'open');
+  const unmaskedResult = await tick(unmasked, at(54));
+  assert.equal(unmasked.issues[0].state, 'closed');
+  assert.equal(unmaskedResult.results.length, 1);
+  assert.equal(unmaskedResult.results[0].run, 902);
 });
