@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -139,15 +139,19 @@ test('schema validation, deterministic dedupe IDs, bounds, ref validation, and J
   assert.throws(() => validateBead({ ...bead, revision: 2 ** 53 }), BeadsValidationError);
   assert.throws(() => validateBead({ ...bead, priority: null }), BeadsValidationError);
   assert.throws(() => validateBead({ ...bead, createdAt: 'November 26, 2026' }), BeadsValidationError);
+  assert.throws(() => validateBead({ ...bead, createdAt: '2026-02-30T12:00:00+01:00' }), BeadsValidationError);
+  assert.throws(() => validateBead({ ...bead, createdAt: '9999-12-31T23:30:00-02:00' }), BeadsValidationError);
   assert.throws(() => validateBead({ ...bead, releasedLeases: ['junk'] }), BeadsValidationError);
   assert.throws(() => validateBead({ ...bead, releasedLeases: ['November 26, 2026|November 27, 2026|abcdef123456'] }), BeadsValidationError);
-  // Legacy schema-v1 records carrying leaseReleasedAt or "<claimedAt>|<owner>" tombstones load cleanly
+  assert.throws(() => applyOperations(new Map(), [{ op: 'create', title: 'Null prio', scope: { type: 'repo', targets: [] }, priority: null }]), BeadsValidationError);
+  assert.throws(() => applyOperations(new Map(), [{ op: 'upsert', dedupeKey: 'k:null', title: 'Null prio', scope: { type: 'repo', targets: [] }, priority: null }]), BeadsValidationError);
+  // Legacy schema-v1 records carrying leaseReleasedAt or "<claimedAt>|<owner>" tombstones (including "|" in owner) load cleanly
   const legacyNull = validateBead({ ...bead, leaseReleasedAt: null });
   assert.equal(legacyNull.leaseFloorAt, null);
   const legacyTs = validateBead({ ...bead, leaseReleasedAt: '2026-11-26T00:30:00.000Z' });
   assert.equal(legacyTs.leaseFloorAt, '2026-11-26T00:30:00.000Z');
-  const legacyTombstone = validateBead({ ...bead, releasedLeases: ['2026-11-26T00:00:00.000Z|alice'] });
-  assert.deepEqual(legacyTombstone.releasedLeases, ['2026-11-26T00:00:00.000Z|alice']);
+  const legacyTombstone = validateBead({ ...bead, releasedLeases: ['2026-11-26T00:00:00.000Z|worker|lane'] });
+  assert.deepEqual(legacyTombstone.releasedLeases, ['2026-11-26T00:00:00.000Z|worker|lane']);
   const maxSafeMap = new Map([[bead.id, { ...bead, revision: Number.MAX_SAFE_INTEGER }]]);
   assert.throws(() => applyOperations(maxSafeMap, [{ op: 'note', id: bead.id, note: 'overflow' }], { now }), BeadsValidationError);
 });
@@ -595,6 +599,33 @@ test('mergeBeadsMaps preserves closed status, bumps revision on merge, caps evid
   assert.equal(afterOverflowMerge.get(idA).status, 'open');
   assert.equal(afterOverflowMerge.get(idA).lease, null);
 
+  // Compacting 51 tombstones across two branches must never leave an active lease <= leaseFloorAt (idempotent under note merges)
+  const makeHalf = (startMs, count, prefix) => {
+    let cur = base;
+    for (let i = 0; i < count; i++) {
+      cur = applyOperations(cur, [
+        { op: 'claim', id: idA, owner: `${prefix}-${i}`, ttlHours: 1 },
+        { op: 'release', id: idA, owner: `${prefix}-${i}` },
+      ], { actor: `${prefix}-${i}`, now: new Date(startMs + i * 20) }).beads;
+    }
+    return cur;
+  };
+  const branchA26 = makeHalf(t1.getTime() + 5000, 26, 'a');
+  const branchB26 = applyOperations(
+    makeHalf(t1.getTime() + 20000, 25, 'b'),
+    [{ op: 'claim', id: idA, owner: 'older-active', ttlHours: 48 }],
+    { actor: 'older-active', now: t1 },
+  ).beads;
+  const compacted = mergeBeadsMaps(branchA26, branchB26);
+  const compactedBead = compacted.get(idA);
+  if (compactedBead.lease && compactedBead.leaseFloorAt) {
+    assert.ok(compactedBead.lease.claimedAt > compactedBead.leaseFloorAt);
+  }
+  const compactedNote = applyOperations(compacted, [{ op: 'note', id: idA, note: 'Idempotence check' }], { actor: 'obs', now: t3 }).beads;
+  const remerged = mergeBeadsMaps(compacted, compactedNote);
+  assert.equal(remerged.get(idA).status, compactedBead.status);
+  assert.deepEqual(remerged.get(idA).lease, compactedBead.lease);
+
   // Same-millisecond, same-owner claims with different TTLs have distinct tombstones
   const shortClaim = applyOperations(base, [{ op: 'claim', id: idA, owner: 'alice', ttlHours: 1 }], { actor: 'alice', now: t1 }).beads;
   const longClaim = applyOperations(base, [{ op: 'claim', id: idA, owner: 'alice', ttlHours: 24 }], { actor: 'alice', now: t1 }).beads;
@@ -838,6 +869,37 @@ test('git orphan-branch store handles subdirectories, CAS bootstrap, fast-forwar
     syncBeadsRef(relRepo, { remote: 'origin', push: true });
     assert.ok(execFileSync('git', ['rev-parse', '--verify', 'refs/heads/memory/beads'], { cwd: relTargetBare, encoding: 'utf8' }).trim());
     assert.equal(execFileSync('git', ['for-each-ref', 'refs/heads/memory/beads'], { cwd: unrelatedBare, encoding: 'utf8' }).trim(), '');
+
+    // Symlinked relative remote path and single-pass insteadOf rewrite must target the exact configured remote
+    const symRepo = join(root, 'sym-repo');
+    const nestedDir = join(symRepo, 'sub', 'nested');
+    const symlinkRealBare = join(symRepo, 'sub', 'target.git');
+    const lexicalWrongBare = join(symRepo, 'target.git');
+    mkdirSync(nestedDir, { recursive: true });
+    mkdirSync(symlinkRealBare, { recursive: true });
+    mkdirSync(lexicalWrongBare, { recursive: true });
+    initGitRepo(symRepo);
+    execFileSync('git', ['init', '--bare', '-b', 'main', symlinkRealBare], { stdio: 'ignore' });
+    execFileSync('git', ['init', '--bare', '-b', 'main', lexicalWrongBare], { stdio: 'ignore' });
+    symlinkSync(nestedDir, join(symRepo, 'link'));
+    execFileSync('git', ['remote', 'add', 'origin', 'link/../target.git'], { cwd: symRepo, stdio: 'ignore' });
+    mutateBeadsRef(symRepo, [{ op: 'create', title: 'Symlink remote test', scope: { type: 'repo', targets: [] } }], { actor: 'sym' });
+    syncBeadsRef(symRepo, { remote: 'origin', push: true });
+    assert.ok(execFileSync('git', ['rev-parse', '--verify', 'refs/heads/memory/beads'], { cwd: symlinkRealBare, encoding: 'utf8' }).trim());
+    assert.equal(execFileSync('git', ['for-each-ref', 'refs/heads/memory/beads'], { cwd: lexicalWrongBare, encoding: 'utf8' }).trim(), '');
+
+    const insteadRealBare = join(root, 'instead-real.git');
+    const insteadWrongBare = join(root, 'instead-wrong.git');
+    mkdirSync(insteadRealBare, { recursive: true });
+    mkdirSync(insteadWrongBare, { recursive: true });
+    execFileSync('git', ['init', '--bare', '-b', 'main', insteadRealBare], { stdio: 'ignore' });
+    execFileSync('git', ['init', '--bare', '-b', 'main', insteadWrongBare], { stdio: 'ignore' });
+    execFileSync('git', ['remote', 'add', 'aliased', 'alias://repo'], { cwd: symRepo, stdio: 'ignore' });
+    execFileSync('git', ['config', `url.${insteadRealBare}.insteadOf`, 'alias://repo'], { cwd: symRepo, stdio: 'ignore' });
+    execFileSync('git', ['config', `url.${insteadWrongBare}.insteadOf`, insteadRealBare], { cwd: symRepo, stdio: 'ignore' });
+    syncBeadsRef(symRepo, { remote: 'aliased', push: true });
+    assert.ok(execFileSync('git', ['rev-parse', '--verify', 'refs/heads/memory/beads'], { cwd: insteadRealBare, encoding: 'utf8' }).trim());
+    assert.equal(execFileSync('git', ['for-each-ref', 'refs/heads/memory/beads'], { cwd: insteadWrongBare, encoding: 'utf8' }).trim(), '');
 
     // Pull-only sync must ignore configured remote refmaps and fetch.recurseSubmodules=true
     const subUpstream = join(root, 'sub-upstream.git');

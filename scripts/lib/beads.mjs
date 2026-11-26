@@ -1,6 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { resolve } from 'node:path';
 
 export const SCHEMA_VERSION = 1;
 export const DEFAULT_BEADS_REF = 'refs/heads/memory/beads';
@@ -13,7 +12,7 @@ export const SCOPE_TYPES = Object.freeze(['app', 'package', 'exe', 'shared', 're
 const MEMORY_REF_PATTERN = /^refs\/heads\/memory\/[a-z0-9][a-z0-9._/-]*$/;
 const REMOTE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const RELEASED_LEASE_HASH_PATTERN = /^[0-9a-f]{12}$/;
-const ISO_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+const ISO_TIMESTAMP_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})$/;
 const ZERO_OID = '0000000000000000000000000000000000000000';
 
 export const LIMITS = Object.freeze({
@@ -118,16 +117,41 @@ function assertOptionalString(value, field, maxLen) {
 }
 
 function assertIsoTimestamp(value, field) {
-  if (typeof value !== 'string' || !ISO_TIMESTAMP_PATTERN.test(value)) {
+  if (typeof value !== 'string') {
     throw new BeadsValidationError(`${field} must be a valid ISO-8601 timestamp`);
+  }
+  const match = ISO_TIMESTAMP_PATTERN.exec(value);
+  if (!match) {
+    throw new BeadsValidationError(`${field} must be a valid ISO-8601 timestamp`);
+  }
+  const [, yStr, mStr, dStr, hStr, minStr, sStr, , tz] = match;
+  const year = Number(yStr);
+  const month = Number(mStr);
+  const day = Number(dStr);
+  const hour = Number(hStr);
+  const minute = Number(minStr);
+  const second = Number(sStr);
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) {
+    throw new BeadsValidationError(`${field} must be a valid calendar ISO-8601 timestamp`);
+  }
+  const checkUtc = new Date(Date.UTC(year, month - 1, day));
+  if (checkUtc.getUTCFullYear() !== year || checkUtc.getUTCMonth() !== month - 1 || checkUtc.getUTCDate() !== day) {
+    throw new BeadsValidationError(`${field} must be a valid calendar ISO-8601 timestamp`);
+  }
+  if (tz !== 'Z') {
+    const tzHours = Number(tz.slice(1, 3));
+    const tzMins = Number(tz.slice(4, 6));
+    if (tzHours > 23 || tzMins > 59) {
+      throw new BeadsValidationError(`${field} has an invalid timezone offset`);
+    }
   }
   const ms = Date.parse(value);
   if (Number.isNaN(ms)) {
     throw new BeadsValidationError(`${field} must be a valid ISO-8601 timestamp`);
   }
   const iso = new Date(ms).toISOString();
-  if (value.endsWith('Z') && iso.slice(0, 10) !== value.slice(0, 10)) {
-    throw new BeadsValidationError(`${field} must be a valid calendar ISO-8601 timestamp`);
+  if (!ISO_TIMESTAMP_PATTERN.test(iso)) {
+    throw new BeadsValidationError(`${field} normalizes outside 4-digit ISO-8601 range`);
   }
   return iso;
 }
@@ -311,25 +335,23 @@ function normalizeReleasedLeases(raw = []) {
     if (typeof item !== 'string') {
       throw new BeadsValidationError(`releasedLeases[${idx}] must be a string`);
     }
-    const parts = item.split('|');
-    if (parts.length === 2) {
-      // Legacy schema-v1 tombstone format: "<claimedAt>|<owner>"
-      const claimedAt = assertIsoTimestamp(parts[0], `releasedLeases[${idx}].claimedAt`);
-      const owner = assertNonEmptyString(parts[1], `releasedLeases[${idx}].owner`, LIMITS.actor);
-      return `${claimedAt}|${owner}`;
-    }
-    if (parts.length !== 3) {
+    const firstPipe = item.indexOf('|');
+    if (firstPipe <= 0) {
       throw new BeadsValidationError(`releasedLeases[${idx}] must have format "<claimedAt>|<expiresAt>|<hash>"`);
     }
-    const claimedAt = assertIsoTimestamp(parts[0], `releasedLeases[${idx}].claimedAt`);
-    const expiresAt = assertIsoTimestamp(parts[1], `releasedLeases[${idx}].expiresAt`);
-    if (Date.parse(expiresAt) <= Date.parse(claimedAt)) {
-      throw new BeadsValidationError(`releasedLeases[${idx}] expiresAt must be after claimedAt`);
+    const parts = item.split('|');
+    if (parts.length === 3 && RELEASED_LEASE_HASH_PATTERN.test(parts[2]) && ISO_TIMESTAMP_PATTERN.test(parts[1])) {
+      const claimedAt = assertIsoTimestamp(parts[0], `releasedLeases[${idx}].claimedAt`);
+      const expiresAt = assertIsoTimestamp(parts[1], `releasedLeases[${idx}].expiresAt`);
+      if (Date.parse(expiresAt) <= Date.parse(claimedAt)) {
+        throw new BeadsValidationError(`releasedLeases[${idx}] expiresAt must be after claimedAt`);
+      }
+      return `${claimedAt}|${expiresAt}|${parts[2]}`;
     }
-    if (!RELEASED_LEASE_HASH_PATTERN.test(parts[2])) {
-      throw new BeadsValidationError(`releasedLeases[${idx}] has invalid hash`);
-    }
-    return `${claimedAt}|${expiresAt}|${parts[2]}`;
+    // Legacy schema-v1 tombstone format: "<claimedAt>|<owner>" (owner may contain "|")
+    const claimedAt = assertIsoTimestamp(item.slice(0, firstPipe), `releasedLeases[${idx}].claimedAt`);
+    const owner = assertNonEmptyString(item.slice(firstPipe + 1), `releasedLeases[${idx}].owner`, LIMITS.actor);
+    return `${claimedAt}|${owner}`;
   });
   return uniqueSorted(normalized);
 }
@@ -863,13 +885,13 @@ export function applyOperations(beadsMap, operations, options = {}) {
         stateRevision: 1,
         title: op.title,
         summary: op.summary ?? '',
-        kind: op.kind ?? 'maintenance',
-        status: op.status ?? 'open',
-        priority: op.priority ?? 2,
+        kind: op.kind === undefined ? 'maintenance' : op.kind,
+        status: op.status === undefined ? 'open' : op.status,
+        priority: op.priority === undefined ? 2 : op.priority,
         scope: op.scope,
         dedupeKey,
-        deps: op.deps ?? {},
-        links: op.links ?? {},
+        deps: op.deps === undefined ? {} : op.deps,
+        links: op.links === undefined ? {} : op.links,
         lease: null,
         releasedLeases: [],
         journal: createNote ? [{ at: opNowIso, actor: opActor, note: createNote }] : [],
@@ -965,7 +987,7 @@ export function applyOperations(beadsMap, operations, options = {}) {
       if (hasActiveLease(bead, opNowMs) && bead.lease.owner !== owner) {
         throw new BeadsConflictError(`Bead ${bead.id} is actively claimed by ${bead.lease.owner} until ${bead.lease.expiresAt}`);
       }
-      const ttlHours = op.ttlHours ?? 24;
+      const ttlHours = op.ttlHours === undefined ? 24 : op.ttlHours;
       if (typeof ttlHours !== 'number' || !Number.isFinite(ttlHours) || ttlHours <= 0 || ttlHours > 168) {
         throw new BeadsValidationError('ttlHours must be between 0 and 168');
       }
@@ -1172,14 +1194,16 @@ export function mergeBeadsMaps(localMap, remoteMap) {
       [winner, other] = pickHigherState(local, remote);
     }
 
-    const maxLeaseFloorAt = [local.leaseFloorAt, remote.leaseFloorAt]
+    const initialLeaseFloorAt = [local.leaseFloorAt, remote.leaseFloorAt]
       .filter(Boolean)
       .sort()
       .at(-1) ?? null;
-    const combinedReleased = uniqueSorted([
+    const preTrimmed = trimReleasedLeases([
       ...(local.releasedLeases ?? []),
       ...(remote.releasedLeases ?? []),
-    ]);
+    ], initialLeaseFloorAt);
+    const combinedReleased = [...preTrimmed.releasedLeases];
+    let effectiveLeaseFloorAt = preTrimmed.leaseFloorAt;
     const releasedSet = new Set(combinedReleased);
     const maxReopenedAt = [local.reopenedAt, remote.reopenedAt]
       .filter(Boolean)
@@ -1192,7 +1216,7 @@ export function mergeBeadsMaps(localMap, remoteMap) {
       const isSuperseded = (lease) =>
         releasedSet.has(leaseKey(lease))
         || releasedSet.has(`${lease.claimedAt}|${lease.owner}`)
-        || Boolean(maxLeaseFloorAt && lease.claimedAt <= maxLeaseFloorAt)
+        || Boolean(effectiveLeaseFloorAt && lease.claimedAt <= effectiveLeaseFloorAt)
         || Boolean(maxReopenedAt && lease.claimedAt < maxReopenedAt);
       const survivingByKey = new Map();
       for (const lease of [local.lease, remote.lease]) {
@@ -1223,9 +1247,15 @@ export function mergeBeadsMaps(localMap, remoteMap) {
       }
     }
 
-    const trimmedLeases = trimReleasedLeases(combinedReleased, maxLeaseFloorAt);
+    const trimmedLeases = trimReleasedLeases(combinedReleased, effectiveLeaseFloorAt);
     winner.releasedLeases = trimmedLeases.releasedLeases;
     winner.leaseFloorAt = trimmedLeases.leaseFloorAt;
+    if (winner.lease && winner.leaseFloorAt && winner.lease.claimedAt <= winner.leaseFloorAt) {
+      winner.lease = null;
+      if (winner.status === 'in_progress') {
+        winner.status = other.status === 'blocked' ? 'blocked' : 'open';
+      }
+    }
     winner.reopenedAt = maxReopenedAt;
     winner.journal = mergeJournalEntries(winner.journal, other.journal);
     winner.links = mergeLinks(winner.links, { evidence: other.links.evidence ?? [] }, { capEvidence: true });
@@ -1486,19 +1516,6 @@ function remoteBranchExists(repoTop, remote, ref) {
   }
 }
 
-function resolvePushTarget(repoTop, remote) {
-  const pushUrl = git(['remote', 'get-url', '--push', '--', remote], { cwd: repoTop }).trim();
-  if (!pushUrl) {
-    throw new BeadsValidationError(`Unable to resolve push URL for remote "${remote}"`);
-  }
-  const hasScheme = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(pushUrl);
-  const isScpStyle = /^[^/\\]+:/.test(pushUrl);
-  if (!hasScheme && !isScpStyle && !pushUrl.startsWith('/')) {
-    return resolve(repoTop, pushUrl);
-  }
-  return pushUrl;
-}
-
 export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', push = false, maxRetries = 5 } = {}) {
   assertMemoryRef(ref);
   const repoTop = resolveGitRoot(cwd);
@@ -1510,7 +1527,7 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
   assertNotSymbolicRef(repoTop, trackingRef);
   const remoteExists = remoteBranchExists(repoTop, remote, ref);
   if (remoteExists) {
-    git(['fetch', '--no-tags', '--no-prune', '--no-recurse-submodules', '--no-write-fetch-head', '--refmap=', '--', remote, `+${ref}:${trackingRef}`], { cwd: repoTop });
+    git(['-c', `remote.${remote}.fetch=`, 'fetch', '--no-tags', '--no-prune', '--no-recurse-submodules', '--no-write-fetch-head', '--refmap=', '--', remote, `+${ref}:${trackingRef}`], { cwd: repoTop });
   }
   const remoteState = remoteExists ? readBeadsTree(repoTop, trackingRef) : { sha: null, beads: new Map() };
 
@@ -1585,9 +1602,8 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
 
   let pushed = false;
   if (push && finalSha) {
-    const pushTarget = resolvePushTarget(repoTop, remote);
     const leaseArg = remoteState.sha ? `--force-with-lease=${ref}:${remoteState.sha}` : `--force-with-lease=${ref}:`;
-    git(['push', '--no-follow-tags', '--recurse-submodules=no', leaseArg, '--', pushTarget, `${finalSha}:${ref}`], { cwd: repoTop });
+    git(['-c', `remote.${remote}.fetch=`, 'push', '--no-follow-tags', '--recurse-submodules=no', leaseArg, '--', remote, `${finalSha}:${ref}`], { cwd: repoTop });
     git(['update-ref', '--no-deref', trackingRef, finalSha], { cwd: repoTop });
     pushed = true;
   }
