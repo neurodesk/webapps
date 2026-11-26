@@ -65,6 +65,44 @@ export async function createRegistration({createModule,wasmBinary,onLog=()=>{}})
       const warped=module.FS.readFile(prefix+'brain.nii.gz');
       return {warped,transforms,dir,prefix,fixedPath,seed};
     },
+    registerWithArgs({fixed,moving,buildArgs,transformNames=['0GenericAffine.mat']}) {
+      const dir=`/job-${next++}`;module.FS.mkdir(dir);jobs.add(dir);
+      const fixedPath=dir+'/fixed.nii',movingPath=dir+'/moving.nii',prefix=dir+'/result-',outPath=prefix+'warped.nii';
+      module.FS.writeFile(fixedPath,new Uint8Array(fixed));module.FS.writeFile(movingPath,new Uint8Array(moving));
+      try {
+        call(buildArgs(fixedPath,movingPath,prefix,outPath));
+        const transforms={};
+        for(const name of transformNames){
+          try { transforms[name]=module.FS.readFile(prefix+name).slice(); } catch { /* optional transform */ }
+        }
+        const warped=module.FS.readFile(outPath).slice();
+        return {warped,transforms};
+      } finally {
+        for(const name of module.FS.readdir(dir))if(!['.','..'].includes(name))module.FS.unlink(dir+'/'+name);
+        module.FS.rmdir(dir);jobs.delete(dir);
+      }
+    },
+    applyTransforms({fixed,moving,transforms,interpolation='linear',fill=0}) {
+      if(!['linear','nearest'].includes(interpolation)||!Number.isFinite(fill))throw new Error('Invalid resampling settings.');
+      if(!Array.isArray(transforms)||!transforms.length)throw new Error('At least one transform is required.');
+      const dir=`/job-${next++}`;module.FS.mkdir(dir);jobs.add(dir);
+      const fixedPath=dir+'/fixed.nii',movingPath=dir+'/moving.nii',outPath=dir+'/warped.nii.gz';
+      module.FS.writeFile(fixedPath,new Uint8Array(fixed));module.FS.writeFile(movingPath,new Uint8Array(moving));
+      const specs=[];
+      try {
+        for(let i=0;i<transforms.length;i++){
+          const item=transforms[i];
+          const path=`${dir}/t${i}-${item.name}`;
+          module.FS.writeFile(path,new Uint8Array(item.bytes));
+          specs.push(item.invert?`inverse:${path}`:path);
+        }
+        call(['--apply',fixedPath,movingPath,outPath,interpolation,String(fill),...specs]);
+        return module.FS.readFile(outPath).slice();
+      } finally {
+        for(const name of module.FS.readdir(dir))if(!['.','..'].includes(name))module.FS.unlink(dir+'/'+name);
+        module.FS.rmdir(dir);jobs.delete(dir);
+      }
+    },
     apply({registration,moving,interpolation='linear',fill=0}) {
       if(!['linear','nearest'].includes(interpolation)||!Number.isFinite(fill))throw new Error('Invalid resampling settings.');
       const path=registration.dir+'/additional.nii',out=registration.dir+'/warped.nii.gz';

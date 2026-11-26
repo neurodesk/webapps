@@ -1,0 +1,89 @@
+[
+  {
+    "id": "strokefair-sub-02e8eb42-mni",
+    "label": "Acute stroke MNI lesion + ADC — StrokeView report (sub-02e8eb42)",
+    "description": "Pre-registered MNI152 acute stroke infarct mask, ADC map and brain mask from StrokeFAIR (sub-02e8eb42) for instant radiological reporting, ASPECTS scoring, TreeSHAP attribution and 1,861-patient StrokeView cohort matching.",
+    "expectedResult": "Radiological report with arterial territory, lobar, MCA ASPECTS and hydrocephalus calls, TreeSHAP feature attributions, and StrokeView UMAP nearest-neighbor clinical summary.",
+    "files": [
+      {
+        "role": "mask",
+        "name": "sub-02e8eb42_stroke_space-MNI152.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/63149f27d8461edff52e92ea18d52f69671433bb/openads/examples/sub-02e8eb42-mni/sub-02e8eb42_stroke_space-MNI152.nii.gz",
+        "sha256": "cf00236721c4b7808272743f5b9c1070396925e8db117968cf7e43405fc3b104",
+        "bytes": 46608
+      },
+      {
+        "role": "adc",
+        "name": "sub-02e8eb42_ADC_space-MNI152.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/63149f27d8461edff52e92ea18d52f69671433bb/openads/examples/sub-02e8eb42-mni/sub-02e8eb42_ADC_space-MNI152.nii.gz",
+        "sha256": "096b07c6b36c7b0a4fc0148550130e22b0042e6b5db92e51fef6b81699f51710",
+        "bytes": 7248169
+      },
+      {
+        "role": "brainmask",
+        "name": "sub-02e8eb42_brain-mask_space-MNI152.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/63149f27d8461edff52e92ea18d52f69671433bb/openads/examples/sub-02e8eb42-mni/sub-02e8eb42_brain-mask_space-MNI152.nii.gz",
+        "sha256": "cd867751265775944549a56fcb843b7667ad760ba4d1b6a374b3c9a00fe9c244",
+        "bytes": 68966
+      }
+    ]
+  },
+  {
+    "id": "strokefair-sub-02e8eb42-dwi",
+    "label": "Acute stroke raw DWI + b0 — full pipeline (sub-02e8eb42)",
+    "description": "Native-space acute ischemic stroke DWI and b0 scans from StrokeFAIR (sub-02e8eb42). Computes ADC, strips the skull with SynthStrip, registers to MNI152 with ANTs, segments the core with DAGMNet and generates full radiological reports.",
+    "expectedResult": "Native and MNI152 acute stroke core masks, computed ADC map, JHU-ICBM atlas overlaps, 29-model radiological report, TreeSHAP attributions and StrokeView cohort placement.",
+    "files": [
+      {
+        "role": "dwi",
+        "name": "02e8eb42_DWI.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/63149f27d8461edff52e92ea18d52f69671433bb/openads/examples/sub-02e8eb42-dwi/02e8eb42_DWI.nii.gz",
+        "sha256": "90af074cc1c28125eb646920d17247993da7c2ef4913824facedeb0aab78337b",
+        "bytes": 1678022
+      },
+      {
+        "role": "b0",
+        "name": "02e8eb42_b0.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/63149f27d8461edff52e92ea18d52f69671433bb/openads/examples/sub-02e8eb42-dwi/02e8eb42_b0.nii.gz",
+        "sha256": "1fdc8915179a1fd5d0b7b888dab2dc2cbd1cc7790fe8c84a6524d22d8ed88d23",
+        "bytes": 2096437
+      }
+    ]
+  },
+  {
+    "id": "strokefair-sub-02e8eb42-pwi",
+    "label": "Acute stroke DWI + ADC + 4D PWI — core & hypoperfusion (sub-02e8eb42)",
+    "description": "Native-space DWI, ADC and 4D perfusion-weighted MRI (with BIDS JSON sidecar) from StrokeFAIR (sub-02e8eb42). Segments both infarct core and hypoperfusion deficit and computes core-penumbra mismatch.",
+    "expectedResult": "Infarct core mask, TTP perfusion map, hypoperfusion deficit mask, core-penumbra mismatch ratio, and radiological reports with StrokeView cohort matching.",
+    "files": [
+      {
+        "role": "dwi",
+        "name": "02e8eb42_DWI.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/63149f27d8461edff52e92ea18d52f69671433bb/openads/examples/sub-02e8eb42-pwi/02e8eb42_DWI.nii.gz",
+        "sha256": "cb8f9ff8a33b61b86e499be74ac4a85a422a5dc5719099f06b37717448e3bb6a",
+        "bytes": 983988
+      },
+      {
+        "role": "adc",
+        "name": "02e8eb42_ADC.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/63149f27d8461edff52e92ea18d52f69671433bb/openads/examples/sub-02e8eb42-pwi/02e8eb42_ADC.nii.gz",
+        "sha256": "bbca038a04804e6bdc800cf6666330bf2c5480f6b979c94145472d0d261aaf1e",
+        "bytes": 2408342
+      },
+      {
+        "role": "pwi",
+        "name": "02e8eb42_PWI.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/63149f27d8461edff52e92ea18d52f69671433bb/openads/examples/sub-02e8eb42-pwi/02e8eb42_PWI.nii.gz",
+        "sha256": "8bc2ea5f37eb4b4566b17f72d6b0739280a92cfebf7f7105a2cc98e80603a3d7",
+        "bytes": 23930885
+      },
+      {
+        "role": "pwi-json",
+        "name": "02e8eb42_PWI.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/63149f27d8461edff52e92ea18d52f69671433bb/openads/examples/sub-02e8eb42-pwi/02e8eb42_PWI.json",
+        "sha256": "b92be712b0fa7a891b745f7a1e3d6a0539594c0d84612544cfd659dfe01bcca7",
+        "bytes": 2376
+      }
+    ]
+  }
+]

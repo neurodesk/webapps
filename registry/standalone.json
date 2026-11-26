@@ -2566,6 +2566,13 @@
       "assets": [],
       "downloads": [],
       "containers": []
+    },
+    "openads": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
     }
   }
 }

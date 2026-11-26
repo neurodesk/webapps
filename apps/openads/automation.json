@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 2,
+  "app": "openads",
+  "title": "OpenADS",
+  "description": "Segment acute stroke core and hypoperfusion on DWI/PWI, score JHU-ICBM arterial/ASPECTS territories with TreeSHAP, and explore StrokeView cohort neighbors.",
+  "defaultOperation": "analyze",
+  "operations": {
+    "analyze": {
+      "title": "Run acute stroke analysis",
+      "description": "Analyze raw DWI+b0/ADC (with optional 4D PWI) or a pre-registered MNI152 stroke lesion mask to produce masks, radiological report, QFV tables, TreeSHAP attributions and StrokeView cohort summary.",
+      "mode": "batch",
+      "inputs": {
+        "dwi": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": ["nifti"],
+          "description": "Optional native-space DWI (or 4D DWI+b0) scan",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "adc": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": ["nifti"],
+          "description": "Optional ADC map (native space with DWI, or MNI152 1 mm with an MNI lesion mask)",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "b0": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": ["nifti"],
+          "description": "Optional native-space b0 scan used to compute ADC when ADC is not supplied",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "pwi": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": ["nifti"],
+          "description": "Optional 4D perfusion-weighted MRI series for TTP and hypoperfusion segmentation",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "pwi-json": {
+          "source": "files",
+          "type": "neuro:metadata",
+          "formats": ["json"],
+          "description": "Optional BIDS JSON sidecar with RepetitionTime and SliceTiming for 4D PWI",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "mask": {
+          "source": "files",
+          "type": "neuro:label-map",
+          "formats": ["nifti"],
+          "space": "atlas",
+          "description": "Optional pre-registered MNI152 (182x218x182) stroke lesion mask for direct StrokeView reporting",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "brainmask": {
+          "source": "files",
+          "type": "neuro:label-map",
+          "formats": ["nifti"],
+          "space": "atlas",
+          "description": "Optional MNI152 (182x218x182) brain mask paired with an MNI lesion mask and ADC",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "runSyn": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run nonlinear ANTs SyN warp after affine MNI152 registration"
+        },
+        "runShap": {
+          "type": "boolean",
+          "default": true,
+          "description": "Compute exact TreeSHAP feature attributions for regional classifiers"
+        },
+        "threshold": {
+          "type": "number",
+          "default": 0.5,
+          "minimum": 0.1,
+          "maximum": 0.9,
+          "description": "Probability threshold applied to DAGMNet segmentation outputs"
+        },
+        "cohortK": {
+          "type": "integer",
+          "default": 50,
+          "minimum": 10,
+          "maximum": 250,
+          "description": "Number of nearest StrokeFAIR cohort neighbors summarized in StrokeView"
+        }
+      },
+      "artifacts": {
+        "lesion_mask": {
+          "type": "neuro:label-map",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "maximum": 1,
+          "space": "atlas"
+        },
+        "radiological_report": {
+          "type": "neuro:report",
+          "mediaType": "text/plain",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "qfv_vascular": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "cohort_summary": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "engines": ["browser"]
+    }
+  }
+}

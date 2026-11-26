@@ -48,3 +48,40 @@ test("one registration instance applies transforms 200 times without consuming i
     ants.release(registration);
   }
 });
+
+test("registerWithArgs runs affine-only registration and applyTransforms supports forward and inverse resampling", async () => {
+  const ants = await createRegistration({
+    createModule,
+    wasmBinary: await readFile(new URL("../wasm/syncro-registration.wasm", import.meta.url)),
+  });
+  const image = syntheticNifti({
+    dims: [16, 16, 16],
+    value: (i) => 100 * Math.exp(-((i % 16 - 7) ** 2 + (Math.floor(i / 16) % 16 - 6) ** 2 + (Math.floor(i / 256) - 8) ** 2) / 20),
+    gzip: false,
+  });
+  const aff = ants.registerWithArgs({
+    fixed: image,
+    moving: image,
+    transformNames: ["0GenericAffine.mat"],
+    buildArgs: (fixed, moving, prefix, out) => [
+      "--dimensionality", "3", "--float", "1", "--random-seed", "42",
+      "-r", `[${fixed},${moving},1]`,
+      "--metric", `mattes[${fixed},${moving},1,32,regular,0.2]`,
+      "--transform", "Affine[0.25]",
+      "--convergence", "50x20",
+      "--smoothing-sigmas", "1x0",
+      "--shrink-factors", "2x1",
+      "-u", "0", "-z", "1",
+      "--output", `[${prefix},${out}]`,
+    ],
+  });
+  assert.ok(aff.transforms["0GenericAffine.mat"]?.byteLength > 0);
+  const resampled = ants.applyTransforms({
+    fixed: image,
+    moving: image,
+    transforms: [{ name: "aff.mat", bytes: aff.transforms["0GenericAffine.mat"], invert: true }],
+    interpolation: "nearest",
+    fill: 0,
+  });
+  assert.ok(resampled.byteLength > 0);
+});
