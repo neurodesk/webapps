@@ -3,7 +3,9 @@ import { access, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { JSDOM } from 'jsdom';
 import { parse, stringify } from 'yaml';
+import { classifiedInputs, primaryInput, routeFiles } from '../packages/components/src/ui/pageDrop.js';
 import { MAX_DESCRIPTION_LENGTH, catalogApps, findCatalog, loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { validateAssetManifest } from '../scripts/lib/scientific-assets.mjs';
 
@@ -403,4 +405,25 @@ test('registry rejects a former path that is repeated or still in use', async ()
     await writeFile(path, stringify(raw));
     await assert.rejects(loadAppsRegistry(path), message);
   }
+});
+
+test('every catalogue serving vesselboost also serves vesselcharter for direct segmentation handoff', async () => {
+  const registry = await loadAppsRegistry();
+  const byId = new Map(registry.apps.map((app) => [app.id, app]));
+  const vesselboost = byId.get('vesselboost');
+  const vesselcharter = byId.get('vesselcharter');
+  assert.ok(vesselboost && vesselcharter, 'vesselboost and vesselcharter must both be registered');
+  const catalogsOf = (app) => new Set([app.catalog, ...(app.also_in ?? [])]);
+  const charterCatalogs = catalogsOf(vesselcharter);
+  for (const catalogId of catalogsOf(vesselboost)) {
+    assert.ok(charterCatalogs.has(catalogId), `vesselcharter must be served alongside vesselboost in catalogue ${catalogId}`);
+  }
+  const charterHtml = await readFile(join(repoRoot, 'apps', 'vesselcharter', 'index.html'), 'utf8');
+  const { document } = new JSDOM(charterHtml).window;
+  const inputs = classifiedInputs(document);
+  const primary = primaryInput(document);
+  assert.equal(primary?.id, 'imageInput', 'vesselcharter primary handoff input must be #imageInput');
+  const plan = routeFiles([{ name: 'sub-01_vesselboost_segmentation.nii' }], inputs, primary);
+  assert.equal(plan.length, 1, 'a single handed-off segmentation must route to exactly one input');
+  assert.equal(plan[0][0].id, 'imageInput', 'vesselcharter must route a handed-off NIfTI segmentation to #imageInput');
 });

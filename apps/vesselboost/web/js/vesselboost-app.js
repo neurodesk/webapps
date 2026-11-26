@@ -8,7 +8,7 @@ bindSectionDisclosures(document);
  * Pipeline is split into interactive steps that the user runs sequentially.
  */
 
-import { SimpleFileIOController } from '@neurodesk/webapp-components/file-io';
+import { SimpleFileIOController, isNiftiFile } from '@neurodesk/webapp-components/file-io';
 import { VesselBoostViewer } from './controllers/VesselBoostViewer.js';
 import { VesselBoostPipeline } from './controllers/VesselBoostPipeline.js';
 import { ConsoleOutput, bindWindowControls, createMaskEditor } from '@neurodesk/webapp-components/ui';
@@ -18,10 +18,12 @@ import * as Config from './app/config.js';
 import { generateNiivueColormap, getLabelName } from './app/labels.js';
 import { computeAutoWindow } from '@neurodesk/webapp-components/volume';
 import { createNiftiFromVolume, downloadArrayBuffer } from '@neurodesk/webapp-components/file-io';
+import { sendHandoff } from '@neurodesk/webapp-components/handoff';
 import { registerVesselBoostAutomation } from './automation.js';
 import {
   buildEditVolumeStack,
   buildResultVolumeStack,
+  buildVesselCharterHandoffFile,
   defaultResultVisibility,
   getResultDisplay,
   isImageResultStage,
@@ -73,6 +75,9 @@ class VesselBoostApp {
     };
     this.resultStageVisibility = {};
     this._lastLocationData = null;
+    this._handoffController = null;
+    this._maskActionPending = false;
+    this._pendingImports = 0;
 
     this.init();
   }
@@ -124,7 +129,11 @@ class VesselBoostApp {
       onError: (_stage, error) => this.onMaskEditError(error)
     });
     this.maskEditor.addEventListener('nd-mask-edit-end', () => this.setEditButtonsEnabled(true));
-    this.maskEditor.addEventListener('nd-mask-edit-start', (event) => this.progress.setText(event.detail.message));
+    this.maskEditor.addEventListener('nd-mask-edit-start', (event) => {
+      this.cancelPendingHandoff('reset');
+      this.setEditButtonsEnabled(false);
+      this.progress.setText(event.detail.message);
+    });
     document.querySelector('main.app-main > .viewer-toolbar').after(this.maskEditor);
 
     // Modals
@@ -194,11 +203,11 @@ class VesselBoostApp {
     this.exampleSelector = createExampleSelector({
       scope: document.querySelector('.app-container'),
       examples,
-      onLoad: async (example, { fetchFiles, assertCurrent }) => {
+      onLoad: async (example, { fetchFiles, assertCurrent }) => this.runFileImport(async () => {
         const files = await fetchFiles();
         assertCurrent();
         await this.fileIOController._acceptFile(files[0], true);
-      },
+      }),
       onStatus: (message) => this.updateOutput(message),
     });
     const input = document.getElementById('fileInput');
@@ -209,7 +218,8 @@ class VesselBoostApp {
     const fileInput = document.getElementById('fileInput');
     if (fileInput) {
       fileInput.addEventListener('change', (e) => {
-        this.fileIOController.handleFiles(e.target.files);
+        if (!e.target.files?.length) return;
+        void this.runFileImport(() => this.fileIOController.handleFiles(e.target.files));
       });
     }
 
@@ -342,6 +352,9 @@ class VesselBoostApp {
       });
     }
 
+    const openInVesselCharter = document.getElementById('openInVesselCharter');
+    if (openInVesselCharter) openInVesselCharter.addEventListener('click', () => { void this.openInVesselCharter(); });
+
     const clearResults = document.getElementById('clearResults');
     if (clearResults) clearResults.addEventListener('click', () => this.clearResults());
 
@@ -373,7 +386,13 @@ class VesselBoostApp {
     zone.addEventListener('drop', (e) => {
       e.preventDefault();
       zone.classList.remove('dragover');
-      this.fileIOController.handleDropItems(e.dataTransfer.items);
+      const items = e.dataTransfer?.items;
+      if (!items?.length) return;
+      void this.runFileImport(() => {
+        const files = Array.from(items, item => item.getAsFile?.()).filter(Boolean);
+        if (files.some(isNiftiFile)) return this.fileIOController.handleFiles(files);
+        return this.fileIOController.dicomController.convertDropItems(items);
+      });
     });
   }
 
@@ -445,6 +464,7 @@ class VesselBoostApp {
     }
 
     if (invalidated.stages.includes('segmentation')) {
+      this.cancelPendingHandoff('reset');
       this._segmentationVisible = true;
       const overlayControl = document.getElementById('overlayControl');
       if (overlayControl) overlayControl.classList.add('hidden');
@@ -571,6 +591,8 @@ class VesselBoostApp {
   }
 
   async resetForNewFile() {
+    this.cancelPendingHandoff('superseded');
+    this._maskActionPending = false;
     if (this.inferenceExecutor.isRunning()) {
       this.inferenceExecutor.cancel();
     }
@@ -629,6 +651,7 @@ class VesselBoostApp {
   }
 
   async abortCurrentStep() {
+    if (this.cancelPendingHandoff('user-cancel')) return;
     if (!this.currentRunningStep || !this.inferenceExecutor.isRunning()) return;
 
     const abortedStep = this.currentRunningStep;
@@ -816,6 +839,7 @@ class VesselBoostApp {
 
   async skipBET() {
     if (this.inferenceExecutor.isRunning()) return;
+    this.cancelPendingHandoff('reset');
     const invalidated = this.inferenceExecutor.invalidateFromStep('bet', { includeSelf: true });
     this.applyInvalidationToUI(invalidated, 'bet');
     this.inferenceExecutor.skipBET();
@@ -823,23 +847,47 @@ class VesselBoostApp {
 
   async applyBrainMask() {
     if (this.inferenceExecutor.isRunning()) return;
+    this.cancelPendingHandoff('reset');
     const applyBtn = document.getElementById('applyBETBtn');
     if (applyBtn) applyBtn.disabled = true;
-    await this.inferenceExecutor.applyBrainMask();
+    this._maskActionPending = true;
+    this.updateVesselCharterButton();
+    try {
+      await this.inferenceExecutor.applyBrainMask();
+    } finally {
+      this._maskActionPending = false;
+      this.updateVesselCharterButton();
+    }
   }
 
   async dilateBrainMask() {
     if (this.inferenceExecutor.isRunning()) return;
+    this.cancelPendingHandoff('reset');
     const dilateBtn = document.getElementById('dilateBETBtn');
     if (dilateBtn) dilateBtn.disabled = true;
-    await this.inferenceExecutor.dilateBrainMask(1);
+    this._maskActionPending = true;
+    this.updateVesselCharterButton();
+    try {
+      await this.inferenceExecutor.dilateBrainMask(1);
+    } finally {
+      this._maskActionPending = false;
+      this.updateVesselCharterButton();
+    }
   }
 
   async erodeBrainMask() {
     if (this.inferenceExecutor.isRunning()) return;
+    this.cancelPendingHandoff('reset');
     const erodeBtn = document.getElementById('erodeBETBtn');
     if (erodeBtn) erodeBtn.disabled = true;
-    await this.inferenceExecutor.erodeBrainMask(1);
+    this._maskActionPending = true;
+    this.updateVesselCharterButton();
+    try {
+      await this.inferenceExecutor.erodeBrainMask(1);
+    } finally {
+      this._maskActionPending = false;
+      this.updateVesselCharterButton();
+    }
   }
 
   async runDenoise() {
@@ -912,11 +960,13 @@ class VesselBoostApp {
   // ==================== Step UI Management ====================
 
   setStepRunning(step) {
+    this.cancelPendingHandoff('superseded');
     this.updateStepBadge(step, 'running');
     this.setStepButtonsEnabled(step, false);
     const cancellable = ABORTABLE_STEPS.includes(step) && this.currentRunningStep === step;
     this.setStatusError(false);
     this.progress.begin(`${STEP_LABELS[step] || 'Processing'}...`, { cancellable });
+    this.updateVesselCharterButton();
   }
 
   setStatusError(isError) {
@@ -1415,6 +1465,9 @@ class VesselBoostApp {
   // ==================== Results ====================
 
   async handleStageData(data) {
+    if (data.stage === 'segmentation') {
+      this.cancelPendingHandoff('reset');
+    }
     const resultsSection = document.getElementById('resultsSection');
     if (resultsSection) {
       resultsSection.classList.remove('hidden');
@@ -1625,11 +1678,106 @@ class VesselBoostApp {
 
       container.appendChild(row);
     }
+    this.updateVesselCharterButton();
+  }
+
+  async runFileImport(work) {
+    this.cancelPendingHandoff('reset');
+    this._pendingImports += 1;
+    this.updateVesselCharterButton();
+    try {
+      return await work();
+    } finally {
+      this._pendingImports = Math.max(0, this._pendingImports - 1);
+      this.updateVesselCharterButton();
+    }
+  }
+
+  cancelPendingHandoff(mode = 'reset') {
+    const controller = this._handoffController;
+    if (!controller) return false;
+    this._handoffController = null;
+    controller.abort();
+    this.updateVesselCharterButton();
+    if (mode === 'user-cancel') {
+      this.progress.reset('Cancelled');
+    } else if (mode === 'reset') {
+      this.progress.reset('Ready');
+    }
+    return true;
+  }
+
+  updateVesselCharterButton() {
+    const group = document.getElementById('vesselCharterActions');
+    const button = document.getElementById('openInVesselCharter');
+    if (!button) return;
+    const hasSegmentation = Boolean(this.inferenceExecutor.getResult('segmentation')?.file);
+    if (group) group.hidden = !hasSegmentation;
+    button.hidden = !hasSegmentation;
+    button.disabled = !hasSegmentation
+      || Boolean(this._handoffController)
+      || this._maskActionPending
+      || this._pendingImports > 0
+      || this.inferenceExecutor.isRunning()
+      || this.maskEditor.session.state !== 'idle';
+  }
+
+  async openInVesselCharter() {
+    const segResult = this.inferenceExecutor.getResult('segmentation');
+    if (
+      !segResult?.file
+      || this._handoffController
+      || this._maskActionPending
+      || this._pendingImports > 0
+      || this.inferenceExecutor.isRunning()
+      || this.maskEditor.session.state !== 'idle'
+    ) {
+      return;
+    }
+    const file = buildVesselCharterHandoffFile(segResult.file, this.inputFile, {
+      edited: segResult.edited === true
+    });
+    if (!file) return;
+    const controller = new AbortController();
+    this._handoffController = controller;
+    this.updateVesselCharterButton();
+    this.setStatusError(false);
+    this.progress.begin('Opening segmentation in VesselCharter…');
+    try {
+      await sendHandoff({
+        target: 'vesselcharter',
+        source: { app: 'vesselboost', title: 'VesselBoost' },
+        files: [file],
+        signal: controller.signal,
+      });
+      this.progress.setCancellable(false);
+      // Re-enable cleanly if the browser restores this page from bfcache via Back.
+      window.addEventListener('pageshow', (event) => {
+        if (!event.persisted || this._handoffController !== controller) return;
+        this._handoffController = null;
+        this.progress.end(`Sent ${file.name} to VesselCharter`);
+        this.updateVesselCharterButton();
+      }, { once: true });
+    } catch (error) {
+      if (this._handoffController === controller) {
+        this._handoffController = null;
+      }
+      this.updateVesselCharterButton();
+      if (controller.signal.aborted || error?.name === 'AbortError') {
+        return;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      this.setStatusError(true);
+      this.progress.end(message, { success: false });
+      this.updateOutput(`VesselCharter handoff failed: ${message}`);
+    }
   }
 
   async editResult(stage) {
     const result = this.inferenceExecutor.getResult(stage);
     if (!result?.file || this.inferenceExecutor.isRunning()) return;
+    this.cancelPendingHandoff('reset');
+    this._maskActionPending = true;
     this.setEditButtonsEnabled(false);
     this.setStatusError(false);
     try {
@@ -1659,10 +1807,16 @@ class VesselBoostApp {
       if (!started) this.setEditButtonsEnabled(true);
     } catch (error) {
       this.onMaskEditError(error);
+    } finally {
+      this._maskActionPending = false;
+      this.updateVesselCharterButton();
     }
   }
 
   async onMaskApplied(stage, file, original) {
+    if (stage === 'segmentation') {
+      this.cancelPendingHandoff('reset');
+    }
     this.inferenceExecutor.replaceWithEdit(stage, file, original);
     this.updateOutput(`Applied manual edits to ${file.name}`);
     this.progress.setText('Ready');
@@ -1686,6 +1840,7 @@ class VesselBoostApp {
 
   setEditButtonsEnabled(enabled) {
     document.querySelectorAll('#stageButtons .nd-edit-btn').forEach(btn => { btn.disabled = !enabled || this.maskEditor.session.state !== 'idle'; });
+    this.updateVesselCharterButton();
   }
 
   async viewStage(stage) {
@@ -1744,6 +1899,7 @@ class VesselBoostApp {
         this.setStepButtonsEnabled(step, true);
       }
     }
+    this.updateVesselCharterButton();
   }
 
   disableAllResultTabs() {
@@ -1755,9 +1911,12 @@ class VesselBoostApp {
   }
 
   async clearResults() {
+    this.cancelPendingHandoff('reset');
+    this._maskActionPending = false;
     await this.maskEditor.cancel();
     this.inferenceExecutor.clearResults();
     this.disableAllResultTabs();
+    this.updateVesselCharterButton();
     this.currentResultTab = 'input';
     this._inputVisible = true;
     this.viewerLayerVisibility = { image: true, vessels: true, brainmask: false };

@@ -34,6 +34,7 @@ Common issues it catches:
 - Add a changeset and run `pnpm release` for the UTC date app/package version scheme.
 - WASM preprocessing must initialize successfully. Optional steps may be explicitly skipped, but missing/failed preprocessing is never silently bypassed.
 - Default target spacing: 0.3mm isotropic
+- Results handoff: VesselBoost's Results section uses `@neurodesk/webapp-components/handoff` (`sendHandoff({ target: 'vesselcharter', ... })`) to pass the active binary vessel segmentation mask directly to VesselCharter on the same host. Keep `vesselcharter` co-hosted on every catalogue that serves `vesselboost` (`test/registry.test.mjs` enforces this and VesselCharter's `data-neurodesk-input="image"` target).
 
 ## CI/CD
 

@@ -12,6 +12,7 @@
       "@neurodesk/webapp-components/automation": "./vendor/webapp-components/src/automation/index.js",
       "@neurodesk/webapp-components/ui": "./vendor/webapp-components/src/ui/index.js",
       "@neurodesk/webapp-components/file-io": "./vendor/webapp-components/src/file-io/index.js",
+      "@neurodesk/webapp-components/handoff": "./vendor/webapp-components/src/handoff/index.js",
       "@neurodesk/webapp-components/volume": "./vendor/webapp-components/src/volume/index.js",
       "@neurodesk/webapp-components/": "./vendor/webapp-components/src/"
     }
@@ -242,10 +243,18 @@
         </button></h2>
         <div class="section-content" data-disclosure-panel>
           <div class="stage-buttons-grid" id="stageButtons"></div>
-          <button class="btn btn-secondary btn-sm" id="clearResults" style="width: 100%; margin-top: var(--nd-space-sm);">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            Clear All
-          </button>
+          <div class="step-buttons" id="vesselCharterActions" hidden>
+            <button class="btn btn-secondary btn-sm nd-btn-block" id="openInVesselCharter" type="button" hidden>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              Open in VesselCharter
+            </button>
+          </div>
+          <div class="step-buttons">
+            <button class="btn btn-secondary btn-sm nd-btn-block" id="clearResults" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              Clear All
+            </button>
+          </div>
         </div>
       </section>
 
