@@ -250,3 +250,18 @@ test('the theme controller, which installs the WebMCP recorder, is the first scr
   assert.equal((rethemed.match(/data-neurodesk-theme-controller/g) ?? []).length, 1);
   assert.equal(injectCompositeTheme(rethemed, metadata), rethemed);
 });
+
+test('an imaging workspace page carries its region classes, so it is laid out before the app bundle runs', () => {
+  const page = '<!doctype html><html lang="en"><head><title>Example</title></head><body>'
+    + '<header id="controls"></header><main id="viewer" class="app-viewer"></main><footer id="status"></footer></body></html>';
+  const themed = injectCompositeTheme(page, { ...metadata, shell: 'imaging-workspace' });
+
+  assert.match(themed, /<header id="controls" class="nd-imaging-controls">/);
+  assert.match(themed, /<main id="viewer" class="app-viewer nd-imaging-viewer">/);
+  assert.match(themed, /<footer id="status" class="nd-imaging-status">/);
+  assert.equal(injectCompositeTheme(themed, { ...metadata, shell: 'imaging-workspace' }), themed);
+
+  assert.doesNotMatch(injectCompositeTheme(page, metadata), /nd-imaging-/, 'other shells keep their own layout');
+  const partial = page.replace(' id="viewer"', ' id="canvas"');
+  assert.doesNotMatch(injectCompositeTheme(partial, { ...metadata, shell: 'imaging-workspace' }), /nd-imaging-/, 'a page without all three regions is left to its app');
+});

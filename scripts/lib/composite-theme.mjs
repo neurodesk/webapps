@@ -32,6 +32,21 @@ export function hostedAppTitle(title, siteTitle = DEFAULT_BRAND.siteTitle) {
   return `${title} | ${siteTitle}`;
 }
 
+// mountImagingWorkspace gives these regions their classes, but only once the app bundle has run.
+// Carrying them in the document lets the first paint use the final layout.
+const workspaceRegions = [['controls', 'nd-imaging-controls'], ['viewer', 'nd-imaging-viewer'], ['status', 'nd-imaging-status']];
+
+function stampWorkspaceRegions(html) {
+  const tags = workspaceRegions.map(([id]) => new RegExp(`<[a-z][a-z0-9-]*\\b[^>]*\\sid=["']${id}["'][^>]*>`, 'i'));
+  if (!tags.every((tag) => tag.test(html))) return html;
+  return workspaceRegions.reduce((stamped, [, className], index) => stamped.replace(tags[index], (tag) => {
+    const existing = tag.match(/\sclass=(["'])(.*?)\1/i);
+    if (!existing) return tag.replace(/\/?>$/, (end) => ` class="${className}"${end}`);
+    if (existing[2].split(/\s+/).includes(className)) return tag;
+    return tag.replace(existing[0], ` class=${existing[1]}${`${existing[2]} ${className}`.trim()}${existing[1]}`);
+  }), html);
+}
+
 export function hasIconLink(html) {
   return [...html.matchAll(iconLinkPattern)].some((match) => !placeholderIconPattern.test(match[0]));
 }
@@ -132,6 +147,8 @@ export function injectCompositeTheme(html, {
   } else if (!/<html\b[^>]*\bdata-neurodesk-theme=/i.test(themed)) {
     themed = themed.replace(/<html\b/i, '<html data-neurodesk-theme="dark"');
   }
+
+  if (shell === 'imaging-workspace') themed = stampWorkspaceRegions(themed);
 
   // Name the catalogue that hosts the page, so an app can pick defaults that suit its audience.
   // Standalone builds and the dev server are hosted by no catalogue and carry no attribute.

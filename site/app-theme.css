@@ -550,6 +550,46 @@
   display: none !important;
 }
 
+/* The bar's row keeps one height before the bar arrives and after. The workspace's
+   own brand is the fallback for a shell that never loads, so it waits for the bar
+   before it shows, in a row of the bar's height. */
+[data-neurodesk-app] nd-imaging-app-header {
+  min-height: 49px !important;
+}
+
+[data-neurodesk-app] nd-imaging-app-header:not(:has(> .nd-app-bar)) {
+  display: flex !important;
+  height: 49px;
+  padding-inline: 16px !important;
+  overflow: hidden;
+}
+
+[data-neurodesk-app] nd-imaging-app-header > :not(.nd-app-bar) {
+  animation: nd-bar-fallback 0s 3s backwards;
+}
+
+@keyframes nd-bar-fallback {
+  from {
+    visibility: hidden;
+  }
+}
+
+/* Before the workspace mounts, the body is its grid: hold the bar's row. */
+[data-neurodesk-app] body:has(> .nd-imaging-controls):has(> .nd-imaging-viewer)::before {
+  content: "";
+  grid-column: 1 / -1;
+  grid-row: 1;
+  box-sizing: border-box;
+  min-height: 49px;
+  background: var(--nd-brand-menu);
+  border-bottom: 1px solid var(--nd-brand-border);
+}
+
+[data-neurodesk-app] body:has(> .nd-imaging-controls):has(> .nd-imaging-viewer) > .nd-app-bar--standalone {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
 [data-neurodesk-app]:has(.nd-app-bar) [data-neurodesk-control],
 [data-neurodesk-shell-link][hidden] {
   display: none !important;
@@ -943,6 +983,16 @@
     overflow: visible !important;
   }
 
+  /* The stacked bar's usual height, held before it arrives. */
+  [data-neurodesk-app] nd-imaging-app-header,
+  [data-neurodesk-app] body:has(> .nd-imaging-controls):has(> .nd-imaging-viewer)::before {
+    min-height: 84px !important;
+  }
+
+  [data-neurodesk-app] nd-imaging-app-header:not(:has(> .nd-app-bar)) {
+    height: 84px;
+  }
+
   .nd-app-bar__identity {
     justify-content: space-between !important;
   }
@@ -1061,7 +1111,7 @@
 }
 
 @media (max-width: 780px) {
-  [data-neurodesk-app] .nd-imaging-workspace {
+  [data-neurodesk-app] :is(.nd-imaging-workspace, body:has(> .nd-imaging-controls):has(> .nd-imaging-viewer)) {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto minmax(360px, 60svh) auto;
     height: auto;
@@ -1083,7 +1133,7 @@
   }
 
   /* Only the shared workspace grid; .app-container apps place their own footer. */
-  [data-neurodesk-app] .nd-imaging-workspace > .nd-imaging-status {
+  [data-neurodesk-app] :is(.nd-imaging-workspace, body) > .nd-imaging-status {
     grid-column: 1;
     grid-row: 4;
     flex-wrap: wrap;
