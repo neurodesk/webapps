@@ -11,6 +11,7 @@ export const SCOPE_TYPES = Object.freeze(['app', 'package', 'exe', 'shared', 're
 
 const MEMORY_REF_PATTERN = /^refs\/heads\/memory\/[a-z0-9][a-z0-9._/-]*$/;
 const REMOTE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const RELEASED_LEASE_HASH_PATTERN = /^[0-9a-f]{12}$/;
 const ZERO_OID = '0000000000000000000000000000000000000000';
 
 export const LIMITS = Object.freeze({
@@ -64,6 +65,8 @@ const ALLOWED_BEAD_KEYS = new Set([
   'links',
   'lease',
   'releasedLeases',
+  'leaseFloorAt',
+  'leaseReleasedAt',
   'journal',
   'createdAt',
   'updatedAt',
@@ -254,18 +257,65 @@ function normalizeJournal(journal = []) {
   return normalized.slice(-LIMITS.journal);
 }
 
+function deterministicHash(value) {
+  return createHash('sha256').update(JSON.stringify(value), 'utf8').digest('hex');
+}
+
 function leaseKey(lease) {
-  return `${lease.claimedAt}|${lease.owner}`;
+  const hash = deterministicHash({
+    owner: lease.owner,
+    branch: lease.branch ?? null,
+    claimedAt: lease.claimedAt,
+    expiresAt: lease.expiresAt,
+  }).slice(0, 12);
+  return `${lease.claimedAt}|${lease.expiresAt}|${hash}`;
+}
+
+function trimReleasedLeases(entries, existingFloorAt = null) {
+  const sorted = uniqueSorted(entries);
+  let floorAt = existingFloorAt;
+  if (sorted.length > LIMITS.releasedLeases) {
+    const overflowCount = sorted.length - LIMITS.releasedLeases;
+    for (let i = 0; i < overflowCount; i++) {
+      const evictedClaimedAt = sorted[i].split('|')[0];
+      if (!floorAt || evictedClaimedAt > floorAt) {
+        floorAt = evictedClaimedAt;
+      }
+    }
+    return {
+      releasedLeases: sorted.slice(overflowCount),
+      leaseFloorAt: floorAt,
+    };
+  }
+  return { releasedLeases: sorted, leaseFloorAt: floorAt };
 }
 
 function normalizeReleasedLeases(raw = []) {
   if (!Array.isArray(raw)) {
     throw new BeadsValidationError('releasedLeases must be an array');
   }
-  const normalized = raw.map((item, idx) =>
-    assertNonEmptyString(item, `releasedLeases[${idx}]`, LIMITS.actor + 40),
-  );
-  return uniqueSorted(normalized).slice(-LIMITS.releasedLeases);
+  if (raw.length > LIMITS.releasedLeases) {
+    throw new BeadsValidationError(`releasedLeases exceeds maximum length of ${LIMITS.releasedLeases}`);
+  }
+  const normalized = raw.map((item, idx) => {
+    if (typeof item !== 'string') {
+      throw new BeadsValidationError(`releasedLeases[${idx}] must be a string`);
+    }
+    const parts = item.split('|');
+    if (parts.length !== 3) {
+      throw new BeadsValidationError(`releasedLeases[${idx}] must have format "<claimedAt>|<expiresAt>|<hash>"`);
+    }
+    const claimedAt = assertIsoTimestamp(parts[0], `releasedLeases[${idx}].claimedAt`);
+    const expiresAt = assertIsoTimestamp(parts[1], `releasedLeases[${idx}].expiresAt`);
+    if (Date.parse(expiresAt) <= Date.parse(claimedAt)) {
+      throw new BeadsValidationError(`releasedLeases[${idx}] expiresAt must be after claimedAt`);
+    }
+    if (!RELEASED_LEASE_HASH_PATTERN.test(parts[2])) {
+      throw new BeadsValidationError(`releasedLeases[${idx}] has invalid hash`);
+    }
+    return `${claimedAt}|${expiresAt}|${parts[2]}`;
+  });
+  return uniqueSorted(normalized);
 }
 
 export function validateBead(raw) {
@@ -313,6 +363,9 @@ export function validateBead(raw) {
   const links = normalizeLinks(raw.links);
   const lease = normalizeLease(raw.lease);
   const releasedLeases = normalizeReleasedLeases(raw.releasedLeases);
+  const rawLeaseFloorAt = raw.leaseFloorAt === undefined || raw.leaseFloorAt === null ? null : assertIsoTimestamp(raw.leaseFloorAt, 'leaseFloorAt');
+  const legacyLeaseReleasedAt = raw.leaseReleasedAt === undefined || raw.leaseReleasedAt === null ? null : assertIsoTimestamp(raw.leaseReleasedAt, 'leaseReleasedAt');
+  const leaseFloorAt = [rawLeaseFloorAt, legacyLeaseReleasedAt].filter(Boolean).sort().at(-1) ?? null;
   const journal = normalizeJournal(raw.journal);
   const createdAt = assertIsoTimestamp(raw.createdAt, 'createdAt');
   const updatedAt = assertIsoTimestamp(raw.updatedAt, 'updatedAt');
@@ -349,6 +402,7 @@ export function validateBead(raw) {
     links,
     lease,
     releasedLeases,
+    leaseFloorAt,
     journal,
     createdAt,
     updatedAt,
@@ -651,7 +705,9 @@ function validateUpsertOptionalFields(op, beadsMap, existingId) {
 
 function recordReleasedLease(bead) {
   if (!bead.lease) return;
-  bead.releasedLeases = uniqueSorted([...(bead.releasedLeases ?? []), leaseKey(bead.lease)]).slice(-LIMITS.releasedLeases);
+  const trimmed = trimReleasedLeases([...(bead.releasedLeases ?? []), leaseKey(bead.lease)], bead.leaseFloorAt ?? null);
+  bead.releasedLeases = trimmed.releasedLeases;
+  bead.leaseFloorAt = trimmed.leaseFloorAt;
 }
 
 export function applyOperations(beadsMap, operations, options = {}) {
@@ -754,12 +810,13 @@ export function applyOperations(beadsMap, operations, options = {}) {
         if (updates > maxUpdates) {
           throw new BeadsValidationError(`Operation batch exceeds maxUpdates (${maxUpdates})`);
         }
+        const prevStateSig = stateSignature(existing);
         existing.links = mergedLinks;
         existing.summary = nextSummary;
         if (noteText) appendJournal(existing, opActor, noteText, opNowIso);
         existing.lastSeenAt = opNowIso;
         existing.updatedAt = opNowIso;
-        if (linksChanged || summaryChanged) {
+        if (stateSignature(existing) !== prevStateSig) {
           existing.stateRevision = nextRevision(existing.stateRevision);
           existing.stateUpdatedAt = opNowIso;
         }
@@ -831,12 +888,12 @@ export function applyOperations(beadsMap, operations, options = {}) {
       throw new BeadsValidationError(`Operation batch exceeds maxUpdates (${maxUpdates})`);
     }
 
-    let stateChanged = false;
+    const prevStateSig = stateSignature(bead);
     if (op.op === 'update') {
       const opActor = resolveOpActor(op.actor, actor, lockActor);
-      if (op.title !== undefined) { bead.title = assertNonEmptyString(op.title, 'title', LIMITS.title); stateChanged = true; }
-      if (op.summary !== undefined) { bead.summary = assertOptionalString(op.summary, 'summary', LIMITS.summary) ?? ''; stateChanged = true; }
-      if (op.kind !== undefined) { bead.kind = op.kind; stateChanged = true; }
+      if (op.title !== undefined) bead.title = assertNonEmptyString(op.title, 'title', LIMITS.title);
+      if (op.summary !== undefined) bead.summary = assertOptionalString(op.summary, 'summary', LIMITS.summary) ?? '';
+      if (op.kind !== undefined) bead.kind = op.kind;
       if (op.status !== undefined) {
         if (op.status === 'closed' || op.status === 'in_progress') {
           throw new BeadsValidationError(`Use explicit "${op.status === 'closed' ? 'close' : 'claim'}" operation instead of generic update status`);
@@ -852,17 +909,15 @@ export function applyOperations(beadsMap, operations, options = {}) {
           recordReleasedLease(bead);
           bead.lease = null;
         }
-        stateChanged = true;
       }
-      if (op.priority !== undefined) { bead.priority = op.priority; stateChanged = true; }
+      if (op.priority !== undefined) bead.priority = op.priority;
       if (op.scope !== undefined) {
         bead.scope = normalizeScope(op.scope);
         if (singleAppOnly && !isSingleAppScope(bead)) {
           throw new BeadsValidationError(`Updated scope for ${bead.id} must target a single app`);
         }
-        stateChanged = true;
       }
-      if (op.links !== undefined) { bead.links = mergeLinks(bead.links, op.links); stateChanged = true; }
+      if (op.links !== undefined) bead.links = mergeLinks(bead.links, op.links);
       if (op.note !== undefined) {
         const updateNote = assertOptionalString(op.note, 'note', LIMITS.note);
         if (updateNote) appendJournal(bead, opActor, updateNote, opNowIso);
@@ -876,13 +931,11 @@ export function applyOperations(beadsMap, operations, options = {}) {
         throw new BeadsValidationError(`Adding ${blockerId} as blocker of ${bead.id} would create a cycle`);
       }
       bead.deps.blockedBy = uniqueSorted([...bead.deps.blockedBy, blockerId]);
-      stateChanged = true;
     } else if (op.op === 'dep_remove') {
       if (typeof op.blockedBy !== 'string' || !BEAD_ID_PATTERN.test(op.blockedBy)) {
         throw new BeadsValidationError(`Invalid dependency bead id: ${op.blockedBy}`);
       }
       bead.deps.blockedBy = bead.deps.blockedBy.filter((id) => id !== op.blockedBy);
-      stateChanged = true;
     } else if (op.op === 'claim') {
       const owner = resolveOpActor(op.owner, actor, lockActor);
       if (bead.status === 'closed') {
@@ -901,6 +954,7 @@ export function applyOperations(beadsMap, operations, options = {}) {
         bead.reopenedAt ? Date.parse(bead.reopenedAt) + 1 : -Infinity,
         bead.lease ? Date.parse(bead.lease.claimedAt) + 1 : -Infinity,
         lastReleasedIso ? Date.parse(lastReleasedIso) + 1 : -Infinity,
+        bead.leaseFloorAt ? Date.parse(bead.leaseFloorAt) + 1 : -Infinity,
       );
       const claimedAt = new Date(minClaimMs).toISOString();
       const expiresAt = new Date(minClaimMs + ttlHours * 3600 * 1000).toISOString();
@@ -911,7 +965,6 @@ export function applyOperations(beadsMap, operations, options = {}) {
       bead.status = 'in_progress';
       if (cleanBranch) bead.links = mergeLinks(bead.links, { branch: cleanBranch });
       appendJournal(bead, owner, claimNote, opNowIso);
-      stateChanged = true;
     } else if (op.op === 'release') {
       const owner = resolveOpActor(op.owner, actor, lockActor);
       if (op.force !== undefined && typeof op.force !== 'boolean') {
@@ -929,7 +982,6 @@ export function applyOperations(beadsMap, operations, options = {}) {
         recordReleasedLease(bead);
         bead.lease = null;
         if (bead.status === 'in_progress') bead.status = 'open';
-        stateChanged = true;
       }
       appendJournal(bead, owner, releaseNote, opNowIso);
     } else if (op.op === 'note') {
@@ -954,7 +1006,6 @@ export function applyOperations(beadsMap, operations, options = {}) {
       if (op.pr !== undefined) bead.links = mergeLinks(bead.links, { pr: op.pr });
       const journalNote = `Closed: ${reason}`.slice(0, LIMITS.note);
       appendJournal(bead, opActor, journalNote, opNowIso);
-      stateChanged = true;
     } else if (op.op === 'reopen') {
       const opActor = resolveOpActor(op.actor, actor, lockActor);
       if (bead.status !== 'closed') {
@@ -968,11 +1019,10 @@ export function applyOperations(beadsMap, operations, options = {}) {
       bead.closeReason = null;
       bead.reopenedAt = new Date(minReopenMs).toISOString();
       appendJournal(bead, opActor, reopenNote, opNowIso);
-      stateChanged = true;
     }
 
     bead.updatedAt = opNowIso;
-    if (stateChanged) {
+    if (stateSignature(bead) !== prevStateSig) {
       bead.stateRevision = nextRevision(bead.stateRevision);
       bead.stateUpdatedAt = opNowIso;
     }
@@ -1003,10 +1053,6 @@ function mergeJournalEntries(a, b) {
   }
   merged.sort((x, y) => x.at.localeCompare(y.at) || x.actor.localeCompare(y.actor) || x.note.localeCompare(y.note));
   return merged.slice(-LIMITS.journal);
-}
-
-function deterministicHash(value) {
-  return createHash('sha256').update(JSON.stringify(value), 'utf8').digest('hex');
 }
 
 function reopenedAfterClose(openBead, closedBead) {
@@ -1048,7 +1094,7 @@ function pickHigherState(local, remote) {
     const localWins = localStateAt > remoteStateAt;
     return [structuredClone(localWins ? local : remote), localWins ? remote : local];
   }
-  const localFirst = deterministicHash(local) >= deterministicHash(remote);
+  const localFirst = deterministicHash(stateSignature(local)) >= deterministicHash(stateSignature(remote));
   return [structuredClone(localFirst ? local : remote), localFirst ? remote : local];
 }
 
@@ -1104,19 +1150,26 @@ export function mergeBeadsMaps(localMap, remoteMap) {
       [winner, other] = pickHigherState(local, remote);
     }
 
-    const mergedReleased = uniqueSorted([
+    const maxLeaseFloorAt = [local.leaseFloorAt, remote.leaseFloorAt]
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? null;
+    const combinedReleased = uniqueSorted([
       ...(local.releasedLeases ?? []),
       ...(remote.releasedLeases ?? []),
-    ]).slice(-LIMITS.releasedLeases);
-    const releasedSet = new Set(mergedReleased);
+    ]);
+    const releasedSet = new Set(combinedReleased);
     const maxReopenedAt = [local.reopenedAt, remote.reopenedAt]
       .filter(Boolean)
       .sort()
       .at(-1) ?? null;
 
-    if (winner.status !== 'closed') {
+    if (winner.status === 'closed') {
+      if (other.lease) combinedReleased.push(leaseKey(other.lease));
+    } else {
       const isSuperseded = (lease) =>
         releasedSet.has(leaseKey(lease))
+        || Boolean(maxLeaseFloorAt && lease.claimedAt <= maxLeaseFloorAt)
         || Boolean(maxReopenedAt && lease.claimedAt < maxReopenedAt);
       const survivingLeases = [local.lease, remote.lease].filter((lease) => lease && !isSuperseded(lease));
       if (survivingLeases.length === 0) {
@@ -1135,10 +1188,15 @@ export function mergeBeadsMaps(localMap, remoteMap) {
         );
         winner.lease = structuredClone(survivingLeases[0]);
         winner.status = 'in_progress';
+        for (const loser of survivingLeases.slice(1)) {
+          combinedReleased.push(leaseKey(loser));
+        }
       }
     }
 
-    winner.releasedLeases = mergedReleased;
+    const trimmedLeases = trimReleasedLeases(combinedReleased, maxLeaseFloorAt);
+    winner.releasedLeases = trimmedLeases.releasedLeases;
+    winner.leaseFloorAt = trimmedLeases.leaseFloorAt;
     winner.reopenedAt = maxReopenedAt;
     winner.journal = mergeJournalEntries(winner.journal, other.journal);
     winner.links = mergeLinks(winner.links, { evidence: other.links.evidence ?? [] }, { capEvidence: true });
@@ -1485,8 +1543,13 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
 
   let pushed = false;
   if (push && finalSha) {
+    const pushUrl = git(['remote', 'get-url', '--push', '--', remote], { cwd: repoTop }).trim();
+    if (!pushUrl) {
+      throw new BeadsValidationError(`Unable to resolve push URL for remote "${remote}"`);
+    }
     const leaseArg = remoteState.sha ? `--force-with-lease=${ref}:${remoteState.sha}` : `--force-with-lease=${ref}:`;
-    git(['push', '--no-follow-tags', '--recurse-submodules=no', leaseArg, '--', remote, `${finalSha}:${ref}`], { cwd: repoTop });
+    git(['push', '--no-follow-tags', '--recurse-submodules=no', leaseArg, '--', pushUrl, `${finalSha}:${ref}`], { cwd: repoTop });
+    git(['update-ref', '--no-deref', trackingRef, finalSha], { cwd: repoTop });
     pushed = true;
   }
 

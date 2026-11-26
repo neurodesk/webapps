@@ -137,6 +137,12 @@ test('schema validation, deterministic dedupe IDs, bounds, ref validation, and J
     note: false,
   }]), BeadsValidationError);
   assert.throws(() => validateBead({ ...bead, revision: 2 ** 53 }), BeadsValidationError);
+  assert.throws(() => validateBead({ ...bead, releasedLeases: ['junk'] }), BeadsValidationError);
+  // Legacy schema-v1 records carrying leaseReleasedAt load cleanly
+  const legacyNull = validateBead({ ...bead, leaseReleasedAt: null });
+  assert.equal(legacyNull.leaseFloorAt, null);
+  const legacyTs = validateBead({ ...bead, leaseReleasedAt: '2026-11-26T00:30:00.000Z' });
+  assert.equal(legacyTs.leaseFloorAt, '2026-11-26T00:30:00.000Z');
   const maxSafeMap = new Map([[bead.id, { ...bead, revision: Number.MAX_SAFE_INTEGER }]]);
   assert.throws(() => applyOperations(maxSafeMap, [{ op: 'note', id: bead.id, note: 'overflow' }], { now }), BeadsValidationError);
 });
@@ -515,6 +521,60 @@ test('mergeBeadsMaps preserves closed status, bumps revision on merge, caps evid
   assert.equal(mergedBlockedAndNotes.get(idA).status, 'blocked');
   assert.ok(!readyBeads(mergedBlockedAndNotes, { now: t2 }).some((b) => b.id === idA));
 
+  // No-op update (sending existing title back) must NOT bump stateRevision or defeat concurrent dep_add
+  const noopTitleBranch = applyOperations(base, [
+    { op: 'update', id: idA, title: 'A' },
+  ], { actor: 'triage', now: t2 }).beads;
+  const mergedNoopAndDep = mergeBeadsMaps(noopTitleBranch, depBlockedBranch);
+  assert.deepEqual(mergedNoopAndDep.get(idA).deps.blockedBy, [idB]);
+
+  // Adding audit notes to a tied branch must NEVER flip which scheduling edit wins
+  const tiedTitle = applyOperations(base, [{ op: 'update', id: idA, title: 'Tied title' }], { actor: 'host-1', now: t1 }).beads;
+  const tiedDep = applyOperations(base, [{ op: 'dep_add', id: idA, blockedBy: idB }], { actor: 'host-2', now: t1 }).beads;
+  const tiedWinnerBefore = mergeBeadsMaps(tiedDep, tiedTitle).get(idA);
+  const tiedTitleWithNotes = applyOperations(tiedTitle, [
+    { op: 'note', id: idA, note: 'Tie breaker probe 1' },
+    { op: 'note', id: idA, note: 'Tie breaker probe 2' },
+  ], { actor: 'host-1', now: t3 }).beads;
+  const tiedWinnerAfter = mergeBeadsMaps(tiedDep, tiedTitleWithNotes).get(idA);
+  assert.equal(tiedWinnerAfter.title, tiedWinnerBefore.title);
+  assert.deepEqual(tiedWinnerAfter.deps.blockedBy, tiedWinnerBefore.deps.blockedBy);
+
+  // Losing concurrent claim is tombstoned on merge so stale clones cannot resurrect it after winner releases
+  const aliceClaim = applyOperations(base, [{ op: 'claim', id: idA, owner: 'alice', ttlHours: 24 }], { actor: 'alice', now: t1 }).beads;
+  const bobClaim = applyOperations(base, [{ op: 'claim', id: idA, owner: 'bob', ttlHours: 24 }], { actor: 'bob', now: t2 }).beads;
+  const mergedClaims = mergeBeadsMaps(aliceClaim, bobClaim);
+  assert.equal(mergedClaims.get(idA).lease?.owner, 'bob');
+  const bobReleased = applyOperations(mergedClaims, [{ op: 'release', id: idA, owner: 'bob' }], { actor: 'bob', now: t3 }).beads;
+  const aliceStaleNote = applyOperations(aliceClaim, [{ op: 'note', id: idA, note: 'Stale ping' }], { actor: 'alice', now: t3 }).beads;
+  const afterStaleAlice = mergeBeadsMaps(bobReleased, aliceStaleNote);
+  assert.equal(afterStaleAlice.get(idA).status, 'open');
+  assert.equal(afterStaleAlice.get(idA).lease, null);
+
+  // >50 claim/release cycles advance leaseFloorAt so an evicted unexpired claim cannot resurrect
+  let churn = applyOperations(base, [{ op: 'claim', id: idA, owner: 'early', ttlHours: 24 }], { actor: 'early', now: t1 }).beads;
+  const staleEarlyClaim = churn;
+  churn = applyOperations(churn, [{ op: 'release', id: idA, owner: 'early' }], { actor: 'early', now: new Date(t1.getTime() + 1000) }).beads;
+  for (let i = 0; i < LIMITS.releasedLeases + 5; i++) {
+    const stepMs = t1.getTime() + 2000 + i * 20;
+    churn = applyOperations(churn, [
+      { op: 'claim', id: idA, owner: `w-${i}`, ttlHours: 1 },
+      { op: 'release', id: idA, owner: `w-${i}` },
+    ], { actor: `w-${i}`, now: new Date(stepMs) }).beads;
+  }
+  assert.ok(churn.get(idA).leaseFloorAt !== null);
+  const afterOverflowMerge = mergeBeadsMaps(churn, staleEarlyClaim);
+  assert.equal(afterOverflowMerge.get(idA).status, 'open');
+  assert.equal(afterOverflowMerge.get(idA).lease, null);
+
+  // Same-millisecond, same-owner claims with different TTLs have distinct tombstones
+  const shortClaim = applyOperations(base, [{ op: 'claim', id: idA, owner: 'alice', ttlHours: 1 }], { actor: 'alice', now: t1 }).beads;
+  const longClaim = applyOperations(base, [{ op: 'claim', id: idA, owner: 'alice', ttlHours: 24 }], { actor: 'alice', now: t1 }).beads;
+  const shortReleased = applyOperations(shortClaim, [{ op: 'release', id: idA, owner: 'alice' }], { actor: 'alice', now: t2 }).beads;
+  const mergedDistinctTtl = mergeBeadsMaps(shortReleased, longClaim);
+  assert.equal(mergedDistinctTtl.get(idA).status, 'in_progress');
+  assert.equal(mergedDistinctTtl.get(idA).lease?.expiresAt, longClaim.get(idA).lease.expiresAt);
+
   // Divergent merge rejects overflowing MAX_SAFE_INTEGER revision
   const maxLeft = new Map([[idA, { ...structuredClone(titleA.get(idA)), revision: Number.MAX_SAFE_INTEGER }]]);
   const maxRight = new Map([[idA, { ...structuredClone(titleB.get(idA)), revision: Number.MAX_SAFE_INTEGER }]]);
@@ -724,11 +784,15 @@ test('git orphan-branch store handles subdirectories, CAS bootstrap, fast-forwar
     execFileSync('git', ['update-ref', 'refs/heads/memory/malformed-symlink', symlinkSchemaCommit], { cwd: cloneC, stdio: 'ignore' });
     assert.throws(() => readBeadsFromRef(cloneC, 'refs/heads/memory/malformed-symlink'), BeadsValidationError);
 
-    // sync --push must ignore push.followTags=true (never publish unrelated annotated tags)
+    // sync --push must ignore push.followTags=true AND remote.<name>.fetch mappings (never touch main or tags)
     execFileSync('git', ['tag', '-a', 'hmc-v0.0.1', '-m', 'unrelated tag', 'refs/heads/main'], { cwd: mainRepo, stdio: 'ignore' });
     execFileSync('git', ['config', 'push.followTags', 'true'], { cwd: mainRepo, stdio: 'ignore' });
+    execFileSync('git', ['config', '--add', 'remote.origin.fetch', '+refs/heads/memory/beads:refs/heads/main'], { cwd: mainRepo, stdio: 'ignore' });
+    const mainRepoHeadBefore = execFileSync('git', ['rev-parse', 'refs/heads/main'], { cwd: mainRepo, encoding: 'utf8' }).trim();
+    mutateBeadsRef(mainRepo, [{ op: 'note', id: beadId, note: 'Push isolation check' }], { actor: 'host-a' });
     syncBeadsRef(mainRepo, { remote: 'origin', push: true });
     assert.equal(execFileSync('git', ['ls-remote', '--tags', 'origin'], { cwd: mainRepo, encoding: 'utf8' }).trim(), '');
+    assert.equal(execFileSync('git', ['rev-parse', 'refs/heads/main'], { cwd: mainRepo, encoding: 'utf8' }).trim(), mainRepoHeadBefore);
 
     // Pull-only sync must ignore configured remote refmaps and fetch.recurseSubmodules=true
     const subUpstream = join(root, 'sub-upstream.git');

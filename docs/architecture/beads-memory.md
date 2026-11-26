@@ -23,7 +23,7 @@ memory/beads
 
 - **Zero working-tree pollution:** [scripts/beads.mjs](../../scripts/beads.mjs) and [scripts/lib/beads.mjs](../../scripts/lib/beads.mjs) read and commit directly through Git plumbing (`ls-tree`, `cat-file`, `hash-object`, `mktree`, `commit-tree`, and compare-and-swap `update-ref`). Every parallel T3/git worktree shares `refs/heads/memory/beads` automatically through `--git-common-dir` without dirtying any checkout or touching `main`.
 - **Zero CI blast radius:** Every `on: push` workflow trigger in `.github/workflows/` filters to `branches: [main]` (or tags), so `memory/beads` pushes are CI-silent and never appear in `main` diffs or `app-plan.mjs`.
-- **Conflict-free sync:** `sync` merges per-item by `(revision, updatedAt)` and unions `journal` entries and `evidence` links, then pushes with `--force-with-lease`.
+- **Conflict-free sync:** `sync` merges per-item by `(stateRevision, stateUpdatedAt)` with explicit lifecycle and per-claim lease reconciliation, unions `journal` entries and `evidence` links, and pushes with `--force-with-lease`.
 - **Public-repo safety:** Treat `memory/beads` as world-readable if pushed to `origin`. Never store credentials, private review notes, raw non-collaborator issue text, or unpublished data in beads.
 
 ## Everyday CLI usage
