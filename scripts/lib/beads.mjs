@@ -13,6 +13,7 @@ const MEMORY_REF_PATTERN = /^refs\/heads\/memory\/[a-z0-9][a-z0-9._/-]*$/;
 const REMOTE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const RELEASED_LEASE_HASH_PATTERN = /^[0-9a-f]{12}$/;
 const ISO_TIMESTAMP_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})$/;
+const CANONICAL_UTC_ISO_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const ZERO_OID = '0000000000000000000000000000000000000000';
 
 export const LIMITS = Object.freeze({
@@ -134,7 +135,8 @@ function assertIsoTimestamp(value, field) {
   if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) {
     throw new BeadsValidationError(`${field} must be a valid calendar ISO-8601 timestamp`);
   }
-  const checkUtc = new Date(Date.UTC(year, month - 1, day));
+  const checkUtc = new Date(0);
+  checkUtc.setUTCFullYear(year, month - 1, day);
   if (checkUtc.getUTCFullYear() !== year || checkUtc.getUTCMonth() !== month - 1 || checkUtc.getUTCDate() !== day) {
     throw new BeadsValidationError(`${field} must be a valid calendar ISO-8601 timestamp`);
   }
@@ -340,7 +342,7 @@ function normalizeReleasedLeases(raw = []) {
       throw new BeadsValidationError(`releasedLeases[${idx}] must have format "<claimedAt>|<expiresAt>|<hash>"`);
     }
     const parts = item.split('|');
-    if (parts.length === 3 && RELEASED_LEASE_HASH_PATTERN.test(parts[2]) && ISO_TIMESTAMP_PATTERN.test(parts[1])) {
+    if (parts.length === 3 && CANONICAL_UTC_ISO_PATTERN.test(parts[0]) && CANONICAL_UTC_ISO_PATTERN.test(parts[1]) && RELEASED_LEASE_HASH_PATTERN.test(parts[2])) {
       const claimedAt = assertIsoTimestamp(parts[0], `releasedLeases[${idx}].claimedAt`);
       const expiresAt = assertIsoTimestamp(parts[1], `releasedLeases[${idx}].expiresAt`);
       if (Date.parse(expiresAt) <= Date.parse(claimedAt)) {
@@ -348,7 +350,7 @@ function normalizeReleasedLeases(raw = []) {
       }
       return `${claimedAt}|${expiresAt}|${parts[2]}`;
     }
-    // Legacy schema-v1 tombstone format: "<claimedAt>|<owner>" (owner may contain "|")
+    // Legacy schema-v1 tombstone format: "<claimedAt>|<owner>" (owner is preserved verbatim)
     const claimedAt = assertIsoTimestamp(item.slice(0, firstPipe), `releasedLeases[${idx}].claimedAt`);
     const owner = assertNonEmptyString(item.slice(firstPipe + 1), `releasedLeases[${idx}].owner`, LIMITS.actor);
     return `${claimedAt}|${owner}`;
@@ -1602,8 +1604,15 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
 
   let pushed = false;
   if (push && finalSha) {
+    const pushUrls = git(['remote', 'get-url', '--push', '--all', '--', remote], { cwd: repoTop })
+      .split('\n')
+      .map((u) => u.trim())
+      .filter(Boolean);
+    if (pushUrls.length > 1) {
+      throw new BeadsValidationError(`Remote "${remote}" has ${pushUrls.length} push URLs; beads sync requires a single push destination for atomic --force-with-lease`);
+    }
     const leaseArg = remoteState.sha ? `--force-with-lease=${ref}:${remoteState.sha}` : `--force-with-lease=${ref}:`;
-    git(['-c', `remote.${remote}.fetch=`, 'push', '--no-follow-tags', '--recurse-submodules=no', leaseArg, '--', remote, `${finalSha}:${ref}`], { cwd: repoTop });
+    git(['-c', `remote.${remote}.fetch=`, '-c', `remote.${remote}.mirror=false`, 'push', '--no-follow-tags', '--recurse-submodules=no', leaseArg, '--', remote, `${finalSha}:${ref}`], { cwd: repoTop });
     git(['update-ref', '--no-deref', trackingRef, finalSha], { cwd: repoTop });
     pushed = true;
   }

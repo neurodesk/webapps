@@ -152,6 +152,11 @@ test('schema validation, deterministic dedupe IDs, bounds, ref validation, and J
   assert.equal(legacyTs.leaseFloorAt, '2026-11-26T00:30:00.000Z');
   const legacyTombstone = validateBead({ ...bead, releasedLeases: ['2026-11-26T00:00:00.000Z|worker|lane'] });
   assert.deepEqual(legacyTombstone.releasedLeases, ['2026-11-26T00:00:00.000Z|worker|lane']);
+  // Legacy owner that looks like "<offset-iso>|<hex12>" must stay verbatim rather than being rewritten
+  const legacyOffsetOwner = validateBead({ ...bead, releasedLeases: ['2026-11-26T00:00:00.000Z|2026-11-26T06:00:00+01:00|abcdef123456'] });
+  assert.deepEqual(legacyOffsetOwner.releasedLeases, ['2026-11-26T00:00:00.000Z|2026-11-26T06:00:00+01:00|abcdef123456']);
+  // Valid calendar ISO dates in years 0000-0099 (e.g. leap year 0000-02-29) are accepted
+  assert.equal(validateBead({ ...bead, createdAt: '0000-02-29T12:00:00Z' }).createdAt, '0000-02-29T12:00:00.000Z');
   const maxSafeMap = new Map([[bead.id, { ...bead, revision: Number.MAX_SAFE_INTEGER }]]);
   assert.throws(() => applyOperations(maxSafeMap, [{ op: 'note', id: bead.id, note: 'overflow' }], { now }), BeadsValidationError);
 });
@@ -611,16 +616,17 @@ test('mergeBeadsMaps preserves closed status, bumps revision on merge, caps evid
     return cur;
   };
   const branchA26 = makeHalf(t1.getTime() + 5000, 26, 'a');
-  const branchB26 = applyOperations(
-    makeHalf(t1.getTime() + 20000, 25, 'b'),
-    [{ op: 'claim', id: idA, owner: 'older-active', ttlHours: 48 }],
-    { actor: 'older-active', now: t1 },
-  ).beads;
-  const compacted = mergeBeadsMaps(branchA26, branchB26);
+  const olderActive = applyOperations(base, [
+    { op: 'claim', id: idA, owner: 'older-active', ttlHours: 48 },
+  ], { actor: 'older-active', now: t1 }).beads;
+  // Combine 25 newer tombstones with an active claim whose claimedAt (t1) genuinely precedes all 51 tombstones
+  const branchB25WithOlderActive = mergeBeadsMaps(makeHalf(t1.getTime() + 20000, 25, 'b'), olderActive);
+  assert.equal(branchB25WithOlderActive.get(idA).lease?.claimedAt, t1.toISOString());
+  const compacted = mergeBeadsMaps(branchA26, branchB25WithOlderActive);
   const compactedBead = compacted.get(idA);
-  if (compactedBead.lease && compactedBead.leaseFloorAt) {
-    assert.ok(compactedBead.lease.claimedAt > compactedBead.leaseFloorAt);
-  }
+  assert.ok(compactedBead.leaseFloorAt > t1.toISOString());
+  assert.equal(compactedBead.lease, null);
+  assert.equal(compactedBead.status, 'open');
   const compactedNote = applyOperations(compacted, [{ op: 'note', id: idA, note: 'Idempotence check' }], { actor: 'obs', now: t3 }).beads;
   const remerged = mergeBeadsMaps(compacted, compactedNote);
   assert.equal(remerged.get(idA).status, compactedBead.status);
@@ -900,6 +906,14 @@ test('git orphan-branch store handles subdirectories, CAS bootstrap, fast-forwar
     syncBeadsRef(symRepo, { remote: 'aliased', push: true });
     assert.ok(execFileSync('git', ['rev-parse', '--verify', 'refs/heads/memory/beads'], { cwd: insteadRealBare, encoding: 'utf8' }).trim());
     assert.equal(execFileSync('git', ['for-each-ref', 'refs/heads/memory/beads'], { cwd: insteadWrongBare, encoding: 'utf8' }).trim(), '');
+
+    // remote.<name>.mirror=true still allows single-ref beads push, while multiple push URLs are rejected atomically
+    execFileSync('git', ['config', 'remote.aliased.mirror', 'true'], { cwd: symRepo, stdio: 'ignore' });
+    mutateBeadsRef(symRepo, [{ op: 'create', title: 'Mirror config push', scope: { type: 'repo', targets: [] } }], { actor: 'sym' });
+    syncBeadsRef(symRepo, { remote: 'aliased', push: true });
+    execFileSync('git', ['remote', 'set-url', '--add', '--push', 'aliased', insteadRealBare], { cwd: symRepo, stdio: 'ignore' });
+    execFileSync('git', ['remote', 'set-url', '--add', '--push', 'aliased', insteadWrongBare], { cwd: symRepo, stdio: 'ignore' });
+    assert.throws(() => syncBeadsRef(symRepo, { remote: 'aliased', push: true }), BeadsValidationError);
 
     // Pull-only sync must ignore configured remote refmaps and fetch.recurseSubmodules=true
     const subUpstream = join(root, 'sub-upstream.git');
