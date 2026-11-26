@@ -4,7 +4,7 @@ import { isAlias, isMap, isScalar, isSeq, parse, parseDocument } from 'yaml';
 import { LockfileAnalysisError, lockfileImpact } from './lockfile-impact.mjs';
 import { onlyAddsExports } from './module-closure.mjs';
 import { EMBEDDED_VERSION_FILES, releaseBookkeeping } from './release-bookkeeping.mjs';
-import { ANY_ROOT_SCRIPT, CATALOG, INDEPENDENT_CONFIG, SITE } from './workspace-graph.mjs';
+import { CATALOG, INDEPENDENT_CONFIG, SITE, reachableFrom } from './workspace-graph.mjs';
 import { handoffCatalogEntry, validateAppInformation } from './app-information.mjs';
 import { appCatalogIds, parseAppsRegistry } from './apps-registry.mjs';
 import { validateStandalone } from './standalone.mjs';
@@ -26,6 +26,11 @@ const INDEPENDENT_CHECK_PATHS = [
   /^config\/dependency-/,
   /^templates\//,
 ];
+// Lint and quality tooling run in workspace-contracts or quality.yml rather
+// than app builds; exempt them only when the workspace graph confirms neither
+// CATALOG, SITE nor any app (outside the lint runner itself) reaches them.
+const LINT_RUNNER = /^scripts\/lint\.mjs$/;
+const LINT_TOOLING_PATHS = [LINT_RUNNER, /^scripts\/quality\//];
 // Root files the workspace graph follows. Without a graph they count as shared.
 const ROOT_FILE = /^(?:scripts|test-utils|registry|test)\//;
 // An app's model manifest belongs to that app alone.
@@ -375,44 +380,11 @@ export function ciImpact({ before, after }) {
 }
 
 const EXACT_PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
-const MAX_PACKAGE_NAME_LENGTH = 214;
-const MAX_SEMVER_LENGTH = 256;
 const SEMVER_NUM = '(?:0|[1-9]\\d*)';
 const SEMVER_PRE = '(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)';
 // Strict SemVer 2.0.0 without build metadata (+build), which pnpm normalizes
 // away when matching minimumReleaseAgeExclude against locked versions.
 const EXACT_SEMVER = new RegExp(`^${SEMVER_NUM}\\.${SEMVER_NUM}\\.${SEMVER_NUM}(?:-${SEMVER_PRE}(?:\\.${SEMVER_PRE})*)?$`);
-// Plain scalars interpreted differently across YAML 1.1 (js-yaml) and YAML 1.2.
-const AMBIGUOUS_PLAIN_YAML = /^(?:y|yes|n|no|true|false|on|off|~|null|0[0-7]+|[+-]?0[0-7]+)$/i;
-
-// Printable ASCII plus tab/CR/LF: excludes control chars (e.g. U+0001), BOM,
-// and non-ASCII line breaks that YAML parsers (yaml vs js-yaml/pnpm) disagree on.
-const SAFE_YAML_TEXT = /^[\t\n\r\x20-\x7E]*$/;
-const SAFE_YAML_STRING = /^[\x20-\x7E]*$/;
-
-function isPlainJsonValue(value) {
-  if (value === null || typeof value === 'boolean') return true;
-  if (typeof value === 'string') return SAFE_YAML_STRING.test(value);
-  if (typeof value === 'number') return Number.isFinite(value);
-  if (Array.isArray(value)) return value.every(isPlainJsonValue);
-  if (typeof value !== 'object') return false;
-  if (Object.getPrototypeOf(value) !== Object.prototype) return false;
-  return Object.values(value).every(isPlainJsonValue);
-}
-
-function isExactPnpmSemver(version) {
-  if (version.length > MAX_SEMVER_LENGTH || !EXACT_SEMVER.test(version)) return false;
-  const dash = version.indexOf('-');
-  const core = dash < 0 ? version : version.slice(0, dash);
-  const pre = dash < 0 ? undefined : version.slice(dash + 1);
-  if (!core.split('.').every((part) => part.length <= 16 && Number.isSafeInteger(Number(part)))) return false;
-  if (pre !== undefined) {
-    for (const part of pre.split('.')) {
-      if (/^\d+$/.test(part) && (part.length > 16 || !Number.isSafeInteger(Number(part)))) return false;
-    }
-  }
-  return true;
-}
 
 function unsafeYamlReason(node) {
   if (!node || typeof node !== 'object') return null;
@@ -433,89 +405,34 @@ function unsafeYamlReason(node) {
       const nested = unsafeYamlReason(item);
       if (nested) return nested;
     }
-    return null;
-  }
-  if (isScalar(node)) {
-    const src = typeof node.source === 'string' ? node.source : null;
-    if (typeof node.value === 'number' && src !== null && (/^[+-]?0\d/.test(src) || /[_:]/.test(src))) {
-      return 'it uses ambiguous numeric YAML literals';
-    }
-    if (typeof node.value === 'boolean' && src !== null && src !== 'true' && src !== 'false') {
-      return 'it uses non-canonical YAML boolean literals';
-    }
-    if (typeof node.value === 'string' && node.type === 'PLAIN' && AMBIGUOUS_PLAIN_YAML.test(node.value)) {
-      return 'it uses YAML 1.1-ambiguous plain scalars';
-    }
   }
   return null;
 }
 
 function parseSafeWorkspaceYaml(text) {
-  if (typeof text !== 'string' || !SAFE_YAML_TEXT.test(text)) {
-    return { error: 'it contains control or non-ASCII characters that YAML parsers handle differently' };
-  }
-  const doc12 = parseDocument(text, { schema: 'core', uniqueKeys: true });
-  if (doc12.errors.length) return { error: `it does not parse (${doc12.errors[0].message.split('\n')[0]})` };
-  if (doc12.warnings.length) return { error: `it has YAML warnings (${doc12.warnings[0].message.split('\n')[0]})` };
-  if (doc12.directives.yaml.explicit || Object.keys(doc12.directives.tags).some((tag) => tag !== '!!')) {
+  if (typeof text !== 'string') return { error: 'its workspace configuration is missing' };
+  const doc = parseDocument(text, { uniqueKeys: true });
+  if (doc.errors.length) return { error: `it does not parse (${doc.errors[0].message.split('\n')[0]})` };
+  if (doc.warnings.length) return { error: `it has YAML warnings (${doc.warnings[0].message.split('\n')[0]})` };
+  if (doc.directives.yaml.explicit || Object.entries(doc.directives.tags).some(([handle, prefix]) => handle !== '!!' || prefix !== 'tag:yaml.org,2002:')) {
     return { error: 'it uses explicit YAML directives' };
   }
-  if (!isMap(doc12.contents) || doc12.contents.flow) return { error: 'it is not a block YAML mapping' };
-  const unsafe = unsafeYamlReason(doc12.contents);
+  if (!isMap(doc.contents)) return { error: 'it is not a YAML mapping' };
+  const unsafe = unsafeYamlReason(doc.contents);
   if (unsafe) return { error: unsafe };
-  // Parse under YAML 1.1 as well (matching js-yaml / pnpm) and reject any scalar
-  // that resolves to a non-JSON type (such as an unquoted ISO Date) or differs
-  // between YAML 1.1 and YAML 1.2.
-  const doc11 = parseDocument(text, { schema: 'yaml-1.1', uniqueKeys: true });
-  if (doc11.errors.length || doc11.warnings.length || !isMap(doc11.contents)) {
-    return { error: 'it does not parse identically under YAML 1.1 and 1.2' };
-  }
-  const [val12, val11] = [doc12.toJS(), doc11.toJS()];
-  if (!same(val12, val11)) {
-    return { error: 'it contains YAML scalars whose meaning differs between YAML 1.1 and 1.2' };
-  }
-  if (!isPlainJsonValue(val12) || !isPlainJsonValue(val11)) {
-    return { error: 'it contains non-plain or control-character YAML scalars' };
-  }
-  return { doc: doc12, value: val12 };
+  return { doc, value: doc.toJS() };
 }
 
-const RELEASE_AGE_HEADER = /^minimumReleaseAgeExclude: *(?:#[^\r\n]*)?$/;
-const RELEASE_AGE_EMPTY = /^minimumReleaseAgeExclude: *\[\] *(?:#[^\r\n]*)?$/;
-const RELEASE_AGE_BLANK = /^ *(?:#[^\r\n]*)?$/;
-const RELEASE_AGE_ITEM = /^( *)- +(?:[A-Za-z0-9][A-Za-z0-9@._/| -]*|'[A-Za-z0-9@._/| -]+'|"[A-Za-z0-9@._/| -]+") *(?:#[^\r\n]*)?$/;
-const SIMPLE_SCALAR_TYPES = new Set(['PLAIN', 'QUOTE_SINGLE', 'QUOTE_DOUBLE']);
-
-function stripReleaseAgeSection(text, doc) {
+function outsideReleaseAgeSection(text, doc) {
   const pair = doc.contents.items.find((item) => isScalar(item.key) && item.key.value === 'minimumReleaseAgeExclude');
-  if (!pair) return { outside: text, section: null, pair: null };
+  if (!pair) return { outside: text };
   if (!pair.key.range || !pair.value?.range) return { error: 'its minimumReleaseAgeExclude range cannot be determined' };
   const [start] = pair.key.range;
   const end = pair.value.range[2];
   if ((start > 0 && text[start - 1] !== '\n') || (end < text.length && text[end - 1] !== '\n')) {
     return { error: 'its minimumReleaseAgeExclude section is not on clean line boundaries' };
   }
-  return { outside: text.slice(0, start) + text.slice(end), section: text.slice(start, end), pair };
-}
-
-function isSafeReleaseAgeSection(section, pair) {
-  if (section === null) return true;
-  if (!isSeq(pair.value)) return false;
-  const lines = section.replace(/\r?\n$/, '').split(/\r?\n/);
-  if (lines.length === 1) {
-    return pair.value.items.length === 0 && RELEASE_AGE_EMPTY.test(lines[0]);
-  }
-  if (pair.value.flow || !RELEASE_AGE_HEADER.test(lines[0])) return false;
-  if (!pair.value.items.every((item) => isScalar(item) && SIMPLE_SCALAR_TYPES.has(item.type))) return false;
-  let indent = null;
-  for (const line of lines.slice(1)) {
-    if (RELEASE_AGE_BLANK.test(line)) continue;
-    const match = line.match(RELEASE_AGE_ITEM);
-    if (!match) return false;
-    if (indent === null) indent = match[1].length;
-    else if (match[1].length !== indent) return false;
-  }
-  return true;
+  return { outside: text.slice(0, start) + text.slice(end) };
 }
 
 function parseReleaseAgeExclusions(value) {
@@ -524,16 +441,16 @@ function parseReleaseAgeExclusions(value) {
   const seenNames = new Set();
   const specs = new Set();
   for (const entry of value) {
-    if (typeof entry !== 'string' || entry.length > MAX_SEMVER_LENGTH || entry !== entry.trim()) return null;
+    if (typeof entry !== 'string' || entry !== entry.trim()) return null;
     const at = entry.indexOf('@', 1);
     if (at < 0) return null;
     const name = entry.slice(0, at);
-    if (name.length > MAX_PACKAGE_NAME_LENGTH || !EXACT_PACKAGE_NAME.test(name) || seenNames.has(name)) return null;
+    if (!EXACT_PACKAGE_NAME.test(name) || seenNames.has(name)) return null;
     seenNames.add(name);
     const rawVersionSpec = entry.slice(at + 1);
-    if (!rawVersionSpec || /^\s/.test(rawVersionSpec) || rawVersionSpec.length > MAX_SEMVER_LENGTH) return null;
+    if (!rawVersionSpec || /^\s/.test(rawVersionSpec)) return null;
     const rawParts = rawVersionSpec.split('||');
-    if (!rawParts.length || !rawParts.every((part) => part.length <= MAX_SEMVER_LENGTH && isExactPnpmSemver(part.trim()))) return null;
+    if (!rawParts.length || !rawParts.every((part) => EXACT_SEMVER.test(part.trim()))) return null;
     for (const part of rawParts) specs.add(`${name}@${part.trim()}`);
   }
   return specs;
@@ -542,9 +459,9 @@ function parseReleaseAgeExclusions(value) {
 // Whether a pnpm-workspace.yaml change is confined to valid exact-version
 // minimumReleaseAgeExclude entries whose removals (if any) are no longer
 // resolved in pnpm-lock.yaml at head. Adding exact-version exclusions only
-// relaxes pnpm's release-age check, while pnpm-lock.yaml pins and scopes every
-// resolved dependency; removing an exclusion for a package still locked at head
-// could break frozen installs and falls back to the complete catalog.
+// relaxes pnpm's release-age gate while pnpm-lock.yaml pins and scopes every
+// resolved dependency; removing an exclusion still resolved in head
+// pnpm-lock.yaml falls back conservatively to the complete catalog.
 export function workspaceConfigImpact({ before, after, lockAfter }) {
   const [oldDoc, nowDoc] = [parseSafeWorkspaceYaml(before), parseSafeWorkspaceYaml(after)];
   if (oldDoc.error) return { shared: oldDoc.error };
@@ -556,13 +473,10 @@ export function workspaceConfigImpact({ before, after, lockAfter }) {
   } catch (error) {
     return { shared: `its settings cannot be compared (${error.message.split('\n')[0]})` };
   }
-  const [oldSection, nowSection] = [stripReleaseAgeSection(before, oldDoc.doc), stripReleaseAgeSection(after, nowDoc.doc)];
-  if (oldSection.error) return { shared: oldSection.error };
-  if (nowSection.error) return { shared: nowSection.error };
-  if (oldSection.outside !== nowSection.outside) return { shared: 'raw YAML outside minimumReleaseAgeExclude changed' };
-  if (!isSafeReleaseAgeSection(nowSection.section, nowSection.pair)) {
-    return { shared: 'its minimumReleaseAgeExclude section uses non-standard YAML syntax' };
-  }
+  const [oldOutside, nowOutside] = [outsideReleaseAgeSection(before, oldDoc.doc), outsideReleaseAgeSection(after, nowDoc.doc)];
+  if (oldOutside.error) return { shared: oldOutside.error };
+  if (nowOutside.error) return { shared: nowOutside.error };
+  if (oldOutside.outside !== nowOutside.outside) return { shared: 'raw YAML outside minimumReleaseAgeExclude changed' };
   const [oldSpecs, nowSpecs] = [parseReleaseAgeExclusions(old.minimumReleaseAgeExclude), parseReleaseAgeExclusions(now.minimumReleaseAgeExclude)];
   if (!oldSpecs || !nowSpecs) return { shared: 'its minimumReleaseAgeExclude entries must be unique exact package@version specs' };
   const removed = [...oldSpecs].filter((spec) => !nowSpecs.has(spec));
@@ -584,7 +498,6 @@ export function workspaceConfigImpact({ before, after, lockAfter }) {
 
 const AST_META = new Set(['loc', 'range', 'start', 'end', 'tokens', 'comments', 'parent']);
 const TABLE_NAMES = new Set(['provisioners', 'unpublished']);
-const DISPATCH_IDENTIFIERS = new Set(['provisioners', 'unpublished', 'provisionTestData']);
 
 function stripAst(value, cleared) {
   if (value === null || value === undefined) return value;
@@ -607,7 +520,7 @@ function stripAst(value, cleared) {
 function referencesTable(value) {
   if (!value || typeof value !== 'object') return false;
   if (Array.isArray(value)) return value.some(referencesTable);
-  if (value.type === 'Identifier' && DISPATCH_IDENTIFIERS.has(value.name)) return true;
+  if (value.type === 'Identifier' && TABLE_NAMES.has(value.name)) return true;
   return Object.keys(value).some((key) => !AST_META.has(key) && referencesTable(value[key]));
 }
 
@@ -684,76 +597,6 @@ function checkNodeEsmSyntax(source) {
   });
 }
 
-// Whether `export async function provisionTestData(app, ...)` only indexes
-// `provisioners` by its first parameter `app` (whitelisting every occurrence of
-// `app` and `provisioners`, rejecting shadowing via class/function/var/pattern
-// bindings, `with`, `eval`, or lookups of any other app or `unpublished`).
-function isDirectProvisionDispatcher(statement) {
-  if (statement?.type !== 'ExportNamedDeclaration') return false;
-  const fn = statement.declaration;
-  if (fn?.type !== 'FunctionDeclaration' || fn.id?.name !== 'provisionTestData') return false;
-  const appParam = fn.params?.[0]?.type === 'Identifier' ? fn.params[0].name : null;
-  if (!appParam) return false;
-  let safe = true;
-  const ancestors = [];
-  const walk = (node) => {
-    if (!safe || !node || typeof node !== 'object') return;
-    if (Array.isArray(node)) {
-      for (const item of node) walk(item);
-      return;
-    }
-    if (node.type === 'WithStatement') {
-      safe = false;
-      return;
-    }
-    const parent = ancestors[ancestors.length - 1] ?? null;
-    const grandParent = ancestors[ancestors.length - 2] ?? null;
-    if (node.type === 'Identifier' && (node.name === 'eval' || node.name === 'provisionTestData')) {
-      safe = false;
-      return;
-    }
-    if (node.type === 'Identifier' && node.name === appParam) {
-      const isPlainObjectKey = parent?.type === 'Property' && !parent.computed && parent.key === node && grandParent?.type === 'ObjectExpression';
-      const isPlainMemberProp = parent?.type === 'MemberExpression' && !parent.computed && parent.property === node;
-      const isProvisionerIndex =
-        parent?.type === 'MemberExpression' &&
-        parent.computed &&
-        parent.property === node &&
-        parent.object?.type === 'Identifier' &&
-        parent.object.name === 'provisioners';
-      const isTemplateRead = parent?.type === 'TemplateLiteral' && Array.isArray(parent.expressions) && parent.expressions.includes(node);
-      if (!isPlainObjectKey && !isPlainMemberProp && !isProvisionerIndex && !isTemplateRead) {
-        safe = false;
-        return;
-      }
-    }
-    if (node.type === 'Identifier' && TABLE_NAMES.has(node.name)) {
-      const isPropKey = parent?.type === 'Property' && !parent.computed && parent.key === node && grandParent?.type === 'ObjectExpression';
-      if (!isPropKey) {
-        const isAppLookup =
-          node.name === 'provisioners' &&
-          parent?.type === 'MemberExpression' &&
-          parent.object === node &&
-          parent.computed &&
-          parent.property?.type === 'Identifier' &&
-          parent.property.name === appParam;
-        if (!isAppLookup) {
-          safe = false;
-          return;
-        }
-      }
-    }
-    ancestors.push(node);
-    for (const key of Object.keys(node)) {
-      if (!AST_META.has(key)) walk(node[key]);
-    }
-    ancestors.pop();
-  };
-  walk(fn.params.slice(1));
-  walk(fn.body);
-  return safe;
-}
-
 function parseE2eTables(source) {
   const ast = sourceParser.parse(source, { filePath: E2E_TEST_DATA, sourceType: 'module' });
   const tables = new Map();
@@ -765,12 +608,10 @@ function parseE2eTables(source) {
   let hasPureFlag = false;
   for (const statement of ast.body) {
     if (statement.type === 'FunctionDeclaration' && statement.id?.type === 'Identifier') {
-      if (referencesTable(statement)) return null;
       hoistedFunctions.add(statement.id.name);
       continue;
     }
     if (statement.type === 'VariableDeclaration' && statement.kind === 'const') {
-      if (referencesTable(statement)) return null;
       if (!seenProvisioners) {
         for (const declarator of statement.declarations) {
           if (declarator.id?.type !== 'Identifier') continue;
@@ -782,30 +623,13 @@ function parseE2eTables(source) {
       }
       continue;
     }
-    const isProvisionTestData =
-      statement.type === 'ExportNamedDeclaration' &&
-      statement.declaration?.type === 'FunctionDeclaration' &&
-      statement.declaration.id?.name === 'provisionTestData';
-    if (isProvisionTestData) {
-      if (!isDirectProvisionDispatcher(statement)) return null;
-      continue;
-    }
-    if (statement.type !== 'ExportNamedDeclaration' || statement.declaration?.type !== 'VariableDeclaration' || statement.declaration.kind !== 'const') {
-      if (referencesTable(statement)) return null;
-      continue;
-    }
-    let matchedTable = false;
+    if (statement.type !== 'ExportNamedDeclaration' || statement.declaration?.type !== 'VariableDeclaration' || statement.declaration.kind !== 'const') continue;
     for (const declarator of statement.declaration.declarations) {
-      if (declarator.id?.type !== 'Identifier' || !TABLE_NAMES.has(declarator.id.name)) {
-        if (referencesTable(declarator)) return null;
-        continue;
-      }
+      if (declarator.id?.type !== 'Identifier' || !TABLE_NAMES.has(declarator.id.name)) continue;
       if (tables.has(declarator.id.name) || declarator.init?.type !== 'ObjectExpression') return null;
       tables.set(declarator.id.name, declarator.init);
       if (declarator.id.name === 'provisioners') seenProvisioners = true;
-      matchedTable = true;
     }
-    if (!matchedTable && referencesTable(statement)) return null;
   }
   if (!tables.has('provisioners')) return null;
   const context = { hasPureFlag, topLevelFunctions: new Set([...hoistedFunctions, ...initializedConsts]) };
@@ -862,52 +686,10 @@ export function e2eTestDataImpact({ before, after }) {
 // reach only those that read them and a document only those that read that
 // file; any other file reaches its package's users and, if a root file names
 // it, that file's.
-const E2E_DATA_SCRIPTS = new Set(['scripts/e2e-test-data.mjs', E2E_TEST_DATA]);
-
-function reachableWithRuntime(graph, start) {
-  const seen = new Set([start]);
-  const pending = [start];
-  while (pending.length) {
-    const node = pending.pop();
-    for (const next of [...(graph.edges.get(node) ?? []), ...(graph.runtimeWorkspaceEdges?.get(node) ?? [])]) {
-      if (!seen.has(next)) {
-        seen.add(next);
-        pending.push(next);
-      }
-    }
-  }
-  return seen;
-}
-
-// Nodes reached by per-app CI jobs, keeping eager/top-level workspace imports
-// of e2e-test-data scripts while skipping only lazy (inside-function) workspace
-// references attributable to individual app provisioners.
-function catalogSharedNodes(graph) {
-  const seen = new Set();
-  const seenDirect = new Set();
-  const seenProvisioner = new Set();
-  const stack = [[CATALOG, false]];
-  while (stack.length) {
-    const [node, inProvisioner] = stack.pop();
-    const visited = inProvisioner ? seenProvisioner : seenDirect;
-    if (visited.has(node)) continue;
-    visited.add(node);
-    seen.add(node);
-    const nextInProvisioner = inProvisioner || E2E_DATA_SCRIPTS.has(node);
-    const lazy = nextInProvisioner && ROOT_FILE.test(node) ? graph.lazyWorkspaceEdges?.get(node) : null;
-    for (const next of [...(graph.edges.get(node) ?? []), ...(graph.runtimeWorkspaceEdges?.get(node) ?? [])]) {
-      if (lazy?.has(next)) continue;
-      stack.push([next, nextInProvisioner]);
-    }
-  }
-  return seen;
-}
-
 function graphNodes(path, graph) {
   const packageTests = path.match(/^packages\/[^/]+\/tests?(?=\/)/)?.[0];
   const document = /^(?:packages|exes)\/.*\.md$/.test(path) && path;
-  if (packageTests) return [packageTests, graph?.edges.has(path) ? path : null].filter(Boolean);
-  if (document) return [document];
+  if (packageTests || document) return [packageTests || document];
   return [path.match(/^(packages|exes)\/[^/]+(?=\/)/)?.[0], ROOT_FILE.test(path) || graph?.edges.has(path) ? path : null].filter(Boolean);
 }
 
@@ -1002,28 +784,9 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
   if (!changedPaths.length) return everything('no changed paths: no base revision, an unreadable diff, or a full run');
 
   const appIds = new Set(registry.apps.map((app) => app.id));
-  const reach = graph && new Map(registry.apps.map((app) => {
-    const reached = reachableWithRuntime(graph, `apps/${app.id}`);
-    for (const extra of graph.provisionerAppEdges?.get(app.id) ?? []) {
-      for (const node of reachableWithRuntime(graph, extra)) reached.add(node);
-    }
-    return [app.id, reached];
-  }));
-  const catalog = graph && reachableWithRuntime(graph, CATALOG);
-  // Everything per-app CI jobs reach, keeping eager/top-level workspace imports
-  // of scripts/e2e-test-data.mjs while attributing lazy per-app provisioner
-  // workspace references to their owning apps (or falling back to shared when
-  // an owner is not a registered app).
-  const catalogShared = graph && catalogSharedNodes(graph);
-  if (graph?.provisionerAppEdges) {
-    for (const [ownerApp, targets] of graph.provisionerAppEdges) {
-      if (appIds.has(ownerApp)) continue;
-      for (const target of targets) {
-        for (const node of reachableWithRuntime(graph, target)) catalogShared.add(node);
-      }
-    }
-  }
-  const site = graph && reachableWithRuntime(graph, SITE);
+  const reach = graph && new Map(registry.apps.map((app) => [app.id, reachableFrom(graph, `apps/${app.id}`)]));
+  const catalog = graph && reachableFrom(graph, CATALOG);
+  const site = graph && reachableFrom(graph, SITE);
   const appReasons = new Map();
   const editedApps = new Set();
   const siteReasons = [];
@@ -1042,19 +805,36 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     siteReasons.push(reason);
   };
   const siteData = (reason) => siteReasons.push(reason);
+  const reachableWithout = (node, excludedPattern) => {
+    const seen = new Set([node]);
+    const pending = [node];
+    while (pending.length) {
+      for (const next of graph.edges.get(pending.pop()) ?? []) {
+        if (excludedPattern.test(next) || seen.has(next)) continue;
+        seen.add(next);
+        pending.push(next);
+      }
+    }
+    return seen;
+  };
+
   // Selects whatever reaches `node` or a file below it.
   const selectReaching = (node, reason) => {
     const within = (candidate) => candidate === node || candidate.startsWith(`${node}/`);
-    if (
-      (ROOT_FILE.test(`${node}/`) && [...catalog].some(within))
-      || catalogShared.has(node)
-      || [...catalogShared].some((candidate) => graph.externalImporterDeps?.get(candidate) === node)
-    ) {
-      shared(`${reason}; ci.yml's per-app jobs run ${node}`);
-    }
+    if (ROOT_FILE.test(`${node}/`) && [...catalog].some(within)) shared(`${reason}; ci.yml's per-app jobs run ${node}`);
     if ([...site].some(within)) siteBuild(reason);
     for (const candidate of registry.apps) {
       if ([...reach.get(candidate.id)].some(within)) select(candidate.id, reason);
+    }
+  };
+  const selectLintTooling = (node, reason) => {
+    const within = (candidate) => candidate === node || candidate.startsWith(`${node}/`);
+    if ([...catalog].some(within)) shared(`${reason}; ci.yml's per-app jobs run ${node}`);
+    if ([...site].some(within)) siteBuild(reason);
+    if (!LINT_RUNNER.test(node)) {
+      for (const candidate of registry.apps) {
+        if ([...reachableWithout(`apps/${candidate.id}`, LINT_RUNNER)].some(within)) select(candidate.id, reason);
+      }
     }
   };
 
@@ -1072,19 +852,7 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
         }
         continue;
       }
-      if (catalogShared?.has(`apps/${appId}`)) {
-        shared(`${path}: ci.yml's per-app jobs run apps/${appId}`);
-        continue;
-      }
       select(appId, path);
-      if (graph) {
-        if (site.has(`apps/${appId}`)) siteBuild(`${path}: the composite site reaches apps/${appId}`);
-        for (const candidate of registry.apps) {
-          if (candidate.id !== appId && reach.get(candidate.id).has(`apps/${appId}`)) {
-            select(candidate.id, `${path}: ${candidate.id} reaches apps/${appId}`);
-          }
-        }
-      }
       for (const reader of graph?.appReaders?.(path) ?? []) {
         if (appIds.has(reader)) select(reader, `${path}: ${reader}'s code reads it`);
       }
@@ -1101,6 +869,11 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     ) {
       continue;
     }
+    if (LINT_TOOLING_PATHS.some((pattern) => pattern.test(path))) {
+      if (!graph) shared(`${path}: there is no workspace graph to confirm lint tooling is unreached`);
+      else selectLintTooling(path, path);
+      continue;
+    }
     if (path === LOCKFILE) {
       const impact = manifests.get(path) ? analyseLockfile(manifests.get(path)) : { shared: 'the base or head lockfile is unavailable' };
       if (impact.shared) {
@@ -1109,14 +882,12 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       }
       for (const [importer, reason] of impact.importers) {
         const importerApp = importer.match(/^apps\/([^/]+)$/)?.[1];
-        if (appIds.has(importerApp)) {
-          if (catalogShared?.has(importer)) shared(`${path}: ${reason}; ci.yml's per-app jobs run ${importer}`);
-          else if (graph) selectReaching(importer, `${path}: ${reason}`);
-          else select(importerApp, `${path}: ${reason}`);
-        } else if (importer === '.') shared(`${path}: ${reason}; the root's dependencies resolve for every workspace member`);
+        if (appIds.has(importerApp)) select(importerApp, `${path}: ${reason}`);
+        else if (importer === '.') shared(`${path}: ${reason}; the root's dependencies resolve for every workspace member`);
         else if (SELF_CONTAINED_PREFIXES.some((prefix) => `${importer}/`.startsWith(prefix))) continue;
         else if (INDEPENDENT_CHECK_PATHS.some((pattern) => pattern.test(`${importer}/`))) continue;
         else if (!graph) shared(`${path}: ${reason}, and there is no workspace graph to find its users`);
+        else if (LINT_TOOLING_PATHS.some((pattern) => pattern.test(`${importer}/`))) selectLintTooling(importer, `${path}: ${reason}`);
         else selectReaching(importer, `${path}: ${reason}`);
       }
       continue;
@@ -1130,24 +901,15 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       continue;
     }
     if (path === E2E_TEST_DATA && manifests.get(path)) {
-      if (graph?.e2eProvisionersNarrowable === false) {
-        shared(`${path}: callers import provisioners directly or bypass provisionTestData`);
-        for (const id of appIds) editedApps.add(id);
-        continue;
-      }
       const impact = e2eTestDataImpact(manifests.get(path));
       if (impact.shared) {
         shared(`${path}: ${impact.shared}`);
-        for (const id of appIds) editedApps.add(id);
         continue;
       }
+      if (graph && site.has(path)) siteBuild(path);
       if (graph) {
-        if (site.has(path)) siteBuild(path);
         for (const candidate of registry.apps) {
-          if (reach.get(candidate.id).has(path)) {
-            select(candidate.id, `${path}: ${candidate.id} loads ${path}`);
-            editedApps.add(candidate.id);
-          }
+          if (reach.get(candidate.id).has(path)) select(candidate.id, path);
         }
       }
       for (const id of impact.changed) {
@@ -1277,30 +1039,13 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
       }
       const scripts = changedRootScripts(manifest);
       if (scripts) {
-        // Every root script a ci.yml job or workspace manifest runs is an input:
-        // one only the site jobs run selects the site build, a per-app CI job
-        // selects every app, and a workspace invocation selects whatever reaches
-        // that workspace; a script nothing runs selects nothing.
-        const installHooks = new Set(['preinstall', 'install', 'postinstall', 'prepublish', 'preprepare', 'prepare', 'postprepare', 'pnpm:devPreinstall']);
-        const packHooks = new Set(['prepack', 'pack', 'postpack', 'preprepare', 'prepare', 'postprepare']);
-        const publishHooks = new Set(['prepublishOnly', 'prepack', 'prepare', 'postpack', 'publish', 'postpublish', 'preprepare', 'postprepare', 'prepublish']);
+        // Every root script a ci.yml job runs is an input: one only the site jobs run
+        // selects the site build, any other every app; a script no job runs, nothing.
         for (const name of scripts) {
-          const lifecycleBase = name.match(/^(?:pre|post)(.+)$/)?.[1] ?? null;
-          const runsScript = (run) => run.has(name)
-            || run.has(ANY_ROOT_SCRIPT)
-            || (lifecycleBase !== null && run.has(lifecycleBase))
-            || (installHooks.has(name) && run.has('install'))
-            || (packHooks.has(name) && run.has('pack'))
-            || (publishHooks.has(name) && run.has('publish'))
-            || ((name === 'stop' || name === 'start' || lifecycleBase === 'stop' || lifecycleBase === 'start') && run.has('restart'));
-          const jobs = [...graph.jobScripts].filter(([, run]) => runsScript(run)).map(([id]) => id);
-          if (jobs.length) {
-            if (jobs.every((id) => CI_JOB_SCOPES[id] === 'site')) siteBuild(`${path}: the site CI jobs run root script ${name}`);
-            else shared(`${path}: ci.yml's ${jobs.join(', ')} ${jobs.length === 1 ? 'job runs' : 'jobs run'} root script ${name}`);
-          }
-          for (const [workspaceNode, rootNames] of graph.workspaceRootScripts ?? []) {
-            if (runsScript(rootNames)) selectReaching(workspaceNode, `${path}: ${workspaceNode} runs root script ${name}`);
-          }
+          const jobs = [...graph.jobScripts].filter(([, run]) => run.has(name)).map(([id]) => id);
+          if (!jobs.length) continue;
+          if (jobs.every((id) => CI_JOB_SCOPES[id] === 'site')) siteBuild(`${path}: the site CI jobs run root script ${name}`);
+          else shared(`${path}: ci.yml's ${jobs.join(', ')} ${jobs.length === 1 ? 'job runs' : 'jobs run'} root script ${name}`);
         }
         continue;
       }
@@ -1315,10 +1060,6 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     // A module of the shared component package reaches the apps that load it.
     const loadedBy = graph?.moduleUsers?.(path);
     if (loadedBy) {
-      if (catalogShared.has(path) || loadedBy.some((user) => catalogShared.has(user) && !graph.lazyWorkspaceEdges?.get(user)?.has(path))) {
-        shared(`${path}: ci.yml's per-app jobs run it`);
-        continue;
-      }
       if (loadedBy.some((user) => site.has(user))) siteBuild(path);
       for (const candidate of registry.apps) {
         const user = loadedBy.find((user) => reach.get(candidate.id).has(user));
@@ -1328,16 +1069,9 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     }
     const nodes = graphNodes(path, graph);
     if (graph && nodes.length) {
-      // Per-app jobs reach packages through e2e-test-data.mjs only to provision
-      // an individual app's data; any root file or any node reached outside the
-      // data provisioner runs for every app.
-      if (
-        (ROOT_FILE.test(path) && catalog.has(path))
-        || nodes.some((node) => catalogShared.has(node))
-        || (/^(?:packages|exes)\/[^/]+\/package\.json$/.test(path) && [...catalogShared].some((node) => node.startsWith(`${nodes[0]}/`)))
-      ) {
+      // Per-app jobs name packages only to provision their own app's data.
+      if (ROOT_FILE.test(path) && catalog.has(path)) {
         shared(`${path}: ci.yml's per-app jobs run it`);
-        if (path === E2E_TEST_DATA) for (const id of appIds) editedApps.add(id);
         continue;
       }
       if (nodes.some((node) => site.has(node))) siteBuild(path);
