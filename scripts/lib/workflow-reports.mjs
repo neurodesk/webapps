@@ -168,27 +168,31 @@ const markerOf = (kind, attempt) => `<!-- ${kind === 'scheduled' ? 'nightly' : '
 
 const attemptKey = attempt => `${attempt.id}:${attempt.run_attempt ?? 1}`;
 
-// For each scheduled workflow that has a clean passing attempt newer (by both
-// completion and creation time) than every failed or incomplete attempt in the
-// lookback, return that latest passing attempt.
+// For each scheduled workflow that has a clean passing attempt at or after
+// `cutover` that is newer (by both completion and creation time) than every
+// failed or incomplete attempt in the lookback and is not superseded by a
+// newer attempt (including in-progress/queued reruns), return that attempt.
 function recoveryCandidates(ordered, { repository, defaultBranch, cutover, failedAttempts, erroredWorkflows }) {
+  const maxAttemptByRun = new Map();
   const byWorkflow = new Map();
   for (const attempt of ordered) {
-    if (attempt.status !== 'completed' || !(completedAt(attempt) >= time(cutover))) continue;
     if (!isScheduledReport(attempt, { repository, defaultBranch })) continue;
+    const number = Number(attempt.run_attempt ?? 1);
+    if (number > (maxAttemptByRun.get(attempt.id) ?? 0)) maxAttemptByRun.set(attempt.id, number);
+    if (attempt.status !== 'completed') continue;
     const workflowId = String(attempt.workflow_id);
     if (!byWorkflow.has(workflowId)) byWorkflow.set(workflowId, []);
     byWorkflow.get(workflowId).push(attempt);
   }
+  const cutoverAt = time(cutover);
   const candidates = [];
   for (const [workflowId, list] of byWorkflow) {
     if (erroredWorkflows.has(workflowId)) continue;
     const isUnhealthy = attempt => attempt.conclusion !== 'success' || failedAttempts.has(attemptKey(attempt));
-    const passing = list.filter(attempt => !isUnhealthy(attempt));
+    const passing = list.filter(attempt => completedAt(attempt) >= cutoverAt && !isUnhealthy(attempt));
     if (!passing.length) continue;
     const best = passing[passing.length - 1];
-    const hasNewerAttemptOfSameRun = list.some(other => other.id === best.id && Number(other.run_attempt ?? 1) > Number(best.run_attempt ?? 1));
-    if (hasNewerAttemptOfSameRun) continue;
+    if ((maxAttemptByRun.get(best.id) ?? 1) > Number(best.run_attempt ?? 1)) continue;
     const dominatedByUnhealthy = list.some(other => isUnhealthy(other) && (completedAt(other) >= completedAt(best) || time(other.created_at) > time(best.created_at)));
     if (dominatedByUnhealthy) continue;
     candidates.push({ workflowId, attempt: best });
@@ -279,7 +283,7 @@ export async function runTick({ client, repository, defaultBranch, workflows, un
       notarizingRuns.add(run.id);
     }
   }
-  const attempts = (await attemptsOf(candidates.values(), client)).filter(attempt => completedAt(attempt) < until.getTime());
+  const attempts = (await attemptsOf(candidates.values(), client)).filter(attempt => attempt.status !== 'completed' || completedAt(attempt) < until.getTime());
   const reported = await reportedMarkers(client, new Date(Math.max(earliest, time(cutover))));
   const { results, marked } = await reportWorkflowRuns({ attempts, repository, defaultBranch, notarizingRuns, continuesOnError: facts.continuesOnError, cutover, reported, client, dryRun });
   const completed = attempts.filter(attempt => attempt.status === 'completed' && completedAt(attempt) >= time(cutover));

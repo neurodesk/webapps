@@ -12,7 +12,7 @@ const failedJob = {
   steps: [{ number: 3, name: 'Test app', conclusion: 'failure' }],
 };
 
-function fakeClient({ jobs = [failedJob], issues = [], comments = [], artifacts = [], logs = { text: 'first\nerror: scientific parity failed\nlast', truncated: false }, logError, artifactError } = {}) {
+function fakeClient({ jobs = [failedJob], issues = [], comments = [], events = [], artifacts = [], logs = { text: 'first\nerror: scientific parity failed\nlast', truncated: false }, logError, artifactError } = {}) {
   const calls = [];
   return {
     calls,
@@ -21,6 +21,7 @@ function fakeClient({ jobs = [failedJob], issues = [], comments = [], artifacts 
       if (path.includes('/jobs')) return jobs;
       if (path.startsWith('/issues?')) return issues.map(issue => ({ user: { login: 'github-actions[bot]' }, ...issue }));
       if (path.endsWith('/comments')) return comments.map(comment => ({ user: { login: 'github-actions[bot]' }, ...comment }));
+      if (path.endsWith('/events')) return events;
       if (path.endsWith('/artifacts')) {
         if (artifactError) throw artifactError;
         return artifacts;
@@ -491,17 +492,45 @@ test('closeRecoveredNightlyIssue skips non-qualifying, stale, partial, all-skipp
   // All-skipped run with zero passing jobs.
   const allSkipped = fakeClient({ jobs: [{ id: 1, name: 'skipped', conclusion: 'skipped' }], issues: [openIssue] });
   assert.ok((await closeRecoveredNightlyIssue({ run: passing, repository: 'owner/repo', defaultBranch: 'main', client: allSkipped })).skipped);
-  // Already recovered by this passing attempt (e.g. a human reopened the issue).
+  // Already recovered by this passing attempt and subsequently reopened by a human.
   const reopenedClient = fakeClient({
     jobs: [{ id: 1, name: 'ok', conclusion: 'success' }],
     issues: [openIssue],
     comments: [{ body: '<!-- nightly-recovery:124:attempt:1 -->\nRecovered', created_at: '2026-10-16T06:00:00Z' }],
+    events: [
+      { event: 'closed', created_at: '2026-10-16T06:00:01Z' },
+      { event: 'reopened', created_at: '2026-10-16T07:00:00Z' },
+    ],
   });
   assert.deepEqual(
     await closeRecoveredNightlyIssue({ run: passing, repository: 'owner/repo', defaultBranch: 'main', client: reopenedClient }),
     { duplicate: true, issue: 8 },
   );
   assert.deepEqual(writes(reopenedClient), []);
+  // Interrupted close (recovery comment landed, PATCH never completed): retries PATCH without duplicating the comment.
+  const interruptedClose = fakeClient({
+    jobs: [{ id: 1, name: 'ok', conclusion: 'success' }],
+    issues: [openIssue],
+    comments: [{ body: '<!-- nightly-recovery:124:attempt:1 -->\nRecovered', created_at: '2026-10-16T06:00:00Z' }],
+    events: [{ event: 'closed', created_at: '2026-10-14T06:00:00Z' }],
+  });
+  assert.deepEqual(
+    await closeRecoveredNightlyIssue({ run: passing, repository: 'owner/repo', defaultBranch: 'main', client: interruptedClose }),
+    { issue: 8, closed: true },
+  );
+  assert.deepEqual(writes(interruptedClose), [{ path: '/issues/8', method: 'PATCH', body: { state: 'closed', state_reason: 'completed' } }]);
+  // Older run rerun passing after a newer recorded failure does not close the issue.
+  const oldRerun = {
+    ...run, id: 120, run_attempt: 2, conclusion: 'success',
+    created_at: '2026-10-14T00:00:00Z', run_started_at: '2026-10-16T00:00:00Z', updated_at: '2026-10-16T00:10:00Z',
+  };
+  const newerRecordedIssue = {
+    number: 8, state: 'open', created_at: '2026-10-15T06:00:00Z',
+    body: '<!-- nightly-workflow:45 -->\n<!-- nightly-run:123:attempt:1 -->\n- Started: 2026-10-15T00:00:00Z. Updated: 2026-10-15T00:10:00Z.',
+  };
+  const staleRerunClient = fakeClient({ jobs: [{ id: 1, name: 'ok', conclusion: 'success' }], issues: [newerRecordedIssue] });
+  assert.ok((await closeRecoveredNightlyIssue({ run: oldRerun, repository: 'owner/repo', defaultBranch: 'main', client: staleRerunClient })).skipped);
+  assert.deepEqual(writes(staleRerunClient), []);
   // Human-authored recovery marker cannot suppress auto-close; dryRun makes no writes.
   const humanMarker = fakeClient({
     jobs: [{ id: 1, name: 'ok', conclusion: 'success' }],

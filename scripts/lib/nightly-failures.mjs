@@ -253,11 +253,28 @@ export async function reportNightlyFailure({ run, repository, defaultBranch, cli
   return { issue: created.number, created: true };
 }
 
-function reportedAttemptTime(body, fallback) {
+function reportedFailureInfo(body, fallback) {
   const header = body?.slice(0, 1000) ?? '';
-  const updated = header.match(/^- (?:Started: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+-]+Z?\. )?Updated: ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+-]+Z?)\.$/m)?.[1];
-  const parsed = updated ? time(updated) : Number.NaN;
-  return Number.isNaN(parsed) ? time(fallback) : parsed;
+  const marker = header.match(/<!-- nightly-run:(\d+):attempt:(\d+) -->/);
+  const meta = header.match(/^- (?:Started: ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+-]+Z?)\. )?Updated: ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+-]+Z?)\.$/m);
+  const startedAt = meta?.[1] ? time(meta[1]) : Number.NaN;
+  const updatedAt = meta?.[2] ? time(meta[2]) : time(fallback);
+  return {
+    runId: marker?.[1] ?? null,
+    attempt: marker?.[2] ? Number(marker[2]) : null,
+    startedAt,
+    updatedAt,
+  };
+}
+
+function runSupersedesReport({ runId, attempt, runCreatedAt, runCompletedAt }, report) {
+  if (!Number.isNaN(report.updatedAt) && !(runCompletedAt > report.updatedAt)) return false;
+  if (report.runId === runId) {
+    return report.attempt === null || Number(attempt) > report.attempt;
+  }
+  if (report.runId !== null && BigInt(runId) < BigInt(report.runId)) return false;
+  if (!Number.isNaN(report.startedAt) && !Number.isNaN(runCreatedAt) && runCreatedAt < report.startedAt) return false;
+  return true;
 }
 
 export async function closeRecoveredNightlyIssue({ run, repository, defaultBranch, client, dryRun = false, openIssue = null }) {
@@ -282,20 +299,30 @@ export async function closeRecoveredNightlyIssue({ run, repository, defaultBranc
   }
   const comments = await client.list(`/issues/${numeric(issue.number)}/comments`);
   const botComments = comments.filter(comment => comment.user?.login === 'github-actions[bot]');
-  if (botComments.some(comment => comment.body?.startsWith(recoveryMarker))) {
-    return { ...(dryRun && { dryRun: true }), duplicate: true, issue: issue.number };
-  }
-  let latestFailureAt = reportedAttemptTime(issue.body, issue.created_at);
-  for (const comment of botComments) {
-    if (!comment.body?.startsWith('<!-- nightly-run:')) continue;
-    const commentTime = reportedAttemptTime(comment.body, comment.created_at);
-    if (!Number.isNaN(commentTime) && (Number.isNaN(latestFailureAt) || commentTime > latestFailureAt)) {
-      latestFailureAt = commentTime;
+  const existingRecovery = botComments.find(comment => comment.body?.startsWith(recoveryMarker));
+  if (existingRecovery) {
+    const events = await client.list(`/issues/${numeric(issue.number)}/events`);
+    const recoveryAt = time(existingRecovery.created_at);
+    const closedOrReopenedAfter = events.some(event => (event.event === 'closed' || event.event === 'reopened')
+      && (Number.isNaN(recoveryAt) || time(event.created_at) >= recoveryAt));
+    if (closedOrReopenedAfter) {
+      return { ...(dryRun && { dryRun: true }), duplicate: true, issue: issue.number };
     }
   }
-  const runCompletedAt = time(run.updated_at);
-  if (!Number.isNaN(latestFailureAt) && !(runCompletedAt > latestFailureAt)) {
+  const reports = [
+    reportedFailureInfo(issue.body, issue.created_at),
+    ...botComments
+      .filter(comment => comment.body?.startsWith('<!-- nightly-run:'))
+      .map(comment => reportedFailureInfo(comment.body, comment.created_at)),
+  ];
+  const candidate = { runId, attempt, runCreatedAt: time(run.created_at), runCompletedAt: time(run.updated_at) };
+  if (!reports.every(report => runSupersedesReport(candidate, report))) {
     return { skipped: 'Passing run is not newer than the latest reported failure' };
+  }
+  if (existingRecovery) {
+    if (dryRun) return { dryRun: true, issue: issue.number, closed: true };
+    await client.request(`/issues/${numeric(issue.number)}`, { method: 'PATCH', body: { state: 'closed', state_reason: 'completed' } });
+    return { issue: issue.number, closed: true };
   }
   const runPath = `/actions/runs/${runId}`;
   const jobs = await client.list(`${runPath}/attempts/${attempt}/jobs`, 'jobs');

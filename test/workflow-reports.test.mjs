@@ -35,18 +35,21 @@ function attempt(overrides = {}) {
 function github({ runs = [], jobs = {}, logs = {} } = {}) {
   const issues = [];
   const comments = new Map();
+  const events = new Map();
   const writes = [];
   const reads = [];
   let next = 1;
   const bot = { login: 'github-actions[bot]' };
   const latest = () => [...Object.values(Object.groupBy(runs, run => run.id))].map(each => each.reduce((a, b) => (a.run_attempt > b.run_attempt ? a : b)));
   return {
-    runs, issues, comments, writes, reads,
+    runs, issues, comments, events, writes, reads,
     async list(path) {
       reads.push(path);
       if (path.startsWith('/issues?')) return [...issues].reverse();
       const comment = path.match(/^\/issues\/(\d+)\/comments(?:\?|$)/);
       if (comment) return comments.get(Number(comment[1])) ?? [];
+      const event = path.match(/^\/issues\/(\d+)\/events(?:\?|$)/);
+      if (event) return events.get(Number(event[1])) ?? [];
       const job = path.match(/^\/actions\/runs\/(\d+)\/attempts\/(\d+)\/jobs$/);
       if (job) return jobs[`${job[1]}:${job[2]}`] ?? [{ id: Number(job[1]) * 10 + Number(job[2]), name: 'check', conclusion: 'failure', steps: [] }];
       if (path.endsWith('/artifacts')) return [];
@@ -87,9 +90,20 @@ function github({ runs = [], jobs = {}, logs = {} } = {}) {
       }
       const issue = path.match(/^\/issues\/(\d+)$/);
       if (issue && options.method === 'PATCH') {
-        const target = issues.find(each => each.number === Number(issue[1]));
+        const number = Number(issue[1]);
+        const target = issues.find(each => each.number === number);
+        const now = new Date().toISOString();
+        const eventList = events.get(number) ?? [];
+        if (options.body.state === 'closed' && target.state !== 'closed') {
+          eventList.push({ event: 'closed', created_at: now });
+          events.set(number, eventList);
+        }
+        if (options.body.state === 'open' && target.state === 'closed') {
+          eventList.push({ event: 'reopened', created_at: now });
+          events.set(number, eventList);
+        }
         Object.assign(target, options.body);
-        if (options.body.state === 'closed' && !options.body.closed_at) target.closed_at = new Date().toISOString();
+        if (options.body.state === 'closed' && !options.body.closed_at) target.closed_at = now;
         if (options.body.state === 'open') target.closed_at = null;
         return {};
       }
@@ -561,4 +575,68 @@ test('auto-close handles same-tick rerun recovery and dry-run previews without c
   assert.equal(dryTick.results[0].result.issue, 810);
   assert.equal(dryClient.issues[0].state, 'open');
   assert.deepEqual(dryClient.writes, []);
+});
+
+test('auto-close retries an interrupted close, waits when a newer attempt is in progress, and ignores an old rerun across the cutover', async () => {
+  // 1. Interrupted close: recovery comment succeeds, PATCH fails on tick 1; tick 2 finishes closing without duplicating the comment.
+  const failed = attempt({ id: 600, workflow_id: 21, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(2), updated_at: at(3) });
+  const passed = attempt({ id: 601, workflow_id: 21, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', conclusion: 'success', created_at: at(26), run_started_at: at(26), updated_at: at(27) });
+  const retryBase = github({
+    runs: [failed, passed],
+    jobs: {
+      '600:1': [{ id: 6001, name: 'report', conclusion: 'failure', steps: [] }],
+      '601:1': [{ id: 6011, name: 'report', conclusion: 'success', steps: [] }],
+    },
+  });
+  await tick(retryBase, at(7));
+  let failPatchOnce = true;
+  const flaky = {
+    ...retryBase,
+    request: async (path, options = {}) => {
+      if (failPatchOnce && options.method === 'PATCH' && path === '/issues/1') {
+        failPatchOnce = false;
+        throw new Error('GitHub API PATCH /issues/1 returned 502');
+      }
+      return retryBase.request(path, options);
+    },
+  };
+  const firstRecovery = await tick(flaky, at(28));
+  assert.equal(firstRecovery.results.length, 1);
+  assert.match(firstRecovery.results[0].error, /502/);
+  assert.equal(retryBase.issues[0].state, 'open');
+  assert.equal(retryBase.comments.get(1).length, 1);
+  const secondRecovery = await tick(flaky, at(29));
+  assert.equal(retryBase.issues[0].state, 'closed');
+  assert.equal(retryBase.comments.get(1).length, 1, 'does not duplicate the recovery comment on retry');
+  assert.deepEqual(secondRecovery.results[0].result, { issue: 1, closed: true });
+
+  // 2. Passing attempt 1 must not close the issue while attempt 2 of the same run is in progress.
+  const earlierFail = attempt({ id: 700, workflow_id: 22, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(2), updated_at: at(3) });
+  const passAttempt1 = attempt({ id: 701, workflow_id: 22, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', conclusion: 'success', created_at: at(26), run_started_at: at(26), updated_at: at(27) });
+  const runningAttempt2 = { ...passAttempt1, run_attempt: 2, status: 'in_progress', conclusion: null, run_started_at: at(27.5), updated_at: at(28.5) };
+  const inProgress = github({
+    runs: [earlierFail, passAttempt1, runningAttempt2],
+    jobs: {
+      '700:1': [{ id: 7001, name: 'report', conclusion: 'failure', steps: [] }],
+      '701:1': [{ id: 7011, name: 'report', conclusion: 'success', steps: [] }],
+    },
+  });
+  await tick(inProgress, at(7));
+  await tick(inProgress, at(28));
+  assert.equal(inProgress.issues[0].state, 'open');
+
+  // 3. Old rerun passing after cutover must not close an issue for a newer failure that happened before cutover.
+  const preCutoverOldFail = attempt({ id: 800, workflow_id: 23, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(-48), run_started_at: at(-48), updated_at: at(-47) });
+  const preCutoverNewFail = attempt({ id: 801, workflow_id: 23, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(-2), run_started_at: at(-2), updated_at: at(-1) });
+  const postCutoverOldRerun = { ...preCutoverOldFail, run_attempt: 2, conclusion: 'success', run_started_at: at(1), updated_at: at(2) };
+  const acrossCutover = github({
+    runs: [preCutoverOldFail, preCutoverNewFail, postCutoverOldRerun],
+    jobs: { '800:2': [{ id: 8002, name: 'report', conclusion: 'success', steps: [] }] },
+  });
+  acrossCutover.issues.push({
+    number: 99, state: 'open', user: { login: 'github-actions[bot]' }, created_at: at(-0.5),
+    body: `<!-- nightly-workflow:23 -->\n<!-- nightly-run:801:attempt:1 -->\n- Started: ${at(-2)}. Updated: ${at(-1)}.`,
+  });
+  await tick(acrossCutover, at(4), { cutover: at(0) });
+  assert.equal(acrossCutover.issues[0].state, 'open');
 });
