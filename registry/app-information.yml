@@ -3300,3 +3300,36 @@ apps:
         title: ISIC Archive (CC-0)
         reference: "International Skin Imaging Collaboration (ISIC). ISIC Archive public domain (CC-0) dermoscopic images (ISIC_0000000, ISIC_0000013, ISIC_0001115)."
         url: https://www.isic-archive.com/
+
+  laynii:
+    about:
+      - "LayNii computes equidistant and equivolume cortical gray-matter layers (LN2_LAYERS) and layer-wise signal profiles (LN2_PROFILE) from a 3D rim segmentation in the browser. The WebAssembly build compiles unmodified LayNii v2.10.0 C++ sources on one thread without SharedArrayBuffer, reproducing native LN2_LAYERS and LN2_PROFILE voxels bit for bit."
+      - "Supply a 3D rim NIfTI volume with integer labels 1 (outer gray-matter/CSF border), 2 (inner gray-matter/white-matter border), and 3 (pure gray matter). Enable Equivolume layers (-equivol) for Bok-principle volume-preserving layers on sub-millimetre rims (recommended at or below 0.3 mm resolution). Optional outputs include cortical thickness, curvature, equal-count layers and mid-GM surfaces."
+      - "Optionally load a matched 3D functional or quantitative signal volume on the exact rim grid (such as BOLD, VASO, or T2*) to run LN2_PROFILE automatically and inspect the resulting mean ± SD laminar profile plot and CSV table in the Profile tab."
+      - "To protect browser memory in WebAssembly, volumes above 12 million voxels are refused before allocation. For whole-brain ultra-high-resolution datasets or batch processing, run the native LayNii 2.10.0 container listed under Standalone; the technical log prints the matching native CLI command for every run."
+    packages:
+      - { name: LayNii (WebAssembly), url: https://github.com/layerfMRI/LAYNII, role: "LN2_LAYERS and LN2_PROFILE v2.10.0 compiled to WebAssembly (@neurodesk/laynii)" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+      - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
+    citations:
+      - group: Cortical layering
+        title: LayNii
+        reference: "Huber L, Poser BA, Bandettini PA, Arora K, Wagstyl K, Cho S, Goense J, Nothnagel N, Morgan AT, van den Hurk J, Mueller AK, Reynolds RC, Glen DR, Goebel RW, Gulban OF. LayNii: A software suite for layer-fMRI. NeuroImage. 2021;237:118091."
+        doi: 10.1016/j.neuroimage.2021.118091
+        code: https://github.com/layerfMRI/LAYNII
+      - group: Cortical layering
+        title: Equivolume cortical layering
+        reference: "Waehnert MD, Dinse J, Weiss M, Streicher MN, Waehnert P, Geyer S, Turner R, Bazin PL. Anatomically motivated modeling of cortical laminae. NeuroImage. 2014;93(Pt 2):210–220."
+        doi: 10.1016/j.neuroimage.2013.03.078
+      - group: Example data
+        title: Human occipital cortex reference atlas
+        reference: "Ding SL, Royall JJ, Sunkin SM, et al. Comprehensive cellular-resolution atlas of the adult human brain. Journal of Comparative Neurology. 2016;524(16):3127–3481."
+        doi: 10.1002/cne.24080
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

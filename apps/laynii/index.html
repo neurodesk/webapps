@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LayNii — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a 3D cortical rim NIfTI volume" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop rim NIfTI (1=outer border, 2=inner border, 3=GM)</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+          <div class="nd-field">
+            <label for="signalInput">Signal map <small>optional</small>
+              <span class="nd-info-icon" tabindex="0" aria-label="About the signal map">i<span class="nd-info-tooltip">A 3D functional or quantitative NIfTI volume on the exact rim grid. When loaded, LayNii also runs LN2_PROFILE to compute layer-wise means, standard deviations and voxel counts.</span></span>
+            </label>
+            <div id="signalField"></div>
+          </div>
+          <button id="clearSignal" class="nd-btn nd-btn-secondary" type="button" hidden>Remove signal map</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Cortical layers</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="nrLayers">Number of layers
+              <span class="nd-info-icon" tabindex="0" aria-label="About the number of layers">i<span class="nd-info-tooltip">Number of cortical depth bins from inner white-matter border (layer 1) to outer pial/CSF border (layer N). Default is 3; use 10–20 on upsampled sub-millimetre 7T slabs.</span></span>
+            </label>
+            <input id="nrLayers" type="number" min="2" max="100" step="1" value="3" />
+          </div>
+          <label class="nd-check">
+            <input id="equivol" type="checkbox" />
+            <span>Equivolume layers
+              <span class="nd-info-icon" tabindex="0" aria-label="About equivolume layering">i<span class="nd-info-tooltip">Compute Bok-principle equivolume layers (-equivol) in addition to equidistant layers. Recommended for rims at or below 0.3 mm resolution.</span></span>
+            </span>
+          </label>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="iterSmooth">Smoothing iterations
+                  <span class="nd-info-icon" tabindex="0" aria-label="About smoothing iterations">i<span class="nd-info-tooltip">Iterations (-iter_smooth, default 100) used to smooth equivolume factors, cortical thickness and curvature estimates.</span></span>
+                </label>
+                <input id="iterSmooth" type="number" min="1" max="2000" step="1" value="100" />
+              </div>
+              <label class="nd-check">
+                <input id="thickness" type="checkbox" />
+                <span>Cortical thickness map</span>
+              </label>
+              <label class="nd-check">
+                <input id="curvature" type="checkbox" />
+                <span>Cortical curvature map</span>
+              </label>
+              <label class="nd-check">
+                <input id="inclBorders" type="checkbox" />
+                <span>Include border voxels</span>
+              </label>
+              <label class="nd-check">
+                <input id="equalCounts" type="checkbox" />
+                <span>Equal voxel-count layers</span>
+              </label>
+              <label class="nd-check">
+                <input id="noSmooth" type="checkbox" />
+                <span>Disable depth smoothing</span>
+              </label>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Compute layers</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a rim NIfTI anywhere, or choose an example.</p>
+        <section id="profileReport" class="nd-viewer-report" aria-label="Laminar profile" hidden>
+          <div class="nd-report-controls">
+            <p id="profileSummary" class="nd-report-notes"></p>
+            <button id="downloadProfileCsv" class="nd-btn nd-btn-secondary nd-btn-sm" type="button">Download CSV</button>
+          </div>
+          <div id="profileChart" class="laynii-chart"></div>
+          <div class="nd-table-scroll">
+            <table class="nd-data-table" id="profileTable">
+              <thead>
+                <tr>
+                  <th>Layer (WM → CSF)</th>
+                  <th>Mean</th>
+                  <th>SD</th>
+                  <th>Voxels</th>
+                </tr>
+              </thead>
+              <tbody id="profileBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="LayNii progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel LayNii" aria-label="Cancel LayNii" hidden>×</button>
+    </footer>
+
+    <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

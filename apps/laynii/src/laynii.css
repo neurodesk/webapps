@@ -1,0 +1,38 @@
+.laynii-chart {
+  width: 100%;
+  max-width: 680px;
+  margin-bottom: var(--nd-space-md);
+}
+
+.laynii-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  font-family: var(--nd-font-sans);
+  color: var(--nd-color-text);
+}
+
+.laynii-axis {
+  stroke: var(--nd-color-border);
+  stroke-width: 1;
+}
+
+.laynii-band {
+  fill: var(--nd-color-primary);
+  fill-opacity: 0.16;
+}
+
+.laynii-line {
+  fill: none;
+  stroke: var(--nd-color-primary);
+  stroke-width: 2.5;
+}
+
+.laynii-point {
+  fill: var(--nd-color-primary);
+}
+
+.laynii-label {
+  fill: var(--nd-color-text-muted);
+  font-size: 11px;
+}

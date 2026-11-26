@@ -5715,6 +5715,34 @@
       "kind": "model",
       "license": "MIT",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2449b9ed41ae4d1e7fd8caa4142a5a64186b1bc/laynii/examples/Ding2016_occip_rim.nii.gz": {
+      "sha256": "ca944ebb87836d4b0799dc31fb22d8cd4ed50f5186e1c39d81dc414c57340dfd",
+      "bytes": 87500,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2449b9ed41ae4d1e7fd8caa4142a5a64186b1bc/laynii/examples/sc_rim.nii.gz": {
+      "sha256": "c7b32e4c8bbe7376c125ae35504656e3ea12220dfac29d4efea6779bcab08238",
+      "bytes": 174121,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2449b9ed41ae4d1e7fd8caa4142a5a64186b1bc/laynii/examples/Ding2016_occip_T2star.nii.gz": {
+      "sha256": "6c13b980cb59e06a7eecea6c9b61bd341edaf7b97bfa530ecef06f652db256ba",
+      "bytes": 5494429,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2449b9ed41ae4d1e7fd8caa4142a5a64186b1bc/laynii/examples/sc_BOLD_act.nii.gz": {
+      "sha256": "8fad3572509b3bb9ba0c78e231bae5ada87a60b9fd010b145b330200a8158a38",
+      "bytes": 7364937,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
     }
   },
   "apps": {
@@ -7164,6 +7192,12 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000013.jpg",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0001115.jpg",
       "https://huggingface.co/sazio/skin-mole-vit-onnx/resolve/25be9e61a71125de9502648c1f6adceb7a882637/onnx/model_quantized.onnx"
+    ],
+    "laynii": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2449b9ed41ae4d1e7fd8caa4142a5a64186b1bc/laynii/examples/Ding2016_occip_rim.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2449b9ed41ae4d1e7fd8caa4142a5a64186b1bc/laynii/examples/Ding2016_occip_T2star.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2449b9ed41ae4d1e7fd8caa4142a5a64186b1bc/laynii/examples/sc_rim.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2449b9ed41ae4d1e7fd8caa4142a5a64186b1bc/laynii/examples/sc_BOLD_act.nii.gz"
     ]
   }
 }
