@@ -175,6 +175,18 @@ test('dependency graph validates parent/discoveredFrom, prevents cycles, and rea
   // Cycle must be rejected
   assert.throws(() => applyOperations(state, [{ op: 'dep_add', id: idA, blockedBy: idB }], { now: t0 }), BeadsValidationError);
 
+  // Parent and discoveredFrom cycles must be rejected by validateBeadsGraph
+  const parentCycle = new Map([
+    [idA, { ...structuredClone(state.get(idA)), deps: { blockedBy: [], parent: idB, discoveredFrom: null } }],
+    [idB, { ...structuredClone(state.get(idB)), deps: { blockedBy: [], parent: idA, discoveredFrom: null } }],
+  ]);
+  assert.throws(() => validateBeadsGraph(parentCycle), BeadsConflictError);
+  const discoveredCycle = new Map([
+    [idA, { ...structuredClone(state.get(idA)), deps: { blockedBy: [], parent: null, discoveredFrom: idB } }],
+    [idB, { ...structuredClone(state.get(idB)), deps: { blockedBy: [], parent: null, discoveredFrom: idA } }],
+  ]);
+  assert.throws(() => validateBeadsGraph(discoveredCycle), BeadsConflictError);
+
   // Only A is ready while A is open
   assert.deepEqual(readyBeads(state, { now: t0 }).map((b) => b.id), [idA]);
   assert.deepEqual(readyBeads(state, { now: t0, singleAppOnly: true }).map((b) => b.id), []);
@@ -185,11 +197,20 @@ test('dependency graph validates parent/discoveredFrom, prevents cycles, and rea
   assert.deepEqual(readyBeads(state, { now: t1 }).map((b) => b.id), []);
   assert.throws(() => applyOperations(state, [{ op: 'claim', id: idA, owner: 'gh-aw/run-9' }], { now: t1 }), BeadsConflictError);
 
+  // Another actor cannot clear an active lease via update, reopen, or safe close
+  assert.throws(() => applyOperations(state, [{ op: 'update', id: idA, status: 'open' }], { actor: 'other-actor', now: t1 }), BeadsConflictError);
+  assert.throws(() => applyOperations(state, [{ op: 'update', id: idA, status: 'blocked' }], { actor: 'other-actor', now: t1 }), BeadsConflictError);
+  assert.throws(() => applyOperations(state, [{ op: 'reopen', id: idA }], { actor: 'other-actor', now: t1 }), BeadsConflictError);
+  assert.throws(() => applyOperations(state, [{ op: 'close', id: idA, reason: 'Try to steal lease' }], { actor: 'other-actor', lockActor: true, now: t1 }), BeadsConflictError);
+
   // Once lease expires, A becomes ready again
   assert.deepEqual(readyBeads(state, { now: tExpired }).map((b) => b.id), [idA]);
 
-  // Close A -> B unblocks and becomes ready (and matches singleAppOnly)
-  state = applyOperations(state, [{ op: 'close', id: idA, reason: 'Published upstream', pr: 999 }], { actor: 'pilot', now: t1 }).beads;
+  // Close A with a max-length (500-char) reason succeeds cleanly -> B unblocks and becomes ready
+  const maxReason = 'r'.repeat(LIMITS.closeReason);
+  state = applyOperations(state, [{ op: 'close', id: idA, reason: maxReason, pr: 999 }], { actor: 'pilot', now: t1 }).beads;
+  assert.equal(state.get(idA).closeReason.length, LIMITS.closeReason);
+  assert.ok(state.get(idA).journal.at(-1).note.length <= LIMITS.note);
   assert.deepEqual(readyBeads(state, { now: t1, singleAppOnly: true }).map((b) => b.id), [idB]);
   assert.equal(listBeads(state, { status: 'closed' }).length, 1);
 
@@ -197,6 +218,7 @@ test('dependency graph validates parent/discoveredFrom, prevents cycles, and rea
   assert.equal(snapshot.openCount, 1);
   assert.equal(snapshot.items[0].id, idB);
   assert.equal(snapshot.items[0].blocked, false);
+  assert.throws(() => summarizeBeads(state, { now: t1, maxItems: -1 }), BeadsValidationError);
 });
 
 test('safe-outputs applier enforces revision checks on upserts, resulting single-app scope, caps, actor lock, and later-time replay', () => {
@@ -241,8 +263,50 @@ test('safe-outputs applier enforces revision checks on upserts, resulting single
   const updated = applyOperations(first.beads, [{ ...changedUpsert, expectedRevision: 1 }], { ...safeOpts, now: tLater });
   assert.equal(updated.beads.get(id).revision, 2);
 
-  // Conflicting id + dedupeKey is rejected
+  // Conflicting id + dedupeKey is rejected (including derived id vs legacy id)
   assert.throws(() => applyOperations(updated.beads, [{ ...op, id: 'bd-00000001', expectedRevision: 2 }], { ...safeOpts, now: tLater }), BeadsConflictError);
+  const legacyBead = applyOperations(new Map(), [{
+    op: 'create',
+    id: 'bd-11111111',
+    title: 'Legacy item',
+    scope: { type: 'app', targets: ['syncro'] },
+  }], { now: t0 }).beads;
+  legacyBead.get('bd-11111111').dedupeKey = 'legacy:key';
+  assert.throws(() => applyOperations(legacyBead, [{
+    op: 'upsert',
+    id: deriveBeadId('legacy:key'),
+    dedupeKey: 'legacy:key',
+    title: 'Legacy item',
+    scope: { type: 'app', targets: ['syncro'] },
+  }], { now: tLater }), BeadsConflictError);
+
+  // Safe upsert requires identity (dedupeKey or id), and upsert with expectedRevision must not create
+  assert.throws(() => applyOperations(updated.beads, [{
+    op: 'upsert',
+    title: 'No identity safe upsert',
+    scope: { type: 'app', targets: ['syncro'] },
+  }], { ...safeOpts, now: tLater }), BeadsValidationError);
+  assert.throws(() => applyOperations(updated.beads, [{
+    op: 'upsert',
+    dedupeKey: 'knip:missing:item',
+    title: 'Missing target with expectedRevision',
+    scope: { type: 'app', targets: ['syncro'] },
+    expectedRevision: 1,
+  }], { ...safeOpts, now: tLater }), BeadsConflictError);
+
+  // Existing upserts must validate all supplied optional fields even when they would be a no-op
+  for (const badPatch of [
+    { title: 42 },
+    { kind: 'not-a-kind' },
+    { deps: { unknownDep: 'bd-00000001' } },
+    { links: false },
+  ]) {
+    assert.throws(() => applyOperations(updated.beads, [{
+      op: 'upsert',
+      dedupeKey: op.dedupeKey,
+      ...badPatch,
+    }], { ...safeOpts, now: tLater }), BeadsValidationError);
+  }
 
   // Single-app update cannot widen scope to shared/repo/multi-app
   assert.throws(() => applyOperations(updated.beads, [{
@@ -317,13 +381,42 @@ test('mergeBeadsMaps preserves closed status, bumps revision on merge, caps evid
   const idA = deriveBeadId('m:a');
   const idB = deriveBeadId('m:b');
 
-  // Side 1 closes A at t1; Side 2 concurrently adds a note to A at t2 (higher timestamp, still open)
+  // Side 1 closes A at t1; Side 2 concurrently adds a note reading "Reopened" at t2 (free text must NOT resurrect)
   const closedSide = applyOperations(base, [{ op: 'close', id: idA, reason: 'Fixed in PR #10' }], { actor: 'host-1', now: t1 }).beads;
-  const noteSide = applyOperations(base, [{ op: 'note', id: idA, note: 'Late comment' }], { actor: 'host-2', now: t2 }).beads;
+  const noteSide = applyOperations(base, [{ op: 'note', id: idA, note: 'Reopened' }], { actor: 'host-2', now: t2 }).beads;
   const merged = mergeBeadsMaps(noteSide, closedSide);
   assert.equal(merged.get(idA).status, 'closed');
   assert.equal(merged.get(idA).revision, 3);
-  assert.ok(merged.get(idA).journal.some((e) => e.note === 'Late comment'));
+  assert.ok(merged.get(idA).journal.some((e) => e.note === 'Reopened'));
+
+  // Explicit reopen with a custom note at t2 wins over a concurrent note at t3 on the closed branch
+  const t3 = new Date('2026-11-26T03:00:00.000Z');
+  const reopenedSide = applyOperations(closedSide, [{ op: 'reopen', id: idA, note: 'Regression reproduced on macOS' }], { actor: 'host-2', now: t2 }).beads;
+  const closedWithLateNote = applyOperations(closedSide, [{ op: 'note', id: idA, note: 'Post-close audit note' }], { actor: 'host-1', now: t3 }).beads;
+  const mergedReopen = mergeBeadsMaps(closedWithLateNote, reopenedSide);
+  assert.equal(mergedReopen.get(idA).status, 'open');
+  assert.equal(mergedReopen.get(idA).reopenedAt, t2.toISOString());
+  assert.ok(mergedReopen.get(idA).journal.some((e) => e.note === 'Regression reproduced on macOS'));
+  assert.ok(mergedReopen.get(idA).journal.some((e) => e.note === 'Post-close audit note'));
+
+  // Divergent edits at the same revision MUST bump merged revision so stale expectedRevision fails
+  const titleA = applyOperations(base, [{ op: 'update', id: idA, title: 'Title from host 1' }], { actor: 'host-1', now: t1 }).beads;
+  const titleB = applyOperations(base, [{ op: 'update', id: idA, title: 'Title from host 2' }], { actor: 'host-2', now: t2 }).beads;
+  const mergedTitles = mergeBeadsMaps(titleA, titleB);
+  assert.equal(mergedTitles.get(idA).revision, 3);
+  assert.throws(() => applyOperations(mergedTitles, [{
+    op: 'update',
+    id: idA,
+    expectedRevision: 2,
+    title: 'Stale overwrite attempt',
+  }], { requireExpectedRevision: true, now: t3 }), BeadsConflictError);
+
+  // Merge must reject duplicate dedupeKey across two distinct bead IDs
+  const dupKeyLeft = applyOperations(new Map(), [{ op: 'create', id: 'bd-11111111', title: 'Left', scope: { type: 'repo', targets: [] } }], { now: t0 }).beads;
+  const dupKeyRight = applyOperations(new Map(), [{ op: 'create', id: 'bd-22222222', title: 'Right', scope: { type: 'repo', targets: [] } }], { now: t0 }).beads;
+  dupKeyLeft.get('bd-11111111').dedupeKey = 'shared:key';
+  dupKeyRight.get('bd-22222222').dedupeKey = 'shared:key';
+  assert.throws(() => mergeBeadsMaps(dupKeyLeft, dupKeyRight), BeadsConflictError);
 
   // Evidence lists exceeding LIMITS.evidence when combined are capped cleanly instead of aborting
   const ev1 = Array.from({ length: 15 }, (_, i) => `docs/ev-a-${String(i).padStart(2, '0')}.md`);
@@ -347,7 +440,7 @@ test('git orphan-branch store handles subdirectories, CAS bootstrap, fast-forwar
   try {
     mkdirSync(mainRepo, { recursive: true });
     mkdirSync(bareRemote, { recursive: true });
-    execFileSync('git', ['init', '--bare'], { cwd: bareRemote, stdio: 'ignore' });
+    execFileSync('git', ['init', '--bare', '-b', 'main'], { cwd: bareRemote, stdio: 'ignore' });
     initGitRepo(mainRepo);
     execFileSync('git', ['remote', 'add', 'origin', bareRemote], { cwd: mainRepo, stdio: 'ignore' });
     execFileSync('git', ['push', '-u', 'origin', 'main'], { cwd: mainRepo, stdio: 'ignore' });
@@ -442,9 +535,60 @@ test('git orphan-branch store handles subdirectories, CAS bootstrap, fast-forwar
     // Unconfigured / flag-like remote rejected
     assert.throws(() => syncBeadsRef(cloneC, { remote: '--upload-pack=evil', push: false }), BeadsValidationError);
 
+    // Exported reader enforces memory/ namespace and rejects symbolic refs
+    assert.throws(() => readBeadsFromRef(cloneC, 'refs/heads/main'), BeadsValidationError);
+    const mainShaBefore = execFileSync('git', ['rev-parse', 'refs/heads/main'], { cwd: cloneC, encoding: 'utf8' }).trim();
+    execFileSync('git', ['symbolic-ref', 'refs/heads/memory/sym', 'refs/heads/main'], { cwd: cloneC, stdio: 'ignore' });
+    assert.throws(() => readBeadsFromRef(cloneC, 'refs/heads/memory/sym'), BeadsValidationError);
+    assert.throws(() => initBeadsRef(cloneC, { ref: 'refs/heads/memory/sym' }), BeadsValidationError);
+    assert.throws(() => commitBeadsToRef(cloneC, beads, { ref: 'refs/heads/memory/sym', expectedParentSha: mainShaBefore }), BeadsValidationError);
+    assert.throws(() => mutateBeadsRef(cloneC, [{ op: 'note', id: beadId, note: 'x' }], { ref: 'refs/heads/memory/sym' }), BeadsValidationError);
+    assert.equal(execFileSync('git', ['rev-parse', 'refs/heads/main'], { cwd: cloneC, encoding: 'utf8' }).trim(), mainShaBefore);
+
+    // Malformed store trees (blob named "beads", unexpected root entry, tab in filename) are rejected
+    const schemaBlob = execFileSync('git', ['hash-object', '-w', '--stdin'], {
+      cwd: cloneC,
+      input: JSON.stringify({ schemaVersion: SCHEMA_VERSION, format: 'neurodesk-beads' }),
+      encoding: 'utf8',
+    }).trim();
+    const dummyBlob = execFileSync('git', ['hash-object', '-w', '--stdin'], {
+      cwd: cloneC,
+      input: 'not-a-tree',
+      encoding: 'utf8',
+    }).trim();
+    const badBeadsBlobTree = execFileSync('git', ['mktree'], {
+      cwd: cloneC,
+      input: `100644 blob ${schemaBlob}\tschema.json\n100644 blob ${dummyBlob}\tbeads\n`,
+      encoding: 'utf8',
+    }).trim();
+    const badBeadsCommit = execFileSync('git', ['commit-tree', badBeadsBlobTree, '-m', 'malformed'], { cwd: cloneC, encoding: 'utf8' }).trim();
+    execFileSync('git', ['update-ref', 'refs/heads/memory/malformed-blob', badBeadsCommit], { cwd: cloneC, stdio: 'ignore' });
+    assert.throws(() => readBeadsFromRef(cloneC, 'refs/heads/memory/malformed-blob'), BeadsValidationError);
+
+    const sampleBeadJson = `${JSON.stringify(beads.get(beadId), null, 2)}\n`;
+    const sampleBeadBlob = execFileSync('git', ['hash-object', '-w', '--stdin'], {
+      cwd: cloneC,
+      input: sampleBeadJson,
+      encoding: 'utf8',
+    }).trim();
+    const tabBeadsTree = execFileSync('git', ['mktree', '-z'], {
+      cwd: cloneC,
+      input: `100644 blob ${sampleBeadBlob}\t${beadId}.json\tsuffix.json\0`,
+      encoding: 'utf8',
+    }).trim();
+    const tabRootTree = execFileSync('git', ['mktree'], {
+      cwd: cloneC,
+      input: `100644 blob ${schemaBlob}\tschema.json\n040000 tree ${tabBeadsTree}\tbeads\n`,
+      encoding: 'utf8',
+    }).trim();
+    const tabCommit = execFileSync('git', ['commit-tree', tabRootTree, '-m', 'tab path'], { cwd: cloneC, encoding: 'utf8' }).trim();
+    execFileSync('git', ['update-ref', 'refs/heads/memory/malformed-tab', tabCommit], { cwd: cloneC, stdio: 'ignore' });
+    assert.throws(() => readBeadsFromRef(cloneC, 'refs/heads/memory/malformed-tab'), BeadsValidationError);
+
     // CLI-level validation & safe apply tests
     assert.notEqual(runCli(cloneC, ['list', '--ref', 'refs/heads/main']).status, 0);
     assert.notEqual(runCli(cloneC, ['export', '--format', 'xml']).status, 0);
+    assert.notEqual(runCli(cloneC, ['export', '--format', 'snapshot', '--max-items', '-1']).status, 0);
     assert.notEqual(runCli(cloneC, ['create', '--title', 'Bad int', '--scope', 'repo', '--priority', '1abc']).status, 0);
     assert.notEqual(runCli(cloneC, ['create', '--title', 'Bad scope', '--scope', 'app:a:b']).status, 0);
     assert.notEqual(runCli(cloneC, ['claim', beadId, '--ttl-hours', '24h']).status, 0);
@@ -452,6 +596,9 @@ test('git orphan-branch store handles subdirectories, CAS bootstrap, fast-forwar
     const badEnvelope = join(root, 'bad.json');
     writeFileSync(badEnvelope, 'null\n', 'utf8');
     assert.notEqual(runCli(cloneC, ['apply', badEnvelope, '--safe']).status, 0);
+    const extraKeyEnvelope = join(root, 'extra-key.json');
+    writeFileSync(extraKeyEnvelope, JSON.stringify({ operations: [], unexpected: true }), 'utf8');
+    assert.notEqual(runCli(cloneC, ['apply', extraKeyEnvelope, '--safe']).status, 0);
 
     const safeOpsFile = join(root, 'safe-ops.json');
     writeFileSync(safeOpsFile, JSON.stringify({

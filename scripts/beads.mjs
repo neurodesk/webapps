@@ -329,7 +329,11 @@ function main() {
     let operations;
     if (Array.isArray(raw)) {
       operations = raw;
-    } else if (raw && typeof raw === 'object' && Array.isArray(raw.operations)) {
+    } else if (raw && typeof raw === 'object' && !Array.isArray(raw) && Array.isArray(raw.operations)) {
+      const extraKeys = Object.keys(raw).filter((key) => key !== 'operations');
+      if (extraKeys.length > 0) {
+        throw new Error(`Unexpected top-level field(s) in operations file: ${extraKeys.join(', ')}`);
+      }
       operations = raw.operations;
     } else {
       throw new Error('Operations file must be a JSON array or an object with an "operations" array');

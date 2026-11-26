@@ -45,6 +45,30 @@ const ALLOWED_OP_KEYS = Object.freeze({
 const ALLOWED_LINK_KEYS = new Set(['githubIssue', 'pr', 'branch', 'evidence']);
 const ALLOWED_DEP_KEYS = new Set(['blockedBy', 'parent', 'discoveredFrom']);
 const ALLOWED_SCOPE_KEYS = new Set(['type', 'targets']);
+const ALLOWED_LEASE_KEYS = new Set(['owner', 'branch', 'claimedAt', 'expiresAt']);
+const ALLOWED_JOURNAL_KEYS = new Set(['at', 'actor', 'note']);
+const ALLOWED_BEAD_KEYS = new Set([
+  'schemaVersion',
+  'id',
+  'revision',
+  'title',
+  'summary',
+  'kind',
+  'status',
+  'priority',
+  'scope',
+  'dedupeKey',
+  'deps',
+  'links',
+  'lease',
+  'journal',
+  'createdAt',
+  'updatedAt',
+  'lastSeenAt',
+  'closedAt',
+  'reopenedAt',
+  'closeReason',
+]);
 
 export class BeadsValidationError extends Error {
   constructor(message) {
@@ -197,6 +221,7 @@ function normalizeLease(lease) {
   if (typeof lease !== 'object' || Array.isArray(lease)) {
     throw new BeadsValidationError('lease must be null or an object');
   }
+  assertAllowedKeys(lease, ALLOWED_LEASE_KEYS, 'lease');
   const owner = assertNonEmptyString(lease.owner, 'lease.owner', LIMITS.actor);
   const claimedAt = assertIsoTimestamp(lease.claimedAt, 'lease.claimedAt');
   const expiresAt = assertIsoTimestamp(lease.expiresAt, 'lease.expiresAt');
@@ -215,6 +240,7 @@ function normalizeJournal(journal = []) {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
       throw new BeadsValidationError(`journal[${idx}] must be an object`);
     }
+    assertAllowedKeys(entry, ALLOWED_JOURNAL_KEYS, `journal[${idx}]`);
     return {
       at: assertIsoTimestamp(entry.at, `journal[${idx}].at`),
       actor: assertNonEmptyString(entry.actor, `journal[${idx}].actor`, LIMITS.actor),
@@ -228,6 +254,7 @@ export function validateBead(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new BeadsValidationError('Bead must be an object');
   }
+  assertAllowedKeys(raw, ALLOWED_BEAD_KEYS, 'bead');
   if (raw.schemaVersion !== SCHEMA_VERSION) {
     throw new BeadsValidationError(`Unsupported bead schemaVersion: ${raw.schemaVersion}`);
   }
@@ -268,6 +295,7 @@ export function validateBead(raw) {
   const updatedAt = assertIsoTimestamp(raw.updatedAt, 'updatedAt');
   const lastSeenAt = assertIsoTimestamp(raw.lastSeenAt ?? updatedAt, 'lastSeenAt');
   const closedAt = raw.closedAt === undefined || raw.closedAt === null ? null : assertIsoTimestamp(raw.closedAt, 'closedAt');
+  const reopenedAt = raw.reopenedAt === undefined || raw.reopenedAt === null ? null : assertIsoTimestamp(raw.reopenedAt, 'reopenedAt');
   const closeReason = assertOptionalString(raw.closeReason, 'closeReason', LIMITS.closeReason);
 
   if (raw.status === 'closed') {
@@ -300,6 +328,7 @@ export function validateBead(raw) {
     updatedAt,
     lastSeenAt,
     closedAt,
+    reopenedAt,
     closeReason,
   };
 }
@@ -339,12 +368,38 @@ export function detectDependencyCycle(beadsMap, startId, newBlockerId) {
   return false;
 }
 
-export function validateBeadsGraph(beadsMap) {
+function assertAcyclicRelation(beadsMap, label, getEdges) {
   const color = new Map();
+  function visit(id) {
+    const state = color.get(id) ?? 0;
+    if (state === 1) {
+      throw new BeadsConflictError(`${label} cycle detected involving ${id}`);
+    }
+    if (state === 2) return;
+    color.set(id, 1);
+    for (const next of getEdges(beadsMap.get(id))) {
+      visit(next);
+    }
+    color.set(id, 2);
+  }
+  for (const id of [...beadsMap.keys()].sort()) {
+    visit(id);
+  }
+}
+
+export function validateBeadsGraph(beadsMap) {
+  const seenDedupeKeys = new Map();
   for (const [id, bead] of beadsMap.entries()) {
     validateBead(bead);
     if (bead.id !== id) {
       throw new BeadsValidationError(`Map key ${id} does not match bead.id ${bead.id}`);
+    }
+    if (bead.dedupeKey) {
+      const priorId = seenDedupeKeys.get(bead.dedupeKey);
+      if (priorId && priorId !== id) {
+        throw new BeadsConflictError(`Duplicate dedupeKey "${bead.dedupeKey}" on ${priorId} and ${id}`);
+      }
+      seenDedupeKeys.set(bead.dedupeKey, id);
     }
     for (const depId of bead.deps.blockedBy) {
       if (!beadsMap.has(depId)) {
@@ -359,22 +414,9 @@ export function validateBeadsGraph(beadsMap) {
     }
   }
 
-  function visit(id) {
-    const state = color.get(id) ?? 0;
-    if (state === 1) {
-      throw new BeadsConflictError(`Dependency cycle detected involving ${id}`);
-    }
-    if (state === 2) return;
-    color.set(id, 1);
-    for (const depId of beadsMap.get(id).deps.blockedBy) {
-      visit(depId);
-    }
-    color.set(id, 2);
-  }
-
-  for (const id of [...beadsMap.keys()].sort()) {
-    visit(id);
-  }
+  assertAcyclicRelation(beadsMap, 'Dependency', (b) => b.deps.blockedBy);
+  assertAcyclicRelation(beadsMap, 'Parent', (b) => (b.deps.parent ? [b.deps.parent] : []));
+  assertAcyclicRelation(beadsMap, 'DiscoveredFrom', (b) => (b.deps.discoveredFrom ? [b.deps.discoveredFrom] : []));
 }
 
 function compareBeadOrder(a, b) {
@@ -411,6 +453,9 @@ export function listBeads(beadsMap, { status = null, kind = null, target = null,
 }
 
 export function summarizeBeads(beadsMap, { now = new Date(), maxItems = 100 } = {}) {
+  if (!Number.isInteger(maxItems) || maxItems < 0) {
+    throw new BeadsValidationError(`maxItems must be a non-negative integer (got ${maxItems})`);
+  }
   const nowMs = now instanceof Date ? now.getTime() : Date.parse(now);
   const items = listBeads(beadsMap)
     .filter((bead) => bead.status !== 'closed')
@@ -502,8 +547,8 @@ function appendJournal(bead, actor, note, nowIso) {
 }
 
 function mergeLinks(base, patch, { capEvidence = false } = {}) {
-  if (!patch) return base;
-  if (typeof patch !== 'object' || Array.isArray(patch)) {
+  if (patch === undefined) return base;
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
     throw new BeadsValidationError('links must be an object');
   }
   assertAllowedKeys(patch, ALLOWED_LINK_KEYS, 'links');
@@ -545,6 +590,25 @@ function validateRefsExist(beadsMap, bead) {
   }
 }
 
+function validateUpsertOptionalFields(op) {
+  if (op.title !== undefined) assertNonEmptyString(op.title, 'title', LIMITS.title);
+  if (op.summary !== undefined) assertOptionalString(op.summary, 'summary', LIMITS.summary);
+  if (op.kind !== undefined && !BEAD_KINDS.includes(op.kind)) {
+    throw new BeadsValidationError(`kind must be one of: ${BEAD_KINDS.join(', ')}`);
+  }
+  if (op.status !== undefined && !BEAD_STATUSES.includes(op.status)) {
+    throw new BeadsValidationError(`status must be one of: ${BEAD_STATUSES.join(', ')}`);
+  }
+  if (op.priority !== undefined && (!Number.isInteger(op.priority) || op.priority < 0 || op.priority > 3)) {
+    throw new BeadsValidationError('priority must be an integer 0..3');
+  }
+  if (op.scope !== undefined) normalizeScope(op.scope);
+  if (op.deps !== undefined) normalizeDeps(op.deps);
+  if (op.links !== undefined) normalizeLinks(op.links);
+  if (op.note !== undefined) assertOptionalString(op.note, 'note', LIMITS.note);
+  if (op.closeReason !== undefined) assertOptionalString(op.closeReason, 'closeReason', LIMITS.closeReason);
+}
+
 export function applyOperations(beadsMap, operations, options = {}) {
   if (!Array.isArray(operations)) {
     throw new BeadsValidationError('operations must be an array');
@@ -583,22 +647,31 @@ export function applyOperations(beadsMap, operations, options = {}) {
     if (op.op === 'create' || op.op === 'upsert') {
       const opActor = resolveOpActor(op.actor, actor, lockActor);
       const dedupeKey = assertOptionalString(op.dedupeKey, 'dedupeKey', LIMITS.dedupeKey);
+      if (op.id !== undefined && (typeof op.id !== 'string' || !BEAD_ID_PATTERN.test(op.id))) {
+        throw new BeadsValidationError(`Invalid bead id: ${op.id}`);
+      }
+      if (op.op === 'upsert' && requireExpectedRevision && !dedupeKey && !op.id) {
+        throw new BeadsValidationError('Safe upsert requires dedupeKey or id for idempotent identity');
+      }
+
       const byKey = dedupeKey ? findByDedupeKey(next, dedupeKey) : null;
       const byId = op.id ? next.get(op.id) : null;
-      if (op.id && dedupeKey) {
-        const expectedId = deriveBeadId(dedupeKey);
-        if (op.id !== expectedId && (!byKey || byKey.id !== op.id)) {
-          throw new BeadsConflictError(`Conflicting id (${op.id}) and dedupeKey (${dedupeKey})`);
-        }
+      if (op.id && byKey && byKey.id !== op.id) {
+        throw new BeadsConflictError(`id ${op.id} conflicts with existing dedupeKey match ${byKey.id}`);
       }
       if (byKey && byId && byKey.id !== byId.id) {
         throw new BeadsConflictError(`id ${op.id} and dedupeKey ${dedupeKey} match different beads (${byId.id} vs ${byKey.id})`);
       }
+      if (op.id && dedupeKey && !byKey && !byId && op.id !== deriveBeadId(dedupeKey)) {
+        throw new BeadsConflictError(`Supplied id ${op.id} does not match derived id ${deriveBeadId(dedupeKey)} for dedupeKey "${dedupeKey}"`);
+      }
+
       const existing = byKey ?? byId;
       if (existing && op.op === 'create') {
         throw new BeadsConflictError(`Bead already exists: ${existing.id}`);
       }
       if (existing) {
+        validateUpsertOptionalFields(op);
         if (dedupeKey && existing.dedupeKey && existing.dedupeKey !== dedupeKey) {
           throw new BeadsConflictError(`Bead ${existing.id} has dedupeKey "${existing.dedupeKey}", not "${dedupeKey}"`);
         }
@@ -643,6 +716,9 @@ export function applyOperations(beadsMap, operations, options = {}) {
         continue;
       }
 
+      if (op.expectedRevision !== undefined && op.expectedRevision !== null) {
+        throw new BeadsConflictError('Cannot create a new bead when expectedRevision is specified');
+      }
       creates++;
       if (creates > maxCreates) {
         throw new BeadsValidationError(`Operation batch exceeds maxCreates (${maxCreates})`);
@@ -670,6 +746,7 @@ export function applyOperations(beadsMap, operations, options = {}) {
         updatedAt: nowIso,
         lastSeenAt: nowIso,
         closedAt: op.status === 'closed' ? nowIso : null,
+        reopenedAt: null,
         closeReason: op.status === 'closed' ? op.closeReason : null,
       });
       if (singleAppOnly && !isSingleAppScope(initial)) {
@@ -706,6 +783,9 @@ export function applyOperations(beadsMap, operations, options = {}) {
         }
         if (bead.status === 'closed') {
           throw new BeadsValidationError(`Use explicit "reopen" operation before updating closed bead ${bead.id}`);
+        }
+        if (hasActiveLease(bead, nowMs) && bead.lease.owner !== opActor) {
+          throw new BeadsConflictError(`Cannot change status of ${bead.id}: actively claimed by ${bead.lease.owner}`);
         }
         bead.status = op.status;
         if (op.status === 'blocked' || op.status === 'open') {
@@ -769,19 +849,27 @@ export function applyOperations(beadsMap, operations, options = {}) {
       appendJournal(bead, opActor, op.note, nowIso);
     } else if (op.op === 'close') {
       const opActor = resolveOpActor(op.actor, actor, lockActor);
+      if (lockActor && hasActiveLease(bead, nowMs) && bead.lease.owner !== opActor) {
+        throw new BeadsConflictError(`Cannot close ${bead.id} in safe mode: actively claimed by ${bead.lease.owner}`);
+      }
       const reason = assertNonEmptyString(op.reason ?? op.closeReason, 'reason', LIMITS.closeReason);
       bead.status = 'closed';
       bead.lease = null;
       bead.closedAt = nowIso;
       bead.closeReason = reason;
       if (op.pr !== undefined) bead.links = mergeLinks(bead.links, { pr: op.pr });
-      appendJournal(bead, opActor, `Closed: ${reason}`, nowIso);
+      const journalNote = `Closed: ${reason}`.slice(0, LIMITS.note);
+      appendJournal(bead, opActor, journalNote, nowIso);
     } else if (op.op === 'reopen') {
       const opActor = resolveOpActor(op.actor, actor, lockActor);
+      if (bead.status !== 'closed') {
+        throw new BeadsConflictError(`Cannot reopen non-closed bead ${bead.id} (status: ${bead.status})`);
+      }
       bead.status = 'open';
       bead.lease = null;
       bead.closedAt = null;
       bead.closeReason = null;
+      bead.reopenedAt = nowIso;
       appendJournal(bead, opActor, op.note ?? 'Reopened', nowIso);
     }
 
@@ -815,12 +903,12 @@ function mergeJournalEntries(a, b) {
   return merged.slice(-LIMITS.journal);
 }
 
-function hasReopenAfter(bead, isoTimestamp) {
-  return bead.journal.some((entry) => entry.note === 'Reopened' && entry.at > isoTimestamp);
-}
-
 function deterministicHash(value) {
   return createHash('sha256').update(JSON.stringify(value), 'utf8').digest('hex');
+}
+
+function reopenedAfterClose(openBead, closedBead) {
+  return Boolean(openBead.reopenedAt && closedBead.closedAt && openBead.reopenedAt > closedBead.closedAt);
 }
 
 export function mergeBeadsMaps(localMap, remoteMap) {
@@ -845,15 +933,18 @@ export function mergeBeadsMaps(localMap, remoteMap) {
       continue;
     }
 
-    // Closed status wins over concurrent non-reopen mutations (e.g. notes).
+    // Closed status wins over concurrent non-reopen mutations (e.g. notes),
+    // while an explicit reopen with reopenedAt > closedAt wins cleanly.
     let winner;
     let other;
-    if (local.status === 'closed' && remote.status !== 'closed' && !hasReopenAfter(remote, local.closedAt)) {
-      winner = structuredClone(local);
-      other = remote;
-    } else if (remote.status === 'closed' && local.status !== 'closed' && !hasReopenAfter(local, remote.closedAt)) {
-      winner = structuredClone(remote);
-      other = local;
+    if (local.status === 'closed' && remote.status !== 'closed') {
+      const remoteReopened = reopenedAfterClose(remote, local);
+      winner = structuredClone(remoteReopened ? remote : local);
+      other = remoteReopened ? local : remote;
+    } else if (remote.status === 'closed' && local.status !== 'closed') {
+      const localReopened = reopenedAfterClose(local, remote);
+      winner = structuredClone(localReopened ? local : remote);
+      other = localReopened ? remote : local;
     } else if (local.revision !== remote.revision) {
       winner = structuredClone(local.revision > remote.revision ? local : remote);
       other = local.revision > remote.revision ? remote : local;
@@ -866,14 +957,16 @@ export function mergeBeadsMaps(localMap, remoteMap) {
       other = localFirst ? remote : local;
     }
 
-    const beforeMerge = JSON.stringify(winner);
     winner.journal = mergeJournalEntries(winner.journal, other.journal);
     winner.links = mergeLinks(winner.links, { evidence: other.links.evidence ?? [] }, { capEvidence: true });
     if (other.lastSeenAt > winner.lastSeenAt) winner.lastSeenAt = other.lastSeenAt;
     if (other.updatedAt > winner.updatedAt) winner.updatedAt = other.updatedAt;
-    if (JSON.stringify(winner) !== beforeMerge) {
-      winner.revision = Math.max(local.revision, remote.revision) + 1;
+    if (other.reopenedAt && (!winner.reopenedAt || other.reopenedAt > winner.reopenedAt)) {
+      winner.reopenedAt = other.reopenedAt;
     }
+    // Any divergent merge issues a strictly newer revision so neither pre-merge
+    // expectedRevision token can silently overwrite the merged winner.
+    winner.revision = Math.max(local.revision, remote.revision) + 1;
     merged.set(id, validateBead(winner));
   }
   validateBeadsGraph(merged);
@@ -891,6 +984,19 @@ function git(args, { cwd, input } = {}) {
 
 function resolveGitRoot(cwd) {
   return git(['rev-parse', '--show-toplevel'], { cwd }).trim();
+}
+
+function assertNotSymbolicRef(repoTop, ref) {
+  let isSymbolic = false;
+  try {
+    git(['symbolic-ref', '--quiet', ref], { cwd: repoTop });
+    isSymbolic = true;
+  } catch (error) {
+    if (error.status !== 1) throw error;
+  }
+  if (isSymbolic) {
+    throw new BeadsValidationError(`Ref must not be a symbolic ref: ${ref}`);
+  }
 }
 
 function gitRefSha(repoTop, ref) {
@@ -944,19 +1050,36 @@ function buildTreeFromMap(repoTop, beadsMap) {
   return git(['mktree'], { cwd: repoTop, input: `${rootEntries.join('\n')}\n` }).trim();
 }
 
-export function readBeadsFromRef(cwd, ref = DEFAULT_BEADS_REF) {
-  const repoTop = resolveGitRoot(cwd);
+function parseLsTreeRecord(record) {
+  const tabIndex = record.indexOf('\t');
+  if (tabIndex === -1) {
+    throw new BeadsValidationError(`Malformed ls-tree record: ${record}`);
+  }
+  const meta = record.slice(0, tabIndex);
+  const filePath = record.slice(tabIndex + 1);
+  const [mode, type, oid] = meta.split(' ');
+  return { mode, type, oid, filePath };
+}
+
+function readBeadsTree(repoTop, ref) {
+  assertNotSymbolicRef(repoTop, ref);
   const sha = gitRefSha(repoTop, ref);
   if (!sha) return { sha: null, beads: new Map() };
 
-  const rootEntries = git(['ls-tree', '-z', sha], { cwd: repoTop }).split('\0').filter(Boolean);
+  const rootRecords = git(['ls-tree', '-z', sha], { cwd: repoTop }).split('\0').filter(Boolean);
   let schemaBlob = null;
   let hasBeadsDir = false;
-  for (const record of rootEntries) {
-    const [meta, name] = record.split('\t');
-    const [, type, blobSha] = meta.split(' ');
-    if (name === 'schema.json' && type === 'blob') schemaBlob = blobSha;
-    if (name === 'beads' && type === 'tree') hasBeadsDir = true;
+  for (const record of rootRecords) {
+    const { type, oid, filePath } = parseLsTreeRecord(record);
+    if (filePath === 'schema.json') {
+      if (type !== 'blob') throw new BeadsValidationError(`Ref ${ref} schema.json must be a blob`);
+      schemaBlob = oid;
+    } else if (filePath === 'beads') {
+      if (type !== 'tree') throw new BeadsValidationError(`Ref ${ref} beads entry must be a tree`);
+      hasBeadsDir = true;
+    } else {
+      throw new BeadsValidationError(`Unexpected root entry in ${ref}: ${filePath}`);
+    }
   }
   if (!schemaBlob) {
     throw new BeadsValidationError(`Ref ${ref} is missing schema.json`);
@@ -972,10 +1095,11 @@ export function readBeadsFromRef(cwd, ref = DEFAULT_BEADS_REF) {
   const listing = git(['ls-tree', '-r', '-z', sha, '--', 'beads'], { cwd: repoTop });
   for (const record of listing.split('\0')) {
     if (!record) continue;
-    const [meta, filePath] = record.split('\t');
-    if (!filePath || !filePath.endsWith('.json')) continue;
-    const blobSha = meta.split(' ')[2];
-    const raw = git(['cat-file', '-p', blobSha], { cwd: repoTop });
+    const { type, oid, filePath } = parseLsTreeRecord(record);
+    if (type !== 'blob' || !filePath.endsWith('.json')) {
+      throw new BeadsValidationError(`Unexpected entry in beads tree: ${filePath}`);
+    }
+    const raw = git(['cat-file', '-p', oid], { cwd: repoTop });
     const bead = validateBead(JSON.parse(raw));
     const expectedPath = `beads/${bead.id}.json`;
     if (filePath !== expectedPath) {
@@ -988,6 +1112,12 @@ export function readBeadsFromRef(cwd, ref = DEFAULT_BEADS_REF) {
   }
   validateBeadsGraph(beads);
   return { sha, beads };
+}
+
+export function readBeadsFromRef(cwd, ref = DEFAULT_BEADS_REF) {
+  assertMemoryRef(ref);
+  const repoTop = resolveGitRoot(cwd);
+  return readBeadsTree(repoTop, ref);
 }
 
 function commitTree(repoTop, treeSha, parents, message, authorName, authorEmail) {
@@ -1012,12 +1142,13 @@ function commitTree(repoTop, treeSha, parents, message, authorName, authorEmail)
 export function commitBeadsToRef(cwd, beadsMap, { ref = DEFAULT_BEADS_REF, expectedParentSha = null, message = 'beads: update work graph', authorName = 'neurodesk-beads', authorEmail = 'beads@neurodesk.local' } = {}) {
   assertMemoryRef(ref);
   const repoTop = resolveGitRoot(cwd);
+  assertNotSymbolicRef(repoTop, ref);
   const treeSha = buildTreeFromMap(repoTop, beadsMap);
   const parents = expectedParentSha ? [expectedParentSha] : [];
   const commitSha = commitTree(repoTop, treeSha, parents, message, authorName, authorEmail);
   const oldArg = expectedParentSha ?? ZERO_OID;
   try {
-    git(['update-ref', ref, commitSha, oldArg], { cwd: repoTop });
+    git(['update-ref', '--no-deref', ref, commitSha, oldArg], { cwd: repoTop });
   } catch (error) {
     throw new BeadsConflictError(`Concurrent update detected on ${ref}: ${error.message}`);
   }
@@ -1027,8 +1158,9 @@ export function commitBeadsToRef(cwd, beadsMap, { ref = DEFAULT_BEADS_REF, expec
 export function mutateBeadsRef(cwd, operations, { ref = DEFAULT_BEADS_REF, message = 'beads: apply operations', maxRetries = 5, ...applyOptions } = {}) {
   assertMemoryRef(ref);
   const repoTop = resolveGitRoot(cwd);
+  assertNotSymbolicRef(repoTop, ref);
   for (let attempt = 0; attempt < maxRetries; attempt++) {
-    const { sha, beads } = readBeadsFromRef(repoTop, ref);
+    const { sha, beads } = readBeadsTree(repoTop, ref);
     const result = applyOperations(beads, operations, applyOptions);
     if (result.changedIds.length === 0 && sha !== null) {
       return { ...result, commitSha: sha, changed: false };
@@ -1047,6 +1179,7 @@ export function mutateBeadsRef(cwd, operations, { ref = DEFAULT_BEADS_REF, messa
 export function initBeadsRef(cwd, { ref = DEFAULT_BEADS_REF } = {}) {
   assertMemoryRef(ref);
   const repoTop = resolveGitRoot(cwd);
+  assertNotSymbolicRef(repoTop, ref);
   const existing = gitRefSha(repoTop, ref);
   if (existing) return { sha: existing, created: false };
   try {
@@ -1078,25 +1211,27 @@ function remoteBranchExists(repoTop, remote, ref) {
 export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', push = false, maxRetries = 5 } = {}) {
   assertMemoryRef(ref);
   const repoTop = resolveGitRoot(cwd);
+  assertNotSymbolicRef(repoTop, ref);
   assertConfiguredRemote(repoTop, remote);
 
   const shortBranch = ref.replace(/^refs\/heads\//, '');
   const trackingRef = `refs/remotes/${remote}/${shortBranch}`;
+  assertNotSymbolicRef(repoTop, trackingRef);
   const remoteExists = remoteBranchExists(repoTop, remote, ref);
   if (remoteExists) {
     git(['fetch', '--', remote, `${ref}:${trackingRef}`], { cwd: repoTop });
   }
-  const remoteState = remoteExists ? readBeadsFromRef(repoTop, trackingRef) : { sha: null, beads: new Map() };
+  const remoteState = remoteExists ? readBeadsTree(repoTop, trackingRef) : { sha: null, beads: new Map() };
 
   let finalSha = null;
   let mergedCount = 0;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
-    const localState = readBeadsFromRef(repoTop, ref);
+    const localState = readBeadsTree(repoTop, ref);
 
     if (remoteState.sha && !localState.sha) {
       try {
-        git(['update-ref', ref, remoteState.sha, ZERO_OID], { cwd: repoTop });
+        git(['update-ref', '--no-deref', ref, remoteState.sha, ZERO_OID], { cwd: repoTop });
         finalSha = remoteState.sha;
         mergedCount = remoteState.beads.size;
         break;
@@ -1112,7 +1247,7 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
       }
       if (isAncestor(repoTop, localState.sha, remoteState.sha)) {
         try {
-          git(['update-ref', ref, remoteState.sha, localState.sha], { cwd: repoTop });
+          git(['update-ref', '--no-deref', ref, remoteState.sha, localState.sha], { cwd: repoTop });
           finalSha = remoteState.sha;
           mergedCount = remoteState.beads.size;
           break;
@@ -1137,7 +1272,7 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
         'beads@neurodesk.local',
       );
       try {
-        git(['update-ref', ref, commitSha, localState.sha], { cwd: repoTop });
+        git(['update-ref', '--no-deref', ref, commitSha, localState.sha], { cwd: repoTop });
         finalSha = commitSha;
         mergedCount = merged.size;
         break;
@@ -1148,7 +1283,7 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
     } else if (!localState.sha && !remoteState.sha) {
       const initialized = initBeadsRef(repoTop, { ref });
       finalSha = initialized.sha;
-      mergedCount = readBeadsFromRef(repoTop, ref).beads.size;
+      mergedCount = readBeadsTree(repoTop, ref).beads.size;
       break;
     } else {
       finalSha = localState.sha;
