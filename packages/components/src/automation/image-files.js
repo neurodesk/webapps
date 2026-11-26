@@ -1,4 +1,10 @@
-/** Pair explicit automation sidecars with their image, independently of source filenames. */
+/**
+ * Pair explicit automation sidecars with their image, independently of source filenames.
+ *
+ * @param {Record<string, File[]>} inputs
+ * @param {Record<string, { sidecars?: File[] }>} [inputDetails]
+ * @param {{ image?: string, sidecar?: string, bval?: string, bvec?: string, name?: string }} [options]
+ */
 export function imageFiles(inputs, inputDetails = {}, {
   image = 'image', sidecar = 'sidecar', bval = 'bval', bvec = 'bvec', name,
 } = {}) {
@@ -13,7 +19,7 @@ export function imageFiles(inputs, inputDetails = {}, {
   const imageStem = renamed[0]?.name.replace(/\.nii(?:\.gz)?$/i, '');
   const overridden = new Set(explicit.map(entry => entry.extension));
   const inherited = (inputDetails[image]?.sidecars ?? []).filter(file => {
-    const extension = file.name.split('.').pop().toLowerCase().replace(/^bvals$/, 'bval').replace(/^bvecs$/, 'bvec');
+    const extension = (file.name.split('.').pop() ?? '').toLowerCase().replace(/^bvals$/, 'bval').replace(/^bvecs$/, 'bvec');
     return !overridden.has(extension);
   });
   const auxiliary = images.length === 1

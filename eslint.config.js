@@ -82,6 +82,7 @@ export default [
   ...typedPromiseProjects.map((project) => ({
     files: typedSourceGlobs(project),
     languageOptions: {
+      ...(project.includeJs ? { parser: tsParser } : {}),
       parserOptions: {
         project: [`./${project.tsconfig}`],
         tsconfigRootDir: import.meta.dirname,

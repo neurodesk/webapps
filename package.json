@@ -41,6 +41,7 @@
     "test:lint": "node --test test/lint-coverage.test.mjs",
     "lint:correctness": "node scripts/lint.mjs",
     "quality:unused": "node scripts/report-unused-code.mjs",
+    "quality:maintainability": "node scripts/report-maintainability.mjs",
     "quality:mutations": "node scripts/report-mutations.mjs",
     "quality:mutations:smoke": "node scripts/report-mutations.mjs --smoke",
     "check:dependencies": "node scripts/check-dependencies.mjs",

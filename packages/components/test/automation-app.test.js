@@ -73,13 +73,20 @@ test('cancel during callback or artifact hashing cannot publish a stale report',
 });
 
 test('failed callbacks, missing artifacts and duplicate filenames fail explicitly', async t => {
-  for (const callback of [async () => { throw new Error('worker failed'); }, async () => ({ artifacts: [] }), async () => ({ artifacts: [{ role: 'labels', file: new File([], 'labels.nii') }] })]) {
+  const cases = [
+    [async () => { throw new Error('worker failed'); }, 'worker failed'],
+    [async () => { throw null; }, 'null'],
+    [async () => ({ artifacts: [] }), null],
+    [async () => ({ artifacts: [{ role: 'labels', file: new File([], 'labels.nii') }] }), null],
+  ];
+  for (const [callback, expectedMessage] of cases) {
     const f = fixture(t, callback);
     await f.upload();
     await f.dispatch('start');
     const state = await completed(f.dispatch);
     assert.equal(state.state, 'failed');
-    assert.ok(state.error.message);
+    if (expectedMessage !== null) assert.equal(state.error.message, expectedMessage);
+    else assert.ok(state.error.message);
     assert.equal(state.report, undefined);
   }
 });

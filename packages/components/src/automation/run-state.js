@@ -12,21 +12,25 @@ async function describeFile(file, signal) {
 }
 
 export function createRunState({ app, appVersion, statusElement = document.getElementById('statusText') }) {
-  const doc = statusElement.ownerDocument;
+  if (!statusElement) throw new Error('Missing status element for run state');
+  const targetStatus = statusElement;
+  const doc = targetStatus.ownerDocument;
   let script = doc.getElementById('neurodesk-run');
   if (!script) {
-    script = doc.createElement('script');
-    script.type = 'application/json';
-    script.id = 'neurodesk-run';
-    doc.body.append(script);
+    const created = doc.createElement('script');
+    created.type = 'application/json';
+    created.id = 'neurodesk-run';
+    doc.body.append(created);
+    script = created;
   }
+  const runScript = script;
   let active;
   let snapshot = { schemaVersion: 1, app, appVersion, runId: null, state: 'idle', message: '' };
   function publish(next) {
     snapshot = next;
-    statusElement.dataset.neurodeskState = next.state;
-    statusElement.dataset.neurodeskRunId = next.runId ?? '';
-    script.textContent = JSON.stringify(next);
+    targetStatus.dataset.neurodeskState = next.state;
+    targetStatus.dataset.neurodeskRunId = next.runId ?? '';
+    runScript.textContent = JSON.stringify(next);
   }
   publish(snapshot);
 
@@ -53,6 +57,7 @@ export function createRunState({ app, appVersion, statusElement = document.getEl
         if (state !== 'loading') throw new Error('Only loading can become ready');
         return finish('ready', message);
       },
+      /** @param {{ message?: string, value?: number }} [update] */
       progress({ message = snapshot.message, value } = {}) {
         if (!current()) return false;
         publish({ ...snapshot, message, ...(value === undefined ? {} : { progress: value }) });

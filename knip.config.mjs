@@ -44,6 +44,12 @@ workspaces['apps/dicompare'].entry.push('electron/main.ts');
 workspaces['packages/components'].entry.push(...SHELL_COMPONENTS.filter((name) => name.endsWith('.js')).map((name) => `src/${name}`));
 // fastprep's Rust report inlines this script with include_str!.
 workspaces['.'].entry.push('exes/fastprep/core/src/assets/sdc.js');
+// Spawned in an isolated temporary repository by test/lint-coverage.test.mjs.
+workspaces['.'].entry.push('test-utils/lint-coverage-suite.mjs');
+// Checked-in validation commands invoked directly by filename (see exes/drbuddi-probe/README.md).
+workspaces['.'].entry.push('exes/drbuddi-probe/validation/browser.mjs', 'exes/drbuddi-probe/validation/worker.mjs');
+// Runtime module worker served beside wasm-single/ and loaded by runtimeUrl in apps/bison/src/worker.js.
+workspaces['packages/greedy'].entry.push('src/worker.js');
 workspaces['site/easter-eggs/vessel-surfer-leaderboard'].entry.push('src/worker.js');
 // The reverse-PE validation shell invokes this checked-in Node command by filename.
 workspaces['.'].entry.push('docs/architecture/dwi-reverse-pe-options/mindgrab-mask.mjs');

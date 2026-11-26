@@ -78,6 +78,7 @@ export function registerAppAutomation({ app, operations, convertDicom, sourceRoo
   let contract;
   let active;
   let artifacts = new Map();
+  /** @type {any} */
   let snapshot = { schemaVersion: 2, app, runId: null, state: 'idle' };
   const transfer = doc.createElement('input');
   transfer.type = 'file';
@@ -99,7 +100,7 @@ export function registerAppAutomation({ app, operations, convertDicom, sourceRoo
     return copy(contract);
   })();
   // Loading is lazy from the caller's perspective; dispatch and .ready preserve the error.
-  void ready.catch(() => {});
+  ready.catch(() => {});
 
   async function execute(run, request, operation, sourceFiles) {
     const { signal } = run.controller;
@@ -165,8 +166,9 @@ export function registerAppAutomation({ app, operations, convertDicom, sourceRoo
     } catch (error) {
       if (active !== run || signal.aborted) return;
       artifacts.clear();
-      snapshot = { ...snapshot, state: 'failed', error: { message: error.message || String(error),
-        ...(error.code && { code: error.code }), ...(error.candidates && { candidates: copy(error.candidates) }),
+      const detail = error && typeof error === 'object' ? error : null;
+      snapshot = { ...snapshot, state: 'failed', error: { message: detail?.message ? String(detail.message) : String(error),
+        ...(detail?.code && { code: detail.code }), ...(detail?.candidates && { candidates: copy(detail.candidates) }),
       } };
       run.controller.abort(error);
     }
@@ -215,7 +217,7 @@ export function registerAppAutomation({ app, operations, convertDicom, sourceRoo
       return { cancelled: true };
     }
     if (command === 'adopt') {
-      const adoption = adopt(request.role, Array.from(transfer.files));
+      const adoption = adopt(request.role, Array.from(transfer.files ?? []));
       transfer.value = '';
       return adoption;
     }
@@ -240,7 +242,12 @@ export function registerAppAutomation({ app, operations, convertDicom, sourceRoo
       snapshot = { schemaVersion: 2, app, appVersion: contract.appVersion, runId: run.id, operation: name, state: 'running' };
       const files = new Map(adopted);
       adopted.clear();
-      void execute(run, copy(request), operation, files);
+      execute(run, copy(request), operation, files).catch(error => {
+        if (active !== run || run.controller.signal.aborted) return;
+        artifacts.clear();
+        snapshot = { ...snapshot, state: 'failed', error: { message: error instanceof Error ? error.message : String(error) } };
+        run.controller.abort(error);
+      });
       return { runId: run.id, state: 'running' };
     }
     if (command === 'download') {

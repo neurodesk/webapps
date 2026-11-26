@@ -7,7 +7,7 @@ import { join, relative } from 'node:path';
 import { test } from 'node:test';
 import { getPackages } from '@manypkg/get-packages';
 import config from '../knip.config.mjs';
-import { runReport, summarize } from '../scripts/report-unused-code.mjs';
+import { compareUnusedBaseline, findingKey, ratchetedFindings, runReport, summarize } from '../scripts/report-unused-code.mjs';
 
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), 'unused-code-'));
@@ -17,7 +17,7 @@ function fixture(t) {
   writeFileSync(join(directory, 'index.js'), "import { live } from './helper.js'; console.log(live);\n");
   writeFileSync(join(directory, 'helper.js'), 'export const live = 1; export const deadExport = 2;\n');
   writeFileSync(join(directory, 'dead.js'), 'console.log("unused file canary");\n');
-  return { cwd: directory, config: 'knip.json', output: join(directory, 'artifacts'), summary: join(directory, 'summary.md') };
+  return { cwd: directory, config: 'knip.json', output: join(directory, 'artifacts'), summary: join(directory, 'summary.md'), baseline: null };
 }
 
 test('every pnpm workspace receives a source project without treating all sources as entries', async () => {
@@ -44,9 +44,10 @@ test('documented runtime roots stay registered as Knip entries', () => {
     'apps/surfannotate': ['icon/render.mjs'],
     'packages/runtime-support': ['src/niimath/worker.js', 'src/freebrowse-viewer/static.js'],
     'packages/components': ['web/js/showcase.js', 'src/handoff/index.js', 'src/handoff/receive.js'],
+    'packages/greedy': ['src/worker.js'],
     'packages/desktop': ['src/main.js', 'neuroflow/runtime/neurodesk.mjs'],
     'site/easter-eggs/vessel-surfer-leaderboard': ['src/worker.js'],
-    '.': ['site/app-shell.js', 'site/landing.js', 'site/theme.js', 'exes/nii2tvx/wasm_demo.mjs', 'docs/architecture/dwi-reverse-pe-options/mindgrab-mask.mjs', 'docs/architecture/dwi-reverse-pe-options/drbuddi-wasm/browser-schedule.mjs', 'docs/architecture/dwi-synb0-disco/ort_web_check.mjs', 'exes/fastprep/core/src/assets/sdc.js'],
+    '.': ['site/app-shell.js', 'site/landing.js', 'site/theme.js', 'exes/nii2tvx/wasm_demo.mjs', 'docs/architecture/dwi-reverse-pe-options/mindgrab-mask.mjs', 'docs/architecture/dwi-reverse-pe-options/drbuddi-wasm/browser-schedule.mjs', 'docs/architecture/dwi-synb0-disco/ort_web_check.mjs', 'exes/fastprep/core/src/assets/sdc.js', 'test-utils/lint-coverage-suite.mjs', 'exes/drbuddi-probe/validation/browser.mjs', 'exes/drbuddi-probe/validation/worker.mjs'],
   };
   for (const [workspace, entries] of Object.entries(roots)) {
     for (const entry of entries) assert.ok(config.workspaces[workspace].entry.includes(entry), `${workspace}/${entry}`);
@@ -176,4 +177,62 @@ test('malformed finding names and duplicate groups fail even after a successful 
 test('string export names may be empty or whitespace', () => {
   const report = { issues: [{ file: 'module.js', files: [], exports: [{ name: '' }, { name: '  ' }], types: [], dependencies: [], devDependencies: [], duplicates: [[{ name: '' }, { name: '  ' }]] }] };
   assert.match(summarize(report), /Knip found 3 candidates/);
+});
+
+test('unused-file baseline ratchet catches equal-count replacements, ignores line moves and requires reasons', () => {
+  const baseline = [{ file: 'apps/a/old.js', kind: 'files', name: 'apps/a/old.js', reason: 'Legacy shim' }];
+  // Moving lines does not change identity.
+  assert.equal(
+    findingKey({ file: 'apps/a/old.js', kind: 'files', name: 'apps/a/old.js', line: 1 }),
+    findingKey({ file: 'apps/a/old.js', kind: 'files', name: 'apps/a/old.js', line: 99 }),
+  );
+  // Mixed path separators normalize identically for unused-file entries.
+  assert.deepEqual(
+    compareUnusedBaseline(
+      [{ file: 'apps/a/old.js', kind: 'files', name: 'apps/a/old.js' }],
+      [{ file: 'apps\\a\\old.js', kind: 'files', name: 'apps\\a\\old.js', reason: 'Legacy shim' }],
+    ),
+    { added: [], stale: [] },
+  );
+  // Exact match passes.
+  assert.deepEqual(compareUnusedBaseline([{ file: 'apps/a/old.js', kind: 'files', name: 'apps/a/old.js', line: 42 }], baseline), { added: [], stale: [] });
+  // Equal-count replacement fails on both added and stale.
+  const replaced = compareUnusedBaseline([{ file: 'apps/a/new.js', kind: 'files', name: 'apps/a/new.js' }], baseline);
+  assert.equal(replaced.added.length, 1);
+  assert.equal(replaced.added[0].file, 'apps/a/new.js');
+  assert.equal(replaced.stale.length, 1);
+  assert.equal(replaced.stale[0].file, 'apps/a/old.js');
+  // Resolved entry fails as stale.
+  const resolved = compareUnusedBaseline([], baseline);
+  assert.equal(resolved.stale.length, 1);
+  // Missing reason fails.
+  assert.throws(() => compareUnusedBaseline([], [{ file: 'apps/a/old.js', kind: 'files', name: 'apps/a/old.js', reason: '   ' }]), /specific reason/);
+});
+
+test('unused-file ratchet excludes exports, dependencies and upstream-tracked apps while gating first-party dead files', (t) => {
+  const options = fixture(t);
+  mkdirSync(join(options.cwd, 'apps/upstream-app'), { recursive: true });
+  writeFileSync(join(options.cwd, 'apps/upstream-app/upstream.json'), '{"repository":"https://example.test"}');
+  const scoped = ratchetedFindings([
+    { file: 'dead.js', kind: 'files', name: 'dead.js' },
+    { file: 'helper.js', kind: 'exports', name: 'deadExport', line: 1 },
+    { file: 'apps/upstream-app/orphan.js', kind: 'files', name: 'apps/upstream-app/orphan.js' },
+    { file: 'apps\\upstream-app\\win-orphan.js', kind: 'files', name: 'apps\\upstream-app\\win-orphan.js' },
+  ], { cwd: options.cwd });
+  assert.deepEqual(scoped, [{ file: 'dead.js', kind: 'files', name: 'dead.js' }]);
+
+  const baselineFile = join(options.cwd, 'baseline.json');
+  writeFileSync(baselineFile, JSON.stringify([{ file: 'dead.js', kind: 'files', name: 'dead.js', reason: 'Tracked dead canary' }]));
+  // Matching baseline succeeds even while deadExport remains advisory.
+  runReport({ ...options, baseline: 'baseline.json' });
+  assert.match(readFileSync(options.summary, 'utf8'), /First-party unused files are ratcheted/);
+  // Adding a second dead file fails.
+  writeFileSync(join(options.cwd, 'extra-dead.js'), 'console.log("new dead file");\n');
+  assert.throws(() => runReport({ ...options, baseline: 'baseline.json' }), /New unused first-party files.*extra-dead\.js/);
+  // Equal-count replacement (importing dead.js while leaving extra-dead.js) fails on both added and stale.
+  writeFileSync(join(options.cwd, 'index.js'), "import { live } from './helper.js'; import './dead.js'; console.log(live);\n");
+  assert.throws(() => runReport({ ...options, baseline: 'baseline.json' }), /New unused first-party files.*extra-dead\.js[\s\S]*Resolved unused-code baseline entries.*dead\.js/);
+  // Resolving both leaves dead.js stale until removed from baseline.
+  rmSync(join(options.cwd, 'extra-dead.js'));
+  assert.throws(() => runReport({ ...options, baseline: 'baseline.json' }), /Resolved unused-code baseline entries.*dead\.js/);
 });
