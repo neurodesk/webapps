@@ -29,7 +29,8 @@ Interactive 3D segmentation of MRI and CT scans in the browser using **MedSAM2**
 ## Validation
 
 Exported with `validation/export_onnx.py` (PyTorch 2.5.1, opset 17, `MedSAM2_latest.pt`) with
-target-independent ORT basic constant folding on the image encoder. Preprocessing uses bilinear
+target-independent ORT basic constant folding (onnxruntime 1.20.1, `0.0` max abs diff) on all four
+ONNX graphs. Preprocessing uses bilinear
 resize to `512 × 512` and skips optional CUDA connected-component hole filling (`fill_hole_area = 0`),
 matching PyTorch CPU `SAM2VideoPredictor`. `validation/reference.json` stores PyTorch reference
 masks on `T1_head.nii.gz` (including a 10-slice rolling-memory box case and a single-point case),

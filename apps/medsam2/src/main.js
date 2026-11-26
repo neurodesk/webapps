@@ -137,6 +137,7 @@ let decoding = null;
 let decodeRun = null;
 let loading = null;
 let propagating = null;
+let automating = false;
 let negativeTool = false;
 let outputs = {};
 
@@ -366,7 +367,9 @@ async function switchView(viewId) {
     refreshBase();
     refreshOverlay();
     drawPromptCanvas();
+    schedulePreencode(PREENCODE_SCROLL_MS);
   } else if (volume) {
+    cancelPreencode();
     await syncNiivue();
   }
 }
@@ -417,14 +420,47 @@ async function applyEditedMask(file) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Worker management: one persistent session worker, terminated to cancel propagation.
+// Worker management: one persistent session worker with cooperative cancellation (retaining
+// compiled sessions and cached slice embeddings) and a hard-terminate watchdog fallback.
+
+const CANCEL_HARD_FALLBACK_MS = 30000;
+const PREENCODE_INITIAL_MS = 400;
+const PREENCODE_SCROLL_MS = 250;
 
 let worker = null;
 let messageId = 0;
 const replies = new Map();
+const startedIds = new Set();
+const cancelledWatchdogIds = new Set();
+const cancelWatchdogs = new Map();
 let activePropagationMasks = null;
+let preencodeTimer = null;
+let preencodeRun = null;
+
+function clearCancelWatchdog(id) {
+  startedIds.delete(id);
+  cancelledWatchdogIds.delete(id);
+  const timer = cancelWatchdogs.get(id);
+  if (timer !== undefined) {
+    clearTimeout(timer);
+    cancelWatchdogs.delete(id);
+  }
+}
+
+function armCancelWatchdog(id, w) {
+  if (cancelWatchdogs.has(id) || worker !== w) return;
+  const watchdog = setTimeout(() => {
+    cancelWatchdogs.delete(id);
+    if (worker === w) stopWorker();
+  }, CANCEL_HARD_FALLBACK_MS);
+  cancelWatchdogs.set(id, watchdog);
+}
 
 function stopWorker() {
+  for (const timer of cancelWatchdogs.values()) clearTimeout(timer);
+  cancelWatchdogs.clear();
+  startedIds.clear();
+  cancelledWatchdogIds.clear();
   if (!worker) return;
   worker.terminate();
   worker = null;
@@ -433,14 +469,21 @@ function stopWorker() {
     reply.reject(new DOMException("Cancelled", "AbortError"));
   }
   decoding = null;
+  preencodeRun = null;
 }
 
 function getWorker() {
   if (worker) return worker;
   worker = new Worker(workerUrl, { type: "module" });
+  const currentWorker = worker;
   worker.onmessage = ({ data }) => {
+    if (data.type === "started") {
+      startedIds.add(data.id);
+      if (cancelledWatchdogIds.has(data.id)) armCancelWatchdog(data.id, currentWorker);
+      return;
+    }
     if (data.type === "progress") {
-      progress.setProgress(data.value, data.message);
+      if (decodeRun || propagating) progress.setProgress(data.value, data.message);
       return;
     }
     if (data.type === "log") {
@@ -457,23 +500,30 @@ function getWorker() {
       }
       return;
     }
+    clearCancelWatchdog(data.id);
     const reply = replies.get(data.id);
     if (!reply) return;
     replies.delete(data.id);
-    if (data.type === "error") reply.reject(new Error(data.message));
+    if (data.type === "cancelled") reply.reject(new DOMException("Cancelled", "AbortError"));
+    else if (data.type === "error") reply.reject(new Error(data.message));
     else reply.resolve(data);
   };
   worker.onerror = (event) => {
+    for (const timer of cancelWatchdogs.values()) clearTimeout(timer);
+    cancelWatchdogs.clear();
+    startedIds.clear();
+    cancelledWatchdogIds.clear();
     for (const [id, reply] of replies) {
       replies.delete(id);
       reply.reject(new Error(event.message || "The MedSAM2 worker failed."));
     }
     worker = null;
+    preencodeRun = null;
   };
   return worker;
 }
 
-function callWorker(message, transfer = [], signal = null) {
+function callWorker(message, transfer = [], signal = null, { watchdog = true } = {}) {
   if (signal?.aborted) {
     return Promise.reject(signal.reason ?? new DOMException("Cancelled", "AbortError"));
   }
@@ -482,7 +532,13 @@ function callWorker(message, transfer = [], signal = null) {
     const id = ++messageId;
     const onAbort = () => {
       replies.delete(id);
-      stopWorker();
+      if (worker === w) {
+        if (watchdog) {
+          cancelledWatchdogIds.add(id);
+          if (startedIds.has(id)) armCancelWatchdog(id, w);
+        }
+        w.postMessage({ type: "cancel", targetId: id });
+      }
       reject(signal.reason ?? new DOMException("Cancelled", "AbortError"));
     };
     const cleanup = () => signal?.removeEventListener("abort", onAbort);
@@ -493,6 +549,92 @@ function callWorker(message, transfer = [], signal = null) {
     signal?.addEventListener("abort", onAbort, { once: true });
     w.postMessage({ ...message, id }, transfer);
   });
+}
+
+function cancelPreencode() {
+  if (preencodeTimer !== null) {
+    clearTimeout(preencodeTimer);
+    preencodeTimer = null;
+  }
+  if (preencodeRun) {
+    const run = preencodeRun;
+    preencodeRun = null;
+    run.controller.abort();
+  }
+}
+
+async function runPreencode() {
+  if (!volume || automating || loading || propagating || decoding || activeView !== "prompt") return;
+  const gen = volumeGeneration;
+  const targetAxis = axis;
+  const targetSlice = currentSlice;
+  const winKey = windowKey();
+  const requestedBackend = $("backend").value;
+  const backend = await resolveBackend(requestedBackend);
+  if (
+    !volume
+    || automating
+    || loading
+    || propagating
+    || decoding
+    || activeView !== "prompt"
+    || gen !== volumeGeneration
+    || targetAxis !== axis
+    || targetSlice !== currentSlice
+    || winKey !== windowKey()
+    || requestedBackend !== $("backend").value
+  ) {
+    return;
+  }
+  const primaryKey = `${gen}:${targetAxis}:${winKey}:${targetSlice}`;
+  if (preencodeRun && preencodeRun.sliceKeys.has(primaryKey) && preencodeRun.backend === backend) return;
+  cancelPreencode();
+  const { width, height, depth } = geom();
+  const indices = [targetSlice];
+  if (targetSlice + 1 < depth) indices.push(targetSlice + 1);
+  if (targetSlice - 1 >= 0) indices.push(targetSlice - 1);
+  const slices = [];
+  const transfers = [];
+  for (const s of indices) {
+    const u8 = extractSliceUint8(volume.data, volume.dims, targetAxis, s, intensityWindow.lo, intensityWindow.hi);
+    slices.push({ sliceKey: `${gen}:${targetAxis}:${winKey}:${s}`, sliceUint8: u8 });
+    transfers.push(u8.buffer);
+  }
+  const controller = new AbortController();
+  const run = {
+    controller,
+    backend,
+    sliceKey: primaryKey,
+    sliceKeys: new Set(slices.map((s) => s.sliceKey)),
+  };
+  preencodeRun = run;
+  try {
+    await callWorker({
+      type: "preencode",
+      slices,
+      width,
+      height,
+      backend,
+      pinKey: primaryKey,
+      onlyIfCached: true,
+    }, transfers, controller.signal, { watchdog: false });
+  } catch {
+    // Background pre-encoding is best-effort and never reports errors to the UI.
+  } finally {
+    if (preencodeRun === run) preencodeRun = null;
+  }
+}
+
+function schedulePreencode(delayMs = PREENCODE_SCROLL_MS) {
+  if (preencodeTimer !== null) {
+    clearTimeout(preencodeTimer);
+    preencodeTimer = null;
+  }
+  if (!volume || automating || loading || propagating || decoding || activeView !== "prompt") return;
+  preencodeTimer = setTimeout(() => {
+    preencodeTimer = null;
+    void runPreencode();
+  }, delayMs);
 }
 
 async function resolveBackend(requested = $("backend").value) {
@@ -589,11 +731,10 @@ function resetSession() {
   volumeGeneration++;
   editing = null;
   editor?.cancel();
-  const hadActiveWork = Boolean(decodeRun || propagating);
+  cancelPreencode();
   decodeRun?.abort();
   decodeRun = null;
   propagating?.abort();
-  if (hadActiveWork) stopWorker();
   resetPrompt();
   objects = [];
   nextId = 1;
@@ -632,6 +773,7 @@ async function activateSeries(file, signal) {
   $("axisSelect").value = axis;
   currentSlice = Math.floor(geom().depth / 2);
   resetSession();
+  if (worker) worker.postMessage({ type: "clearCache", id: ++messageId });
   labels = new Uint8Array(volume.data.length);
   $("windowField").hidden = false;
   $("emptyState").hidden = true;
@@ -648,13 +790,16 @@ async function activateSeries(file, signal) {
   if (activeView !== "prompt") await syncNiivue();
   status(`${file.name} loaded · click or drag a box on any slice to prompt`);
   log.log(`${file.name}: RAS ${nx} × ${ny} × ${nz}, spacing ${px}×${py}×${pz} mm, window [${intensityWindow.lo.toFixed(1)}, ${intensityWindow.hi.toFixed(1)}]`, "info", "analysis");
+  schedulePreencode(PREENCODE_INITIAL_MS);
 }
 
 async function loadFiles(filesPromise, signal) {
   const operation = begin("Reading scan and converting DICOM if needed…", signal);
+  cancelPreencode();
   loading = operation.controller;
   updateControls();
   const current = operation.controller.signal;
+  let loadedOk = false;
   try {
     const rawFiles = await filesPromise;
     current.throwIfAborted();
@@ -671,10 +816,12 @@ async function loadFiles(filesPromise, signal) {
     await activateSeries(seriesList[0], current);
     $("imageInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files: rawFiles } }));
     progress.setProgress(0);
+    loadedOk = true;
   } finally {
     loading = null;
     finish(operation);
   }
+  if (loadedOk) schedulePreencode(PREENCODE_INITIAL_MS);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -684,7 +831,7 @@ function windowKey() {
   return `${intensityWindow.lo.toFixed(3)}:${intensityWindow.hi.toFixed(3)}`;
 }
 
-function promptChanged(requestedBackend = $("backend").value) {
+function promptChanged(requestedBackend = $("backend").value, externalSignal = null) {
   const version = ++promptVersion;
   const gen = volumeGeneration;
   pending3D = null;
@@ -704,12 +851,22 @@ function promptChanged(requestedBackend = $("backend").value) {
   const sliceKey = `${gen}:${targetAxis}:${windowKey()}:${targetSlice}`;
 
   const run = (decoding ?? Promise.resolve()).catch(() => {}).then(async () => {
+    externalSignal?.throwIfAborted();
     if (version !== promptVersion || gen !== volumeGeneration || !volume) return null;
+    if (preencodeTimer !== null) {
+      clearTimeout(preencodeTimer);
+      preencodeTimer = null;
+    }
     const controller = new AbortController();
+    const onExternalAbort = () => controller.abort(externalSignal.reason);
+    externalSignal?.addEventListener("abort", onExternalAbort, { once: true });
     decodeRun = controller;
     progress.begin("Segmenting slice…");
     try {
       const backend = await resolveBackend(requestedBackend);
+      if (preencodeRun && (preencodeRun.backend !== backend || !preencodeRun.sliceKeys.has(sliceKey))) {
+        cancelPreencode();
+      }
       if (version !== promptVersion || gen !== volumeGeneration || !volume || controller.signal.aborted) {
         progress.reset(volume ? "Ready" : undefined);
         return null;
@@ -743,6 +900,7 @@ function promptChanged(requestedBackend = $("backend").value) {
       status(`Slice ${targetSlice + 1} preview ready (IoU ${result.score.toFixed(2)}) · click Propagate in 3D or Accept`);
       return pending;
     } finally {
+      externalSignal?.removeEventListener("abort", onExternalAbort);
       if (decodeRun === controller) {
         decodeRun = null;
         progress.stopTimer();
@@ -758,6 +916,9 @@ function promptChanged(requestedBackend = $("backend").value) {
   }).finally(() => {
     if (decoding === run) decoding = null;
     updateControls();
+    if (!decoding && volume && activeView === "prompt" && !automating) {
+      schedulePreencode(PREENCODE_SCROLL_MS);
+    }
   });
   return run;
 }
@@ -778,12 +939,17 @@ async function propagate3D(signal, {
   const snapshot = structuredClone(prompt);
 
   const operation = begin(`Propagating in 3D across slices ${rangeMin + 1}–${rangeMax + 1}…`, signal);
+  if (preencodeTimer !== null) {
+    clearTimeout(preencodeTimer);
+    preencodeTimer = null;
+  }
   propagating = operation.controller;
   const current = operation.controller.signal;
   updateControls();
 
   try {
     const backend = await resolveBackend(requestedBackend);
+    if (preencodeRun && preencodeRun.backend !== backend) cancelPreencode();
     const slicesUint8 = [];
     const transfers = [];
     for (let s = rangeMin; s <= rangeMax; s++) {
@@ -833,6 +999,7 @@ async function propagate3D(signal, {
     activePropagationMasks = null;
     propagating = null;
     finish(operation);
+    if (volume && activeView === "prompt" && !automating) schedulePreencode(PREENCODE_SCROLL_MS);
   }
 }
 
@@ -917,6 +1084,9 @@ function setSlice(nextSlice) {
   refreshOverlay();
   drawPromptCanvas();
   updateControls();
+  const nextKey = `${volumeGeneration}:${axis}:${windowKey()}:${currentSlice}`;
+  if (preencodeRun && !preencodeRun.sliceKeys.has(nextKey)) cancelPreencode();
+  schedulePreencode(PREENCODE_SCROLL_MS);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -982,6 +1152,8 @@ $("axisSelect").addEventListener("change", () => {
   refreshOverlay();
   drawPromptCanvas();
   updateControls();
+  cancelPreencode();
+  schedulePreencode(PREENCODE_INITIAL_MS);
 });
 $("sliceSlider").addEventListener("input", () => setSlice(Number($("sliceSlider").value)));
 $("windowPreset").addEventListener("change", () => {
@@ -992,6 +1164,14 @@ $("windowPreset").addEventListener("change", () => {
   refreshOverlay();
   drawPromptCanvas();
   status(`Window set to [${intensityWindow.lo.toFixed(1)}, ${intensityWindow.hi.toFixed(1)}]`);
+  cancelPreencode();
+  schedulePreencode(PREENCODE_INITIAL_MS);
+});
+$("backend").addEventListener("change", () => {
+  void resolveBackend($("backend").value).then((nextBackend) => {
+    if (preencodeRun && preencodeRun.backend !== nextBackend) cancelPreencode();
+    schedulePreencode(PREENCODE_INITIAL_MS);
+  });
 });
 $("seriesSelect").addEventListener("change", () => {
   const file = seriesList[Number($("seriesSelect").value)];
@@ -1068,57 +1248,65 @@ const automation = registerAppAutomation({
   convertDicom: runDcm2niix,
   operations: {
     segment: async ({ inputs, parameters, signal }) => {
-      await loadFiles(Promise.resolve(inputs.image), signal);
-      if (parameters.window) {
-        $("windowPreset").value = parameters.window;
-        intensityWindow = computeWindow(volume.data, parameters.window);
-      }
-      const prompts = parsePrompts(parameters.prompts, volume.dims);
-      const backend = parameters.backend ?? "auto";
-      for (const item of prompts) {
-        signal?.throwIfAborted();
-        axis = item.axis;
-        $("axisSelect").value = axis;
-        currentSlice = item.slice;
-        refreshBase();
-        prompt = { points: structuredClone(item.points), box: item.box ? [...item.box] : null };
-        promptOrder = [...prompt.points.map(() => "point"), ...(prompt.box ? ["box"] : [])];
-        if (item.propagate) {
-          await propagate3D(signal, {
-            requestedBackend: backend,
-            range: item.range,
-            stopOnEmpty: parameters.stopOnEmpty ?? false,
-          });
-        } else {
-          await promptChanged(backend);
+      automating = true;
+      cancelPreencode();
+      try {
+        await loadFiles(Promise.resolve(inputs.image), signal);
+        if (parameters.window) {
+          $("windowPreset").value = parameters.window;
+          intensityWindow = computeWindow(volume.data, parameters.window);
         }
-        if (!(await accept())) throw new Error("MedSAM2 returned no mask.");
+        const prompts = parsePrompts(parameters.prompts, volume.dims);
+        const backend = parameters.backend ?? "auto";
+        for (const item of prompts) {
+          signal?.throwIfAborted();
+          axis = item.axis;
+          $("axisSelect").value = axis;
+          currentSlice = item.slice;
+          refreshBase();
+          prompt = { points: structuredClone(item.points), box: item.box ? [...item.box] : null };
+          promptOrder = [...prompt.points.map(() => "point"), ...(prompt.box ? ["box"] : [])];
+          if (item.propagate) {
+            await propagate3D(signal, {
+              requestedBackend: backend,
+              range: item.range,
+              stopOnEmpty: parameters.stopOnEmpty ?? false,
+            });
+          } else {
+            await promptChanged(backend, signal);
+          }
+          signal?.throwIfAborted();
+          if (!(await accept())) throw new Error("MedSAM2 returned no mask.");
+        }
+        return {
+          artifacts: [
+            { role: "labels", file: outputs.segmentation.file },
+            { role: "table", file: outputs.table.file },
+          ],
+          provenance: {
+            method: "MedSAM2 interactive 3D segmentation",
+            model: MODEL.name,
+            imageEncoderSha256: MODEL.imageEncoder.sha256,
+            maskDecoderSha256: MODEL.maskDecoder.sha256,
+            memoryEncoderSha256: MODEL.memoryEncoder.sha256,
+            memoryAttentionSha256: MODEL.memoryAttention.sha256,
+            dims: volume.dims,
+            window: intensityWindow,
+            objects: objects.map(({ id, axis: a, slices, voxels, score, backend: b, prompt: used }) => ({
+              id, axis: a, slices, voxels, score, backend: b, prompt: used,
+            })),
+          },
+        };
+      } finally {
+        automating = false;
       }
-      return {
-        artifacts: [
-          { role: "labels", file: outputs.segmentation.file },
-          { role: "table", file: outputs.table.file },
-        ],
-        provenance: {
-          method: "MedSAM2 interactive 3D segmentation",
-          model: MODEL.name,
-          imageEncoderSha256: MODEL.imageEncoder.sha256,
-          maskDecoderSha256: MODEL.maskDecoder.sha256,
-          memoryEncoderSha256: MODEL.memoryEncoder.sha256,
-          memoryAttentionSha256: MODEL.memoryAttention.sha256,
-          dims: volume.dims,
-          window: intensityWindow,
-          objects: objects.map(({ id, axis: a, slices, voxels, score, backend: b, prompt: used }) => ({
-            id, axis: a, slices, voxels, score, backend: b, prompt: used,
-          })),
-        },
-      };
     },
   },
 });
 
 window.addEventListener("pagehide", () => {
   exampleControl.destroy();
+  cancelPreencode();
   loading?.abort();
   propagating?.abort();
   stopWorker();

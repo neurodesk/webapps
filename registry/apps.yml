@@ -1990,6 +1990,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
+      hardware_gpu: true
       release: false
   - id: brainchomp
     path: brainchomp
