@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 2,
+  "app": "laynii",
+  "title": "LayNii",
+  "description": "Compute equidistant or equivolume cortical layers (LN2_LAYERS) and optional laminar signal profiles (LN2_PROFILE) from a 3D rim segmentation.",
+  "defaultOperation": "layers",
+  "operations": {
+    "layers": {
+      "title": "Compute cortical layers",
+      "description": "Run LayNii LN2_LAYERS on a 3D rim NIfTI volume (labels 1=CSF border, 2=WM border, 3=gray matter) and optionally compute a layer-wise mean/SD profile with LN2_PROFILE on a matched 3D signal volume.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:labelmap",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "description": "3D cortical rim volume (1=outer CSF border, 2=inner WM border, 3=gray matter)",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "signal": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "description": "Optional 3D functional or quantitative map on the same grid for LN2_PROFILE",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "nrLayers": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 100,
+          "default": 3,
+          "description": "Number of cortical depth layers to generate"
+        },
+        "equivol": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also compute equivolume cortical layers (-equivol; recommended below 0.3 mm)"
+        },
+        "iterSmooth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2000,
+          "default": 100,
+          "description": "Smoothing iterations for equivolume, thickness and curvature (-iter_smooth)"
+        },
+        "thickness": {
+          "type": "boolean",
+          "default": false,
+          "description": "Export cortical thickness map (-thickness)"
+        },
+        "curvature": {
+          "type": "boolean",
+          "default": false,
+          "description": "Export cortical curvature map (-curvature)"
+        },
+        "inclBorders": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include inner and outer borders in layering (-incl_borders)"
+        },
+        "equalCounts": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also compute equal-voxel-count layers (-equal_counts)"
+        },
+        "noSmooth": {
+          "type": "boolean",
+          "default": false,
+          "description": "Disable smoothing on the depth metric (-no_smooth)"
+        }
+      },
+      "artifacts": {
+        "layers_equidist": {
+          "type": "neuro:labelmap",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "metric_equidist": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "midgm_equidist": {
+          "type": "neuro:mask",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "layers_equivol": {
+          "type": "neuro:labelmap",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "metric_equivol": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "midgm_equivol": {
+          "type": "neuro:mask",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "layers_equicount": {
+          "type": "neuro:labelmap",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "thickness": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "curvature": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "profile": {
+          "type": "file:csv",
+          "mediaType": "text/csv",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

@@ -148,6 +148,12 @@ test('contract tests, tooling, docs and other workflows select no apps and no si
   const registry = await loadAppsRegistry();
   const plan = createAppPlan(registry, [
     'AGENTS.md',
+    'apps/elastix/AGENTS.md',
+    'apps/calmar/CLAUDE.md',
+    'apps/vesselboost/AGENT.md',
+    'packages/node-drivers/AGENTS.md',
+    'packages/components/src/webmcp/AGENTS.md',
+    'exes/AGENTS.md',
     'packages/components/CHANGELOG.md',
     'test/app-plan.test.mjs',
     'test/standalone-links.test.mjs',
@@ -158,6 +164,7 @@ test('contract tests, tooling, docs and other workflows select no apps and no si
     'scripts/check-standalone-links.mjs',
     '.github/workflows/lcmodel-native.yml',
     '.github/workflows/standalone-links.yml',
+    '.github/aw/actions-lock.json',
     'scripts/quality/package.json',
     'eslint.config.js',
     'config/dependency-baseline.json',
@@ -394,7 +401,7 @@ test('ESLint stays out of every app build, unit test and browser test', async ()
   // ESLint, and nothing else loads the runner or the config.
   const workspace = await graph;
   const catalog = reachableFrom(workspace, CATALOG);
-  const loaders = new Set(['scripts/lint.mjs', 'eslint.config.js', 'test-utils/lint-coverage-suite.mjs']);
+  const loaders = new Set(['scripts/lint.mjs', 'scripts/report-maintainability.mjs', 'eslint.config.js', 'test-utils/lint-coverage-suite.mjs']);
   const imports = /(?:from\s*|import\s*\(\s*|require\(\s*)['"](?:(?:eslint|@eslint\/js|globals)(?:\/[^'"]*)?|[^'"]*\/(?:lint\.mjs|eslint\.config\.js))['"]|['"](?:[^'"]*\/)?scripts\/lint\.mjs['"]/;
   const sources = execFileSync('git', ['ls-files', '-z'], { cwd: repoRoot, encoding: 'utf8' })
     .split('\0').filter(path => /\.(?:[cm]?[jt]sx?)$/.test(path));
@@ -1327,7 +1334,7 @@ test('a draft pull request skips package-tests only when every changed path lies
   const registry = await loadAppsRegistry();
   const workspace = await graph;
   const pkgs = (paths, options) => createAppPlan(registry, paths, workspace, new Map(), options).packageTests;
-  for (const path of ['docs/quality/ci-development-tiers.md', '.changeset/brave-owls.md', 'README.md', 'site/easter-eggs/vessel-surfer/src/main.js']) {
+  for (const path of ['docs/quality/ci-development-tiers.md', '.changeset/brave-owls.md', 'README.md', 'AGENTS.md', 'apps/elastix/AGENTS.md', 'packages/components/src/webmcp/AGENTS.md', 'exes/AGENTS.md', 'site/easter-eggs/vessel-surfer/src/main.js']) {
     assert.equal(packageTestsCanSkipOnDraft(path), true, path);
     assert.deepEqual(pkgs([path], { draft: true }), [], path);
   }
@@ -2701,10 +2708,127 @@ test('an app runs its @heavy browser tests only when the change edits it, a fail
   // Release bookkeeping in the app's own directory is not an edit, and a diff of only bookkeeping is no full run.
   const changelog = heavy(createAppPlan(registry, ['packages/components/src/styles/imaging-workspace.css', 'apps/sdc/CHANGELOG.md'], workspace));
   assert.equal(changelog.sdc, false);
+  // Scoped agent guides do not trigger draft app selection or @heavy tests on mixed diffs.
+  const guideMixed = ['packages/components/src/styles/imaging-workspace.css', 'apps/bison/AGENTS.md', 'packages/bison/AGENTS.md'];
+  const guideDraft = createAppPlan(registry, guideMixed, workspace, new Map(), { draft: true });
+  assert.deepEqual(guideDraft.selected, []);
+  const guideReady = createAppPlan(registry, guideMixed, workspace);
+  assert.equal(heavy(guideReady).bison, false);
+  // A cross-app reader of an app's agent guide is still selected when graph.appReaders reports it.
+  const readerGraph = {
+    ...workspace,
+    appReaders: (path) => (path === 'apps/bison/AGENTS.md' ? ['elastix'] : workspace.appReaders(path)),
+  };
+  const withReader = createAppPlan(registry, ['apps/bison/AGENTS.md'], readerGraph);
+  assert.deepEqual(withReader.selected.map((app) => app.id), ['elastix']);
   const onlyBookkeeping = createAppPlan(registry, ['apps/sdc/CHANGELOG.md'], workspace, new Map(), { carried: new Map([['synthseg', ['browser-e2e (synthseg)']]]) });
   assert.deepEqual(heavy(onlyBookkeeping), { synthseg: true });
   // The tag is measured in the CPU job; the macOS GPU job runs every test.
   assert.ok(createAppPlan(registry, ['apps/sdc/src/main.js'], workspace).gpuApps.include.every((entry) => !('heavy_tests' in entry)));
+});
+
+function hasVerifiedGhAwLockMetadata(file, text) {
+  if (!/^\.github\/workflows\/[^/]+\.lock\.yml$/.test(file)) return false;
+  const firstLine = text.split(/\r?\n/, 1)[0] ?? '';
+  const match = firstLine.match(/^# gh-aw-metadata:\s*(\{.*\})$/);
+  if (!match) return false;
+  try {
+    const meta = JSON.parse(match[1]);
+    return meta?.strict === true && typeof meta?.compiler_version === 'string' && /^v\d+\.\d+\.\d+/.test(meta.compiler_version);
+  } catch {
+    return false;
+  }
+}
+
+function yamlContainsUnexpectedExemptRef(text, exemptRef) {
+  let flow;
+  try {
+    flow = parse(text);
+  } catch {
+    return true;
+  }
+  const visit = (value, path = []) => {
+    if (typeof value === 'string') {
+      // Allow only the single compiler-generated env entry on activation's save_base_github_folders step.
+      if (
+        path.length === 6
+        && path[0] === 'jobs'
+        && path[1] === 'activation'
+        && path[2] === 'steps'
+        && path[4] === 'env'
+        && path[5] === 'GH_AW_AGENT_FILES'
+        && value === 'AGENTS.md'
+      ) {
+        const step = flow?.jobs?.activation?.steps?.[path[3]];
+        if (
+          step?.name === 'Save agent config folders for base branch restoration'
+          && typeof step?.run === 'string'
+          && step.run.trim() === 'bash "${RUNNER_TEMP}/gh-aw/actions/save_base_github_folders.sh"'
+        ) {
+          return false;
+        }
+      }
+      return exemptRef.test(value);
+    }
+    if (Array.isArray(value)) {
+      return value.some((item, index) => visit(item, [...path, index]));
+    }
+    if (value && typeof value === 'object') {
+      return Object.entries(value).some(([key, val]) => exemptRef.test(key) || visit(val, [...path, key]));
+    }
+    return false;
+  };
+  return visit(flow);
+}
+
+function unexpectedExemptPathReads(entries) {
+  const exemptRef = /\.github\/aw\b|\.github['"],\s*['"]aw['"]|\b(?:AGENTS|AGENT|CLAUDE)\.md\b/;
+  const allowedMetadata = (file) => /^apps\/[^/]+\/upstream\.json$/.test(file)
+    || file === 'apps/spinalcordtoolbox/.specify/init-options.json'
+    || file === 'scripts/lib/app-plan.mjs'
+    || file === 'scripts/lib/app-plan-shadow.mjs'
+    || file.startsWith('test/');
+  const findings = [];
+  for (const [file, text] of entries) {
+    if (allowedMetadata(file)) continue;
+    if (hasVerifiedGhAwLockMetadata(file, text)) {
+      if (yamlContainsUnexpectedExemptRef(text, exemptRef)) findings.push(file);
+      continue;
+    }
+    for (const line of text.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('//') || trimmed.startsWith('#')) continue;
+      if (exemptRef.test(trimmed)) {
+        findings.push(file);
+        break;
+      }
+    }
+  }
+  return findings;
+}
+
+test('no app build, package source, root script or workflow reads .github/aw/ or scoped agent guides', async () => {
+  // Verify the guard itself rejects injected app-local, cross-app and .github/aw/ reads (including joined paths).
+  assert.deepEqual(
+    unexpectedExemptPathReads([
+      ['apps/bison/scripts/build.mjs', "readFileSync(new URL('../AGENTS.md', import.meta.url));"],
+      ['apps/elastix/scripts/build.mjs', "readFileSync('../../apps/bison/AGENTS.md', 'utf8');"],
+      ['apps/bison/scripts/build.mjs', "readFileSync('../../.github/aw/actions-lock.json', 'utf8');"],
+      ['apps/bison/scripts/join-build.mjs', "readFileSync(join(repoRoot, '.github/aw', 'actions-lock.json'), 'utf8');"],
+      ['apps/bison/scripts/split-build.mjs', "readFileSync(join(repoRoot, '.github', 'aw', 'actions-lock.json'), 'utf8');"],
+      ['apps/bison/scripts/comment-only.mjs', '// See AGENTS.md for build notes\nexport const ok = true;'],
+      ['.github/workflows/fake.lock.yml', '# gh-aw-metadata: {"strict":true,"compiler_version":"v1.2.2"}\njobs:\n  a:\n    steps:\n      - run: cat apps/bison/AGENTS.md\n'],
+      ['.github/workflows/run-block.lock.yml', '# gh-aw-metadata: {"strict":true,"compiler_version":"v1.2.2"}\njobs:\n  activation:\n    steps:\n      - run: |\n          GH_AW_AGENT_FILES: "AGENTS.md"\n'],
+      ['.github/workflows/bad-header.lock.yml', '# gh-aw-metadata: not-json\njobs:\n  activation:\n    steps:\n      - name: Save agent config folders for base branch restoration\n        env:\n          GH_AW_AGENT_FILES: "AGENTS.md"\n        run: bash "${RUNNER_TEMP}/gh-aw/actions/save_base_github_folders.sh"\n'],
+      ['.github/workflows/real.lock.yml', '# gh-aw-metadata: {"strict":true,"compiler_version":"v1.2.2"}\njobs:\n  activation:\n    steps:\n      - name: Save agent config folders for base branch restoration\n        env:\n          GH_AW_AGENT_FILES: "AGENTS.md"\n        run: bash "${RUNNER_TEMP}/gh-aw/actions/save_base_github_folders.sh"\n'],
+      ['.github/workflows/real-crlf.lock.yml', '# gh-aw-metadata: {"strict":true,"compiler_version":"v1.2.2"}\r\njobs:\r\n  activation:\r\n    steps:\r\n      - name: Save agent config folders for base branch restoration\r\n        env:\r\n          GH_AW_AGENT_FILES: "AGENTS.md"\r\n        run: bash "${RUNNER_TEMP}/gh-aw/actions/save_base_github_folders.sh"\r\n'],
+      ['.github/workflows/bad-crlf.lock.yml', '# gh-aw-metadata: {"strict":true,"compiler_version":"v1.2.2"}\r\njobs:\r\n  activation:\r\n    steps:\r\n      - run: cat AGENTS.md\r\n'],
+    ]),
+    ['apps/bison/scripts/build.mjs', 'apps/elastix/scripts/build.mjs', 'apps/bison/scripts/build.mjs', 'apps/bison/scripts/join-build.mjs', 'apps/bison/scripts/split-build.mjs', '.github/workflows/fake.lock.yml', '.github/workflows/run-block.lock.yml', '.github/workflows/bad-header.lock.yml', '.github/workflows/bad-crlf.lock.yml'],
+  );
+  const candidates = filesNaming('\\.github/aw\\b|\\.github[\'"],[[:space:]]*[\'"]aw[\'"]|\\b(AGENTS|AGENT|CLAUDE)\\.md\\b');
+  const entries = await Promise.all(candidates.map(async (file) => [file, await readFile(join(repoRoot, file), 'utf8')]));
+  assert.deepEqual(unexpectedExemptPathReads(entries), []);
 });
 
 test('pnpm-workspace.yaml narrows only for valid exact-version minimumReleaseAgeExclude relaxations and unlocked removals', async () => {

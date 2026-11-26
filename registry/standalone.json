@@ -3367,6 +3367,45 @@
       ],
       "containers": []
     },
+    "vesselcharter": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "laynii": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": [
+        {
+          "id": "laynii",
+          "label": "laynii 2.10.0 (20261012)",
+          "url": "https://hub.docker.com/r/vnmd/laynii_2.10.0",
+          "dockerImage": "vnmd/laynii_2.10.0:20261012",
+          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/laynii_2.10.0_20261012.simg",
+          "apptainerName": "laynii_2.10.0_20261012"
+        }
+      ]
+    },
+    "aurora": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": [
+        {
+          "id": "brainles-aurora",
+          "label": "brainles-aurora 0.2.7 (20261024)",
+          "url": "https://hub.docker.com/r/vnmd/brainles-aurora_0.2.7",
+          "dockerImage": "vnmd/brainles-aurora_0.2.7:20261024",
+          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/brainles-aurora_0.2.7_20261024.simg",
+          "apptainerName": "brainles-aurora_0.2.7_20261024"
+        }
+      ]
+    },
     "openads": {
       "desktop": true,
       "profile": "interactive",

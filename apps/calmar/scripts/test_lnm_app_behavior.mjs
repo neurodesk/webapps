@@ -3839,3 +3839,530 @@ console.log('lnm-app behavior OK: dispatch + precondition + explicit-start + spl
   assert.deepEqual(app.nv.scene.crosshairPos, [10, 0, 0], 'center on foreground, not the empty midpoint');
   assert.equal(draws, 1, 'centering redraws the visible scan');
 }
+
+// ---- Arterial territories direct-overlap behavior, affine guard, denominators, and switching ----
+{
+  const app = makeApp();
+  const dom = new JSDOM();
+  const tableEl = dom.window.document.createElement('table');
+  const helpEl = { textContent: '' };
+  const coverageEl = { textContent: '', classList: makeClassList(['hidden']) };
+  const thresholdControlsEl = { classList: makeClassList([]) };
+  const thresholdSummaryEl = { textContent: '' };
+  const resultsSection = { classList: makeClassList(['collapsed']) };
+  const downloadOverlapCsv = { disabled: true };
+  const emptyResultEl = { classList: makeClassList(['hidden']) };
+  const emptyTableEl = { innerHTML: '' };
+  const minClusterEl = { value: '0' };
+  const restoreDocument = useMockElements({
+    networkOverlapTable: tableEl,
+    directOverlapHelp: helpEl,
+    outsideAtlasWarning: coverageEl,
+    thresholdControls: thresholdControlsEl,
+    networkThresholdSummary: thresholdSummaryEl,
+    networkThresholdMinCluster: minClusterEl,
+    resultsSection,
+    downloadOverlapCsv,
+    affectedNetworkResults: emptyResultEl,
+    affectedNetworkTable: emptyTableEl,
+    mapFunctionProfileResults: emptyResultEl,
+    mapFunctionProfileTable: emptyTableEl,
+    directFunctionProfileResults: emptyResultEl,
+    directFunctionProfileTable: emptyTableEl
+  });
+  const originalCreateElement = globalThis.document.createElement;
+  globalThis.document.createElement = tag => dom.window.document.createElement(tag);
+  const originalFetch = globalThis.fetch;
+  const originalCaches = globalThis.caches;
+  globalThis.caches = undefined;
+
+  // 2x2x2 synthetic arterial atlas at FSL-style affine: label 7 (Left MCA Frontal), label 8 (Right MCA Frontal), 0 (ventricle/unlabeled).
+  const atlasAffine = [
+    -1, 0, 0, 90,
+    0, 1, 0, -126,
+    0, 0, 1, -72
+  ];
+  const shiftedAffine = [
+    -1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0
+  ];
+  const atlasBuf = writeNifti1(new Uint8Array([7, 7, 7, 7, 8, 8, 0, 0]), {
+    dims: [2, 2, 2],
+    spacing: [1, 1, 1],
+    affine: atlasAffine
+  });
+  const mockManifest = {
+    atlasAssets: [{
+      id: 'arterial-territories-mni152-1mm',
+      sourceUrl: 'https://example.test/arterial.nii',
+      cacheKey: 'arterial-test',
+      dims: [2, 2, 2],
+      resolutionMm: 1,
+      supportStatus: 'supported',
+      parcelLabels: {
+        7: 'Left Middle Cerebral Artery (Frontal)',
+        8: 'Right Middle Cerebral Artery (Frontal)'
+      }
+    }]
+  };
+
+  globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('manifest.json')) {
+      return { ok: true, status: 200, async json() { return mockManifest; } };
+    }
+    if (href === 'https://example.test/arterial.nii') {
+      return { ok: true, status: 200, async arrayBuffer() { return atlasBuf.slice(0); } };
+    }
+    throw new Error(`Unexpected fetch URL in arterial behavior test: ${href}`);
+  };
+
+  app.viewerController = {
+    loadBaseVolume: async () => {},
+    loadOverlay: async () => {},
+    removeVolumeForStage: () => {},
+    setViewType: () => {}
+  };
+  app.refreshViewerLayerControls = () => {};
+  app.renderMethodSummary = () => {};
+
+  try {
+    // 1. Switching from Schaefer400 to arterial clears stale connectivity state and hides thresholdControls.
+    app.selectedAtlasOptionId = 'schaefer400';
+    app.networkMapData = new Float32Array([1, 2]);
+    app.networkMapFile = { name: 'stale-fc.nii' };
+    app.thresholdedMaskFile = { name: 'stale-thresh.nii' };
+    app.affectedNetworkResult = { summary: { networks: [{ network: 'LH_Vis_1', voxelsInLesion: 5, fractionOfLesion: 1 }] } };
+    app.handleAtlasSelectionChange('arterial');
+    assert.equal(app.selectedAtlasOptionId, 'arterial');
+    assert.equal(app.networkMapData, null, 'switching to arterial clears stale networkMapData');
+    assert.equal(app.networkMapFile, null, 'switching to arterial clears stale networkMapFile');
+    assert.equal(app.thresholdedMaskFile, null, 'switching to arterial clears stale thresholdedMaskFile');
+    assert.equal(app.affectedNetworkResult, null, 'switching to arterial clears stale affectedNetworkResult');
+    assert.equal(thresholdControlsEl.classList.contains('hidden'), true, 'direct-overlap-only arterial hides threshold controls');
+    assert.equal(app.getAtlasColormap(), null, 'arterial uses neutral fallback colormap');
+
+    // 2. Same-shape shifted-affine upload must be rejected without tagging it in arterial atlas space.
+    const shiftedBuf = writeNifti1(new Uint8Array([1, 1, 0, 0, 0, 0, 0, 0]), {
+      dims: [2, 2, 2],
+      spacing: [1, 1, 1],
+      affine: shiftedAffine
+    });
+    const shiftedFile = { name: 'shifted-origin.nii', arrayBuffer: async () => shiftedBuf.slice(0) };
+    await app.setLesion(shiftedFile);
+    assert.equal(getSpatialMetadata(shiftedFile)?.space, undefined, 'setLesion does not prematurely stamp an unverified atlas space');
+    assert.equal(await app._lesionFileMatchesAtlasGrid(), false, 'grid matcher rejects same-shape shifted affine');
+    const rejected = await app.runAtlasOverlap();
+    assert.deepEqual(rejected, { stopPipeline: true }, 'mismatched affine stops pipeline');
+    assert.equal(app.overlapResult, null, 'mismatched affine publishes no overlapResult');
+    assert.equal(getSpatialMetadata(shiftedFile)?.space, undefined, 'mismatched affine file stays untagged');
+    assert.match(app._messages.at(-1), /Lesion affine does not match/);
+
+    // 3. Matching affine with known Left/Right hits + unlabeled/ventricular voxels and visible min-cluster filtering.
+    // Lesion hits: 2 of 4 Left MCA Frontal voxels, 1 of 2 Right MCA Frontal voxels, 1 unlabeled/ventricle voxel -> 4 total lesion voxels.
+    const alignedBuf = writeNifti1(new Uint8Array([1, 1, 0, 0, 1, 0, 1, 0]), {
+      dims: [2, 2, 2],
+      spacing: [1, 1, 1],
+      affine: atlasAffine
+    });
+    const alignedFile = { name: 'aligned-arterial.nii', arrayBuffer: async () => alignedBuf.slice(0) };
+    await app.setLesion(alignedFile);
+    assert.equal(await app._lesionFileMatchesAtlasGrid(), true, 'grid matcher accepts matching dims and affine');
+    await app.runAtlasOverlap();
+    assert.equal(getSpatialMetadata(alignedFile)?.space, 'atlas:arterial-territories-mni152-1mm');
+    assert.ok(app.overlapResult, 'matching affine produces overlapResult');
+    const summary = app.getDisplayOverlapSummary();
+    assert.equal(summary.networks.length, 2, 'both Left and Right territories are reported at minCluster=0');
+    assert.equal(summary.networks[0].network, 'Left Middle Cerebral Artery (Frontal)');
+    assert.equal(summary.networks[0].voxelsInLesion, 2);
+    assert.equal(summary.networks[0].fractionOfLesion, 0.5, 'Lesion % uses whole-lesion denominator (2/4)');
+    assert.equal(app.overlapResult.networkSizes['Left Middle Cerebral Artery (Frontal)'], 4, 'ROI denominator is 4 voxels');
+    assert.equal(summary.networks[1].network, 'Right Middle Cerebral Artery (Frontal)');
+    assert.equal(summary.networks[1].voxelsInLesion, 1);
+    assert.equal(summary.networks[1].fractionOfLesion, 0.25, 'Lesion % uses whole-lesion denominator (1/4)');
+    // Raising the visible Min cluster size input filters the arterial table accordingly.
+    minClusterEl.value = '2';
+    assert.deepEqual(
+      app.getDisplayOverlapSummary().networks.map(row => row.network),
+      ['Left Middle Cerebral Artery (Frontal)'],
+      'visible Min cluster size filter applies to arterial overlap rows'
+    );
+    minClusterEl.value = '0';
+    assert.equal(coverageEl.classList.contains('hidden'), false, 'coverage warning shown for outside/ventricular voxels');
+    assert.match(coverageEl.textContent, /^3 of 4 lesion voxels fall inside Arterial territories \(Liu et al\., 2023; 1 mm\); 1 are outside labeled arterial territory\.$/);
+    assert.match(helpEl.textContent, /Thirty sided supra- and infratentorial arterial territories/);
+    assert.match(helpEl.textContent, /1 mm³ per voxel/);
+    assert.doesNotMatch(helpEl.textContent, /Cortical labels combine both hemispheres/, 'Harvard-Oxford copy must not leak onto arterial atlas');
+
+    // Verify scoped help text for Schaefer vs Harvard-Oxford.
+    assert.doesNotMatch(app.directOverlapHelpText(app.atlasOptions.find(o => o.id === 'schaefer400')), /Cortical labels combine both hemispheres/);
+    assert.match(app.directOverlapHelpText(app.atlasOptions.find(o => o.id === 'harvardoxford')), /Cortical labels combine both hemispheres/);
+
+    // Direct-overlap-only runFcNetworkMap skips cleanly without producing a network map (leaving kb-report able to run).
+    const fcSkipped = await app.runFcNetworkMap();
+    assert.equal(fcSkipped, undefined);
+    assert.equal(app.networkMapFile, null);
+    assert.match(thresholdSummaryEl.textContent, /direct overlap only/i);
+
+    // 4. Ventricle-only (unlabeled-only) lesion reports 0 hit territories and all voxels outside labeled arterial territory.
+    const ventBuf = writeNifti1(new Uint8Array([0, 0, 0, 0, 0, 0, 1, 1]), {
+      dims: [2, 2, 2],
+      spacing: [1, 1, 1],
+      affine: atlasAffine
+    });
+    const ventFile = { name: 'ventricle-only.nii', arrayBuffer: async () => ventBuf.slice(0) };
+    await app.setLesion(ventFile);
+    await app.runAtlasOverlap();
+    assert.equal(app.getDisplayOverlapSummary().networks.length, 0);
+    assert.equal(coverageEl.classList.contains('hidden'), false);
+    assert.match(coverageEl.textContent, /0 of 2 lesion voxels.*2 are outside labeled arterial territory\./);
+
+    // 5. Non-finite (NaN / Infinity) sform coefficients must be rejected by both manual overlap and grid matcher.
+    for (const badValue of [Number.NaN, Number.POSITIVE_INFINITY]) {
+      const badBuf = writeNifti1(new Uint8Array([1, 1, 0, 0, 0, 0, 0, 0]), {
+        dims: [2, 2, 2],
+        spacing: [1, 1, 1],
+        affine: [-1, 0, 0, badValue, 0, 1, 0, -126, 0, 0, 1, -72]
+      });
+      const badFile = { name: `nonfinite-${badValue}.nii`, arrayBuffer: async () => badBuf.slice(0) };
+      await app.setLesion(badFile);
+      assert.equal(await app._lesionFileMatchesAtlasGrid(), false, `grid matcher rejects ${badValue} affine`);
+      assert.deepEqual(await app.runAtlasOverlap(), { stopPipeline: true }, `runAtlasOverlap rejects ${badValue} affine`);
+      assert.equal(app.overlapResult, null);
+      assert.equal(getSpatialMetadata(badFile)?.space, undefined, `${badValue} affine file must not be stamped as atlas-aligned`);
+    }
+
+    // 6. Threshold stage on direct-overlap-only arterial atlas does NOT overwrite user's cutoff, keeping table and CSV in sync.
+    minClusterEl.value = '2';
+    await app.setLesion(alignedFile);
+    await app.runAtlasOverlap();
+    const beforeThreshold = app.getDisplayOverlapSummary().networks.map(row => row.network);
+    await app._runStage({ module: 'threshold', defaults: { value: 5, symmetric: true, minClusterVoxels: 30 } });
+    assert.equal(minClusterEl.value, '2', 'threshold stage must not reset direct-overlap voxel cutoff to 30');
+    assert.deepEqual(
+      app.getDisplayOverlapSummary().networks.map(row => row.network),
+      beforeThreshold,
+      'table and CSV cutoff remain identical after threshold stage'
+    );
+
+    // 7. Registration FOV clipping is disclosed in coverage note and method summary when unobserved voxels exist.
+    app.registrationFovCoverage = {
+      atlasId: 'arterial',
+      totalLabeledVoxels: 1000,
+      unobservedVoxels: 110497,
+      unobservedFraction: 0.11,
+      clippedRegions: [
+        { label: 1, name: 'Left Anterior Cerebral Artery', unobservedVoxels: 35000, totalVoxels: 193012, unobservedFraction: 0.184 }
+      ]
+    };
+    app.showAtlasCoverageNote(0, 4);
+    assert.equal(coverageEl.classList.contains('hidden'), false, 'FOV clipping notice shows even when lesion has 0 outside voxels');
+    assert.match(coverageEl.textContent, /Registration FOV limit \(MNI160 grid\): 110,497 labeled atlas voxels/);
+    assert.match(coverageEl.textContent, /Left Anterior Cerebral Artery 18\.4%/);
+    assert.match(app.describeMethod(), /110,497 labeled atlas voxels fall outside the MNI160 registration field of view/);
+    assert.match(
+      app.formatFovCoverageNote({ atlasId: 'schaefer400', unobservedVoxels: 10, clippedRegions: [{ name: 'LH_Default_PFC_1', unobservedFraction: 0.2 }] }),
+      /full region volume\./,
+      'non-arterial FOV note uses region wording rather than territory'
+    );
+    assert.match(
+      app.formatFovCoverageStatus({ atlasId: 'schaefer400', unobservedVoxels: 10, clippedRegions: [{ name: 'LH_Default_PFC_1', unobservedFraction: 0.2 }] }),
+      /\(1 region\)\./,
+      'non-arterial FOV status uses region wording rather than territory'
+    );
+
+    // 8. Two-request queued QC race: arterial in-flight -> switch to Schaefer -> queue Schaefer before arterial replies.
+    // Production runInverseWarpStage + handleStageData must discard the arterial bytes and accept the Schaefer bytes.
+    app.selectedAtlasOptionId = 'arterial';
+    app.structuralFile = tagSpatialFile({ name: 'patient-t1.nii' }, {
+      space: VOLUME_SPACES.MNI160,
+      dims: [2, 2, 2],
+      affine: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+    });
+    app.hasRegistrationDisplacement = true;
+    const arterialQcBytes = new Uint8Array([0x11, 0x11, 0x11, 0x11]);
+    const schaeferQcBytes = new Uint8Array([0x22, 0x22, 0x22, 0x22]);
+    const arterialFov = {
+      atlasId: 'arterial',
+      totalLabeledVoxels: 1000,
+      unobservedVoxels: 110497,
+      unobservedFraction: 0.11,
+      clippedRegions: [
+        { label: 1, name: 'Left Anterior Cerebral Artery', unobservedVoxels: 35000, totalVoxels: 193012, unobservedFraction: 0.184 }
+      ]
+    };
+    const schaeferFov = {
+      atlasId: 'schaefer400',
+      totalLabeledVoxels: 500,
+      unobservedVoxels: 0,
+      unobservedFraction: 0,
+      clippedRegions: []
+    };
+    app.projectAtlasToMni160Grid = async () => {
+      const option = app.getAtlasOption();
+      return {
+        labels: new Uint8Array(8),
+        dims: [2, 2, 2],
+        affine: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]],
+        atlasOption: option,
+        fovCoverage: option.id === 'arterial' ? arterialFov : schaeferFov
+      };
+    };
+    const dispatched = [];
+    app.executor = {
+      running: false,
+      runInverseWarpMask: async (settings) => {
+        dispatched.push(settings.description);
+      },
+      cancel: () => {},
+      terminateWorker: () => {}
+    };
+
+    const arterialQcPromise = app.projectAtlasToPatientSpace();
+    await waitForMicrotaskCondition(() => dispatched.length === 1, 'arterial QC inverse warp must dispatch', 100);
+    app.handleAtlasSelectionChange('schaefer400');
+    const schaeferQcPromise = app.projectAtlasToPatientSpace();
+    // Allow Schaefer's projectAtlasToMni160Grid() to finish and queue behind arterial in _inverseWarpQueue.
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(dispatched.length, 1, 'second QC request must wait in _inverseWarpQueue until first settles');
+
+    // Deliver the first (arterial) worker reply + completion.
+    app.handleStageData({ stage: 'atlas-patient', niftiData: arterialQcBytes.buffer.slice(0) });
+    app.handleStepComplete('inverse-warp-mask');
+    const firstResult = await arterialQcPromise;
+    assert.equal(firstResult, null, 'stale arterial QC projection returns null after atlas switch');
+    assert.equal(app.patientAtlasFile, null, 'stale arterial payload must not be mislabeled as Schaefer');
+    assert.equal(app.patientAtlasFovCoverage, null, 'stale arterial FOV coverage must not attach to Schaefer');
+
+    // Queue now dispatches Schaefer; deliver Schaefer's distinct worker reply + completion.
+    await waitForMicrotaskCondition(() => dispatched.length === 2, 'queued Schaefer QC must dispatch next', 100);
+    app.handleStageData({ stage: 'atlas-patient', niftiData: schaeferQcBytes.buffer.slice(0) });
+    app.handleStepComplete('inverse-warp-mask');
+    const secondResult = await schaeferQcPromise;
+    assert.ok(secondResult, 'queued Schaefer QC projection succeeds');
+    assert.equal(app.patientAtlasFile.name, 'lnm-schaefer400-atlas-patient.nii');
+    assert.deepEqual(
+      Array.from(new Uint8Array(await app.patientAtlasFile.arrayBuffer())),
+      Array.from(schaeferQcBytes),
+      'Schaefer patientAtlasFile must contain the Schaefer worker bytes, never the arterial bytes'
+    );
+    assert.equal(app.patientAtlasFovCoverage.unobservedVoxels, 0);
+
+    // 9. showSubjectSpaceAtlas + handleAtlasSelectionChange + ensureViewerLayerLoaded:
+    //    - arterial QC shows clipping warning in shared status bar and loads atlas-qc layer
+    //    - switching to Schaefer removes stale atlas-qc layer AND clears the footer clipping warning
+    //    - re-enabling atlasQc projects & loads Schaefer (never re-showing arterial)
+    //    - switching atlas while a viewer load is in flight aborts before commit
+    const statusUpdates = [];
+    app.progress.setText = (text) => { statusUpdates.push(text); };
+    const loadedStages = new Map();
+    let skipPostLoadRemoveStage = null;
+    let holdOverlayResolve = null;
+    app.viewerController = {
+      volumeFiles: [],
+      getVolumeIndexForStage: (stage) => loadedStages.has(stage) ? loadedStages.get(stage).index : null,
+      removeVolumeForStage: (stage) => {
+        if (skipPostLoadRemoveStage === stage) {
+          skipPostLoadRemoveStage = null;
+          return true;
+        }
+        if (!loadedStages.has(stage)) return false;
+        loadedStages.delete(stage);
+        return true;
+      },
+      loadVolumeStack: async (entries) => {
+        loadedStages.clear();
+        app.viewerController.volumeFiles = [];
+        entries.forEach((entry, idx) => {
+          loadedStages.set(entry.stage, { index: idx, file: entry.file });
+          app.viewerController.volumeFiles[idx] = entry.file;
+        });
+      },
+      loadOverlay: async (file, _colormap, _opacity, opts = {}) => {
+        if (holdOverlayResolve) {
+          await new Promise(resolve => { holdOverlayResolve = resolve; });
+          return;
+        }
+        const idx = Math.max(1, app.viewerController.volumeFiles.length);
+        loadedStages.set(opts.stage, { index: idx, file });
+        app.viewerController.volumeFiles[idx] = file;
+        skipPostLoadRemoveStage = opts.stage;
+      },
+      setStageVisible: () => true
+    };
+    app.applyViewerLayerVisibility = () => {};
+    app.nv = { volumes: [{ name: 't1' }] };
+
+    app.handleAtlasSelectionChange('arterial');
+    const arterialShowPromise = app.showSubjectSpaceAtlas();
+    await waitForMicrotaskCondition(() => dispatched.length === 3, 'arterial showSubjectSpaceAtlas must dispatch', 100);
+    app.handleStageData({ stage: 'atlas-patient', niftiData: arterialQcBytes.buffer.slice(0) });
+    app.handleStepComplete('inverse-warp-mask');
+    await arterialShowPromise;
+    assert.equal(loadedStages.get('atlas-qc')?.file?.name, 'lnm-arterial-atlas-patient.nii');
+    assert.match(
+      statusUpdates.at(-1),
+      /Atlas QC displayed: 110,497 labeled voxels clipped outside MNI160 FOV \(1 territory\)\./,
+      'arterial QC overlay must surface FOV clipping in the shared status bar'
+    );
+
+    // Switching atlas immediately removes the stale arterial QC overlay and clears the footer clipping warning.
+    app.handleAtlasSelectionChange('schaefer400');
+    assert.equal(loadedStages.has('atlas-qc'), false, 'atlas switch must remove stale atlas-qc layer from viewer');
+    assert.equal(statusUpdates.at(-1), 'Atlas set to Schaefer 400 parcels.', 'atlas switch must clear stale QC footer text');
+
+    // Toggling atlasQc back on must project and load Schaefer rather than short-circuiting on a stale layer.
+    const schaeferTogglePromise = app.ensureViewerLayerLoaded('atlasQc');
+    await waitForMicrotaskCondition(() => dispatched.length === 4, 'toggling atlasQc after switch must project new atlas', 100);
+    app.handleStageData({ stage: 'atlas-patient', niftiData: schaeferQcBytes.buffer.slice(0) });
+    app.handleStepComplete('inverse-warp-mask');
+    await schaeferTogglePromise;
+    assert.equal(loadedStages.get('atlas-qc')?.file?.name, 'lnm-schaefer400-atlas-patient.nii');
+    assert.equal(
+      statusUpdates.at(-1),
+      'Atlas alignment QC overlay displayed.',
+      'unclipped atlas QC overlay must show clean QC status in the status bar'
+    );
+
+    // Switching atlases while an atlas-qc viewer overlay load is in flight must abort before commit.
+    app.handleAtlasSelectionChange('arterial');
+    const statusCountBeforeAbortedLoad = statusUpdates.length;
+    holdOverlayResolve = () => {};
+    const inFlightOverlay = app.ensureViewerLayerLoaded('atlasQc');
+    await waitForMicrotaskCondition(() => dispatched.length === 5, 'in-flight overlay test must project arterial', 100);
+    app.handleStageData({ stage: 'atlas-patient', niftiData: arterialQcBytes.buffer.slice(0) });
+    app.handleStepComplete('inverse-warp-mask');
+    await new Promise(resolve => setTimeout(resolve, 10));
+    app.handleAtlasSelectionChange('schaefer400');
+    const releaseOverlay = holdOverlayResolve;
+    holdOverlayResolve = null;
+    releaseOverlay();
+    await assert.rejects(inFlightOverlay, { name: 'AbortError' }, 'atlas switch mid-viewer-load must abort before commit');
+    assert.equal(loadedStages.has('atlas-qc'), false, 'viewer must remain free of stale arterial atlas-qc layer');
+    assert.equal(statusUpdates.length, statusCountBeforeAbortedLoad, 'aborted arterial load must not write a stale QC footer status');
+
+    // 10. Failed viewer loads (returning false) must NOT report QC displayed or write footer status.
+    app.handleAtlasSelectionChange('arterial');
+    let failNextLoad = true;
+    const origLoadOverlay = app.viewerController.loadOverlay;
+    const origLoadStack = app.viewerController.loadVolumeStack;
+    app.viewerController = {
+      ...app.viewerController,
+      loadOverlay: async (...args) => {
+        if (failNextLoad) return false;
+        return origLoadOverlay(...args);
+      },
+      loadVolumeStack: async (...args) => {
+        if (failNextLoad) return false;
+        return origLoadStack(...args);
+      },
+      loadBaseVolume: async () => true
+    };
+    const statusBeforeFailedOverlay = statusUpdates.length;
+    const failedToggle = app.ensureViewerLayerLoaded('atlasQc');
+    await waitForMicrotaskCondition(() => dispatched.length === 6, 'failed-overlay test must project arterial', 100);
+    app.handleStageData({ stage: 'atlas-patient', niftiData: arterialQcBytes.buffer.slice(0) });
+    app.handleStepComplete('inverse-warp-mask');
+    await assert.rejects(failedToggle, /Could not display atlas QC overlay in viewer/);
+    assert.equal(statusUpdates.length, statusBeforeFailedOverlay, 'failed overlay load must not write QC status to footer');
+
+    const statusBeforeFailedStack = statusUpdates.length;
+    const failedShow = await app.showSubjectSpaceAtlas();
+    assert.equal(failedShow, null, 'failed stack load must return null');
+    assert.equal(app.viewerLayerVisibility.atlasQc, false, 'failed stack load must clear atlasQc visibility');
+    assert.equal(statusUpdates.length, statusBeforeFailedStack, 'failed stack load must not write QC status to footer');
+
+    // 11. Unchecking the atlasQc checkbox hides the layer and clears the footer message; re-checking restores it;
+    //     unchecking while an in-flight load finishes does not publish "Atlas QC displayed".
+    failNextLoad = false;
+    const displayedForToggle = await app.showSubjectSpaceAtlas();
+    assert.ok(displayedForToggle, 'arterial QC displays once viewer succeeds');
+    assert.match(statusUpdates.at(-1), /Atlas QC displayed: 110,497 labeled voxels clipped/);
+    const toggleListeners = {};
+    const atlasToggleEl = {
+      checked: true,
+      disabled: false,
+      addEventListener: (eventName, handler) => { toggleListeners[eventName] = handler; }
+    };
+    const prevGetEl = globalThis.document.getElementById;
+    globalThis.document.getElementById = (id) => {
+      if (id === 'layerToggleAtlasQc') return atlasToggleEl;
+      if (id === 'resultsSection') return { classList: { add: () => {}, remove: () => {} } };
+      return prevGetEl(id);
+    };
+    try {
+      app.bindViewerLayerToggles();
+      // Unchecking clears the arterial QC footer message.
+      atlasToggleEl.checked = false;
+      toggleListeners.change({ target: atlasToggleEl });
+      assert.equal(statusUpdates.at(-1), 'Atlas alignment QC overlay hidden.', 'unchecking atlasQc must clear QC footer message');
+
+      // Re-checking an already-loaded arterial layer restores the clipping warning.
+      atlasToggleEl.checked = true;
+      toggleListeners.change({ target: atlasToggleEl });
+      await waitForMicrotaskCondition(
+        () => /Atlas QC displayed: 110,497 labeled voxels clipped/.test(statusUpdates.at(-1) || ''),
+        're-checking already-loaded arterial atlasQc must restore footer clipping status',
+        100
+      );
+
+      // Unchecking while an in-flight atlasQc projection/load is pending must prevent publishing "Atlas QC displayed".
+      app.handleAtlasSelectionChange('arterial');
+      const statusCountBeforeHideRace = statusUpdates.length;
+      atlasToggleEl.checked = true;
+      toggleListeners.change({ target: atlasToggleEl });
+      await waitForMicrotaskCondition(() => dispatched.length === 7, 'in-flight uncheck test must dispatch projection', 100);
+      atlasToggleEl.checked = false;
+      toggleListeners.change({ target: atlasToggleEl });
+      app.handleStageData({ stage: 'atlas-patient', niftiData: arterialQcBytes.buffer.slice(0) });
+      app.handleStepComplete('inverse-warp-mask');
+      await new Promise(resolve => setTimeout(resolve, 15));
+      assert.equal(
+        statusUpdates.length,
+        statusCountBeforeHideRace,
+        'in-flight atlasQc load finishing after uncheck must not publish QC displayed to footer'
+      );
+
+      // 12. Replacing the viewer stack without atlas-qc (e.g. switching to Checkerboard QC) clears stale atlas QC footer status.
+      const displayedForStackSwitch = await app.showSubjectSpaceAtlas();
+      assert.ok(displayedForStackSwitch, 'arterial QC displays before switching QC view');
+      assert.match(statusUpdates.at(-1), /Atlas QC displayed: 110,497 labeled voxels clipped/);
+      await app.loadViewerVolumeStack([
+        { file: app.structuralFile, stage: 'registration-checkerboard', visible: true }
+      ]);
+      assert.equal(
+        statusUpdates.at(-1),
+        'Viewer updated.',
+        'switching to a non-atlas viewer stack must clear stale atlas QC footer status'
+      );
+
+      // 13. Active analysis keeps control of the footer: toggling atlasQc on/off during a run must not overwrite footer status.
+      app._pipelineRunning = true;
+      const statusCountDuringRun = statusUpdates.length;
+      await app.showSubjectSpaceAtlas();
+      atlasToggleEl.checked = false;
+      toggleListeners.change({ target: atlasToggleEl });
+      assert.equal(
+        statusUpdates.length,
+        statusCountDuringRun,
+        'active analysis must keep control of the footer when atlasQc is shown or hidden'
+      );
+      app._pipelineRunning = false;
+
+      // 14. clearResults() after displaying arterial QC with no active run must clear the arterial QC footer message.
+      const displayedForClear = await app.showSubjectSpaceAtlas();
+      assert.ok(displayedForClear, 'arterial QC displays before clearResults');
+      assert.match(statusUpdates.at(-1), /Atlas QC displayed: 110,497 labeled voxels clipped/);
+      app.clearResults({ full: false });
+      assert.equal(statusUpdates.at(-1), 'Results cleared.', 'clearResults must clear stale QC footer text when idle');
+    } finally {
+      globalThis.document.getElementById = prevGetEl;
+    }
+  } finally {
+    restoreDocument();
+    globalThis.document.createElement = originalCreateElement;
+    globalThis.fetch = originalFetch;
+    globalThis.caches = originalCaches;
+  }
+}

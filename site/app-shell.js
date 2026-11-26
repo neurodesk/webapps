@@ -435,13 +435,15 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
     });
 
     if (document.querySelector('[data-neurodesk-top-bar-host] > .nd-app-bar')) {
-      document.querySelectorAll('body > .nd-app-bar--standalone').forEach((bar) => bar.remove());
+      document.querySelectorAll('.nd-app-bar--standalone').forEach((bar) => bar.remove());
     }
 
     if (!document.querySelector('.nd-app-bar')) {
       const bar = createBar();
       bar.classList.add('nd-app-bar--standalone');
-      document.body.prepend(bar);
+      // A workspace that has not mounted holds the bar's row in the parent of its regions.
+      const unmounted = document.querySelector(':not(.nd-imaging-workspace):has(> .nd-imaging-controls):has(> .nd-imaging-viewer)');
+      (unmounted ?? document.body).prepend(bar);
     }
   }
 

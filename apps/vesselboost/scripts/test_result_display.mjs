@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import {
   buildResultVolumeStack,
+  buildVesselCharterHandoffFile,
   chooseResultBaseStage,
   defaultResultVisibility,
   isImageResultStage,
@@ -90,6 +91,42 @@ assert.equal(isResultStageVisible('brainmask', { brainmask: true }), true);
     visibility: Object.fromEntries(stages.map(stage => [stage, false]))
   });
   assert.deepEqual(stack, [], 'all hidden stages should produce an empty viewer stack');
+}
+
+{
+  assert.equal(buildVesselCharterHandoffFile(null), null);
+  const rawBytes = new Uint8Array([1, 2, 3, 4]);
+  const seg = new File([rawBytes], 'segmentation.nii', { type: 'application/octet-stream' });
+  const named = buildVesselCharterHandoffFile(seg, { name: 'sub-01_tof.nii.gz' });
+  assert.equal(named.name, 'sub-01_tof_vesselboost_segmentation.nii');
+  assert.equal(named.type, 'application/octet-stream');
+  assert.deepEqual(new Uint8Array(await named.arrayBuffer()), rawBytes);
+
+  const upper = buildVesselCharterHandoffFile(seg, { name: 'SUB-01_TOF.NII.GZ' });
+  assert.equal(upper.name, 'SUB-01_TOF_vesselboost_segmentation.nii');
+
+  const mgz = buildVesselCharterHandoffFile(seg, { name: 'brain.mgz' });
+  assert.equal(mgz.name, 'brain_vesselboost_segmentation.nii');
+
+  const noDuplicate = buildVesselCharterHandoffFile(seg, { name: 'sub-01_vesselboost_segmentation.nii' });
+  assert.equal(noDuplicate.name, 'sub-01_vesselboost_segmentation.nii');
+
+  const editedFlag = buildVesselCharterHandoffFile(seg, { name: 'sub-01_tof.nii.gz' }, { edited: true });
+  assert.equal(editedFlag.name, 'sub-01_tof_vesselboost_segmentation_edited.nii');
+
+  const editedFile = new File([rawBytes], 'segmentation_edited.nii', { type: 'application/octet-stream' });
+  const editedByName = buildVesselCharterHandoffFile(editedFile, { name: 'sub-01_tof.nii' });
+  assert.equal(editedByName.name, 'sub-01_tof_vesselboost_segmentation_edited.nii');
+
+  const fallback = buildVesselCharterHandoffFile(seg, null);
+  assert.equal(fallback.name, 'segmentation.nii');
+
+  const gzBytes = new Uint8Array([31, 139, 8, 0]);
+  const gzSeg = new File([gzBytes], 'mask.nii.gz', { type: 'application/gzip' });
+  const namedGz = buildVesselCharterHandoffFile(gzSeg, { name: 'my scan (1).nii' });
+  assert.equal(namedGz.name, 'my_scan_1_vesselboost_segmentation.nii.gz');
+  assert.equal(namedGz.type, 'application/gzip');
+  assert.deepEqual(new Uint8Array(await namedGz.arrayBuffer()), gzBytes);
 }
 
 console.log('result-display OK: independent image/mask visibility planning.');

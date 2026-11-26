@@ -14,5 +14,7 @@
   "microsam": "micro-sam (pip or conda install micro_sam) is the Python reference the app reproduces mask for mask on the example; interactive prompting has no separate command line",
   "cryo-em": "RELION is the command line: the app sends each step to RELION 5.1.1 in the Neurodesk relion container, run on the user's cluster by the neurodesk-compute server, whose Slurm-capable release follows ADR-0004; the app adds no command line of its own",
   "medsam2": "MedSAM2 (bowang-lab/MedSAM2 in Python) is the upstream reference; interactive slice prompting has no separate command line",
+  "laynii": "LayNii ships LN2_LAYERS and LN2_PROFILE as native C++ command lines: the Standalone dialog lists the Neurodesk laynii 2.10.0 container, whose outputs the WebAssembly build reproduces bit for bit",
+  "aurora": "BrainLesion AURORA ships as the Neurodesk brainles-aurora 0.2.7 container (with the aurora CLI, 13-pass TTA, and all 7 modality combinations): the Standalone dialog lists it, and packages/aurora/validation/parity.mjs holds the browser ONNX model to upstream AuroraInferer(tta=False) output on t1c-o_best",
   "openads": "OpenADS ships its upstream Python CLI and Neurocontainers openadscpu image (github.com/farialab/OpenADS); the @neurodesk/openads core is Node-tested and browser-run without a separate packaged CLI yet"
 }

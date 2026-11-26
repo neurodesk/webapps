@@ -19,6 +19,7 @@ on:
       - '.github/workflows/pr-gate.yml'
       - 'scripts/workflow-gate.mjs'
       - 'scripts/lib/workflow-gate.mjs'
+      - 'scripts/lib/native-dispatcher.mjs'
       - 'package.json'
       - 'packages/components/**'
       - 'packages/components/package.json'

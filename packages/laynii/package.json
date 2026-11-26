@@ -1,0 +1,35 @@
+{
+  "name": "@neurodesk/laynii",
+  "version": "0.1.0",
+  "description": "LayNii cortical layering (LN2_LAYERS) and laminar profiling (LN2_PROFILE) in WebAssembly",
+  "type": "module",
+  "private": true,
+  "license": "BSD-3-Clause",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./node": "./src/node.js",
+    "./pin": "./src/pin.js",
+    "./worker": "./src/worker.js",
+    "./module": "./wasm/laynii.mjs",
+    "./wasm": "./wasm/laynii.wasm"
+  },
+  "files": [
+    "src/*.js",
+    "wasm",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/*.js test/*.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/laynii"
+  }
+}

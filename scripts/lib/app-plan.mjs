@@ -21,6 +21,7 @@ const INDEPENDENT_CHECK_PATHS = [
   /^[^/]+\.md$/,
   /^\.gitignore$/,
   /^\.github\/workflows\/(?!ci\.yml$)[^/]+$/,
+  /^\.github\/aw\//,
   INDEPENDENT_CONFIG,
   /^config\/dependency-/,
   /^templates\//,
@@ -57,6 +58,10 @@ export const RUNTIME_MANIFEST_READERS = ['scripts/fetch-app-runtime.mjs'];
 // An app that reaches one also tests a change to any app's contract.
 export const AUTOMATION_CATALOG_READERS = ['scripts/lib/neuroflow-bundle.mjs'];
 const AUTOMATION_CONTRACT = /^apps\/[^/]+\/automation\.json$/;
+// Scoped agent instruction documents; no browser build or app test loads
+// them (workspace-contracts checks any contract test that reads them).
+const APP_AGENT_DOC = /^apps\/[^/]+\/(?:AGENTS|AGENT|CLAUDE)\.md$/;
+const AGENT_DOC = /^(?:apps|packages|exes)\/(?:.+\/)?(?:AGENTS|AGENT|CLAUDE)\.md$/;
 // site/ files only the composite build copies: the landing page, its
 // analytics settings, the Pages 404 page and the dicompare route shim.
 // test/app-plan.test.mjs fails when anything else names them.
@@ -702,8 +707,8 @@ function shardedEntries(app) {
 // app for a change it could not narrow (ci.yml, an unresolved lockfile).
 function editsApp(app, changedPaths, edited, carried, editedApps = new Set()) {
   if (!changedPaths.length || carried.has(app.id) || editedApps.has(app.id)) return true;
-  return edited.some((path) => [`apps/${app.id}/`, `packages/${app.id}/`, `exes/${app.id}/`].some((prefix) => path.startsWith(prefix))
-    || path === `models/${app.id}.manifest.json`);
+  return edited.some((path) => !AGENT_DOC.test(path) && ([`apps/${app.id}/`, `packages/${app.id}/`, `exes/${app.id}/`].some((prefix) => path.startsWith(prefix))
+    || path === `models/${app.id}.manifest.json`));
 }
 
 function matrixEntry(app) {
@@ -841,6 +846,12 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     }
     const appId = path.match(/^apps\/([^/]+)\//)?.[1] ?? path.match(MODEL_MANIFEST)?.[1];
     if (appIds.has(appId)) {
+      if (APP_AGENT_DOC.test(path)) {
+        for (const reader of graph?.appReaders?.(path) ?? []) {
+          if (appIds.has(reader)) select(reader, `${path}: ${reader}'s code reads it`);
+        }
+        continue;
+      }
       select(appId, path);
       for (const reader of graph?.appReaders?.(path) ?? []) {
         if (appIds.has(reader)) select(reader, `${path}: ${reader}'s code reads it`);
@@ -1145,7 +1156,7 @@ export function selectEasterEgg(changedPaths) {
 const PACKAGE_TEST_DRAFT_SKIP_TREE = /^(?:docs|\.changeset|site\/easter-eggs)\/|^(?:[^/]+\.md)$/;
 export function packageTestsCanSkipOnDraft(path) {
   if (WORKSPACE_MANIFESTS.includes(path.slice(path.lastIndexOf('/') + 1))) return false;
-  return PACKAGE_TEST_DRAFT_SKIP_TREE.test(path);
+  return PACKAGE_TEST_DRAFT_SKIP_TREE.test(path) || AGENT_DOC.test(path);
 }
 
 export function selectPackageTests(changedPaths) {
@@ -1160,7 +1171,7 @@ export function createAppPlan(registry, changedPaths = [], graph = null, manifes
   // Drafts give fast feedback on app edits. Ready PRs always use the complete
   // dependency plan, including shared-code changes, at their current head.
   const selected = draft && changedPaths.length
-    ? affected.apps.filter((app) => changedPaths.some((path) => path.startsWith(`apps/${app.id}/`) || path === `models/${app.id}.manifest.json`))
+    ? affected.apps.filter((app) => changedPaths.some((path) => (!APP_AGENT_DOC.test(path) && path.startsWith(`apps/${app.id}/`)) || path === `models/${app.id}.manifest.json`))
     : affected.apps;
   const { site, reasons } = affected;
   const releasable = selected.filter((app) => app.ci.release);

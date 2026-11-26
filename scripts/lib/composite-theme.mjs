@@ -32,6 +32,49 @@ export function hostedAppTitle(title, siteTitle = DEFAULT_BRAND.siteTitle) {
   return `${title} | ${siteTitle}`;
 }
 
+// mountImagingWorkspace gives these regions their classes, but only once the app bundle has run.
+// Carrying them in the document lets the first paint use the final layout.
+const workspaceRegions = { controls: 'nd-imaging-controls', viewer: 'nd-imaging-viewer', status: 'nd-imaging-status' };
+// A comment, an element whose content is text, a template boundary, or an opening tag.
+const pageToken = /<!--[\s\S]*?-->|<(script|style|textarea)\b[\s\S]*?<\/\1\s*>|<(\/?)template\b[^>]*>|<[a-z][a-z0-9-]*(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
+const tagAttribute = /\s([^\s"'>=/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g;
+
+function tagAttributes(tag) {
+  return new Map([...tag.matchAll(tagAttribute)].reverse().map((match) => (
+    [match[1].toLowerCase(), { text: match[0], quote: match[3] === undefined ? '"' : "'", value: match[2] ?? match[3] ?? match[4] ?? '' }]
+  )));
+}
+
+/** Rewrites each opening tag of the page itself: not one in a comment, in text content or in a template. */
+function mapLiveTags(html, rewrite) {
+  let templates = 0;
+  return html.replace(pageToken, (token, text, closing) => {
+    if (closing !== undefined) {
+      templates = Math.max(0, templates + (closing ? -1 : 1));
+      return token;
+    }
+    return text || token.startsWith('<!--') || templates ? token : rewrite(token);
+  });
+}
+
+function stampWorkspaceRegions(html) {
+  const live = new Set();
+  mapLiveTags(html, (tag) => {
+    live.add(tagAttributes(tag).get('id')?.value);
+    return tag;
+  });
+  if (!Object.keys(workspaceRegions).every((id) => live.has(id))) return html;
+  return mapLiveTags(html, (tag) => {
+    const attributes = tagAttributes(tag);
+    const className = workspaceRegions[attributes.get('id')?.value];
+    if (!className) return tag;
+    const existing = attributes.get('class');
+    if (!existing) return tag.replace(/\s*\/?>$/, (end) => ` class="${className}"${end}`);
+    if (existing.value.split(/\s+/).includes(className)) return tag;
+    return tag.replace(existing.text, ` class=${existing.quote}${`${existing.value} ${className}`.trim()}${existing.quote}`);
+  });
+}
+
 export function hasIconLink(html) {
   return [...html.matchAll(iconLinkPattern)].some((match) => !placeholderIconPattern.test(match[0]));
 }
@@ -132,6 +175,8 @@ export function injectCompositeTheme(html, {
   } else if (!/<html\b[^>]*\bdata-neurodesk-theme=/i.test(themed)) {
     themed = themed.replace(/<html\b/i, '<html data-neurodesk-theme="dark"');
   }
+
+  if (shell === 'imaging-workspace') themed = stampWorkspaceRegions(themed);
 
   // Name the catalogue that hosts the page, so an app can pick defaults that suit its audience.
   // Standalone builds and the dev server are hosted by no catalogue and carry no attribute.

@@ -313,6 +313,10 @@ apps:
         title: JHU white-matter tractography atlas
         reference: "Hua K, Zhang J, Wakana S, et al. Tract probability maps in stereotaxic spaces: analyses of white matter anatomy and tract-specific quantification. NeuroImage. 2008;39(1):336–347."
         doi: 10.1016/j.neuroimage.2007.07.053
+      - group: Overlap atlases
+        title: Digital 3D brain MRI arterial territories atlas
+        reference: "Liu CF, Hsu J, Xu X, et al. Digital 3D brain MRI arterial territories atlas. Scientific Data. 2023;10:74."
+        doi: 10.1038/s41597-022-01923-0
       - group: Knowledge-base report atlases
         title: XTRACT tract atlases
         reference: "Warrington S, Bryant KL, Khrapitchev AA, et al. XTRACT: standardised protocols for automated tractography in the human and macaque brain. NeuroImage. 2020;217:116923."
@@ -3300,6 +3304,105 @@ apps:
         title: ISIC Archive (CC-0)
         reference: "International Skin Imaging Collaboration (ISIC). ISIC Archive public domain (CC-0) dermoscopic images (ISIC_0000000, ISIC_0000013, ISIC_0001115)."
         url: https://www.isic-archive.com/
+
+  vesselcharter:
+    packages:
+      - { name: "@neurodesk/vesselcharter", url: https://github.com/neurodesk/webapps/tree/main/packages/vesselcharter, role: 3D vessel skeletonisation, morphometry and graph metrics }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: 3D mesh and slice viewer }
+    citations:
+      - group: Skeletonisation & morphometry
+        title: Lee, Kashyap & Chu (1994) 3D Thinning
+        reference: "Lee TC, Kashyap RL, Chu CN. Building Skeleton Models via 3-D Medial Surface/Axis Thinning Algorithms. CVGIP: Graphical Models and Image Processing. 1994;56(6):462-478."
+        doi: 10.1006/cgip.1994.1042
+      - group: Skeletonisation & morphometry
+        title: Felzenszwalb & Huttenlocher (2012) Exact Distance Transform
+        reference: "Felzenszwalb PF, Huttenlocher DP. Distance Transforms of Sampled Functions. Theory of Computing. 2012;8:415-428."
+        doi: 10.4086/toc.2012.v008a019
+      - group: Skeletonisation & morphometry
+        title: Taubin (1995) Non-Shrinking Curve Smoothing
+        reference: "Taubin G. A Signal Processing Approach to Fair Surface Design. Proceedings of ACM SIGGRAPH. 1995:351-358."
+        doi: 10.1145/218380.218473
+      - group: Skeletonisation & morphometry
+        title: Bullitt et al. (2003) Cerebral MRA Tortuosity (SOAM)
+        reference: "Bullitt E, Gerig G, Pizer SM, Lin W, Aylward SR. Measuring Tortuosity of the Intracerebral Vasculature From MRA Images. IEEE Transactions on Medical Imaging. 2003;22(9):1163-1171."
+        doi: 10.1109/TMI.2003.816964
+      - group: Validation & upstream data
+        title: VesselBoost
+        reference: "Xu M, Ribeiro FL, Barth M, Bernier M, Bollmann S, Chatterjee S, et al. VesselBoost: A Python Toolbox for Small Blood Vessel Segmentation in Human Magnetic Resonance Angiography Data. Aperture Neuro. 2024;4."
+        doi: 10.52294/001c.123217
+      - group: Validation & upstream data
+        title: VesselVio (external validation reference)
+        reference: "Bumgarner JR, Nelson RJ. Open-source analysis and visualization of segmented vasculature datasets with VesselVio. Cell Reports Methods. 2022;2(4):100189."
+        doi: 10.1016/j.crmeth.2022.100189
+      - group: Validation & upstream data
+        title: Skan (external validation reference)
+        reference: "Nunez-Iglesias J, Blanch AJ, Looker O, Dixon MW, Tilley L. A new Python library to analyse skeleton images confirms malaria parasite remodelling of the red blood cell membrane skeleton. PeerJ. 2018;6:e4312."
+        doi: 10.7717/peerj.4312
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  laynii:
+    about:
+      - "LayNii computes equidistant and equivolume cortical gray-matter layers (LN2_LAYERS) and layer-wise signal profiles (LN2_PROFILE) from a 3D rim segmentation in the browser. The WebAssembly build compiles unmodified LayNii v2.10.0 C++ sources on one thread without SharedArrayBuffer, reproducing native LN2_LAYERS and LN2_PROFILE voxels bit for bit."
+      - "Supply a 3D rim NIfTI volume with integer labels 1 (outer gray-matter/CSF border), 2 (inner gray-matter/white-matter border), and 3 (pure gray matter). Enable Equivolume layers (-equivol) for Bok-principle volume-preserving layers on sub-millimetre rims (recommended at or below 0.3 mm resolution). Optional outputs include cortical thickness, curvature, equal-count layers and mid-GM surfaces."
+      - "Optionally load a matched 3D functional or quantitative signal volume on the exact rim grid (such as BOLD, VASO, or T2*) to run LN2_PROFILE automatically and inspect the resulting mean ± SD laminar profile plot and CSV table in the Profile tab."
+      - "To protect browser memory in WebAssembly, volumes above 8 million voxels are refused before allocation. For whole-brain ultra-high-resolution datasets or batch processing, run the native LayNii 2.10.0 container listed under Standalone; the technical log prints the matching native CLI command for every run."
+    packages:
+      - { name: LayNii (WebAssembly), url: https://github.com/layerfMRI/LAYNII, role: "LN2_LAYERS and LN2_PROFILE v2.10.0 compiled to WebAssembly (@neurodesk/laynii)" }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+      - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
+    citations:
+      - group: Cortical layering
+        title: LayNii
+        reference: "Huber L, Poser BA, Bandettini PA, Arora K, Wagstyl K, Cho S, Goense J, Nothnagel N, Morgan AT, van den Hurk J, Mueller AK, Reynolds RC, Glen DR, Goebel RW, Gulban OF. LayNii: A software suite for layer-fMRI. NeuroImage. 2021;237:118091."
+        doi: 10.1016/j.neuroimage.2021.118091
+        code: https://github.com/layerfMRI/LAYNII
+      - group: Cortical layering
+        title: Equivolume cortical layering
+        reference: "Waehnert MD, Dinse J, Weiss M, Streicher MN, Waehnert P, Geyer S, Turner R, Bazin PL. Anatomically motivated modeling of cortical laminae. NeuroImage. 2014;93(Pt 2):210–220."
+        doi: 10.1016/j.neuroimage.2013.03.078
+      - group: Example data
+        title: Human occipital cortex reference atlas
+        reference: "Ding SL, Royall JJ, Sunkin SM, et al. Comprehensive cellular-resolution atlas of the adult human brain. Journal of Comparative Neurology. 2016;524(16):3127–3481."
+        doi: 10.1002/cne.24080
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  aurora:
+    about:
+      - "AURORA segments brain metastases from a skull-stripped, contrast-enhanced T1 (T1c) MRI in the browser using the BrainLesion AURORA v0.2.7 MONAI 3D BasicUNet (t1c-o_best, deterministic baseline without test-time augmentation). Inference runs locally on WebGPU when a hardware GPU is available, or on threaded WebAssembly CPU."
+      - "Inputs must be skull-stripped and registered to the 240 × 240 × 155, 1 mm isotropic BraTS/SRI24 atlas grid; off-grid volumes are refused before inference. Output preserves upstream AURORA's two independent sigmoid channels as a combined label map (label 1 = peritumoral oedema, label 2 = metastasis enhancing + necrosis overwriting label 1), separate binary channel masks, per-region volumes (mL), and 26-connected metastasis lesion counts (minimum 5 voxels)."
+      - "For multi-modality combinations (T1, FLAIR, T2) or 13-pass test-time augmentation, use the Neurodesk brainles-aurora 0.2.7 container listed under Standalone."
+    packages:
+      - { name: BrainLes AURORA, url: https://github.com/BrainLesion/AURORA, role: "brain metastasis segmentation network and weights (v0.2.7, t1c-o_best)" }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai/, role: browser WebGPU and WebAssembly inference }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Brain metastasis segmentation
+        title: Identifying core MRI sequences for reliable automatic brain metastasis segmentation
+        reference: "Buchner JA, Peeken JC, Etzel L, Ezhov I, Mayinger M, Christ SM, Brunner TB, Wittig A, Menze BH, Zimmer C, Wiestler B, Kofler F. Identifying core MRI sequences for reliable automatic brain metastasis segmentation. Radiotherapy and Oncology. 2023;188:109901."
+        doi: 10.1016/j.radonc.2023.109901
+        code: https://github.com/BrainLesion/AURORA
+      - group: Brain metastasis segmentation
+        title: AURORA multicenter study
+        reference: "Buchner JA, Kofler F, Etzel L, Mayinger M, Christ SM, Brunner TB, Wittig A, Menze B, Zimmer C, Meyer B, Wiestler B, Peeken JC. Development and external validation of an MRI-based neural network for brain metastasis segmentation in the AURORA multicenter study. Radiotherapy and Oncology. 2022;178:109425."
+        doi: 10.1016/j.radonc.2022.11.014
+      - group: Example data
+        title: BraTS-METS 2023 challenge dataset
+        reference: "Moawad AW, Janas A, Baid U, Ramakrishnan D, Jekel L, Krantchev K, et al. The Brain Tumor Segmentation (BraTS-METS) Challenge 2023: Brain Metastasis Segmentation on Pre-treatment MRI. arXiv:2306.00838. 2023 (CC BY 4.0)."
+        url: https://arxiv.org/abs/2306.00838
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
   openads:
     builders: "Developed from OpenADS (ADSWeb) and StrokeView by Andreia V. Faria, Chin-Fu Liu, and the Faria Lab (Johns Hopkins University School of Medicine, https://strokefair.org), ported to Neurodesk Webapps in collaboration with the Neurodesk team. © The Johns Hopkins University — JHU Non-Profit Research Software License."
     about:

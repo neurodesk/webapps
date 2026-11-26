@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 2,
+  "app": "aurora",
+  "title": "AURORA",
+  "description": "Segment brain metastases on skull-stripped 1 mm SRI24/BraTS T1c MRI with BrainLes AURORA.",
+  "defaultOperation": "segment",
+  "operations": {
+    "segment": {
+      "title": "Segment metastases",
+      "description": "Run BrainLes AURORA (t1c-o_best) to produce a two-region metastasis label map (1 peritumoral oedema, 2 metastasis enhancing + necrosis), channel masks, lesion count and volume table.",
+      "mode": "batch",
+      "inputs": {
+        "t1c": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti"
+          ],
+          "space": "atlas",
+          "description": "Skull-stripped T1 contrast-enhanced image on the 240 x 240 x 155 (1 mm) BraTS/SRI24 atlas grid",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "threshold": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 0.95,
+          "default": 0.5,
+          "description": "Sigmoid probability threshold applied to both output channels (upstream default 0.5)"
+        },
+        "backend": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "wasm"
+          ],
+          "default": "auto",
+          "description": "Requested inference backend; WebGPU failures fall back to WASM CPU."
+        }
+      },
+      "artifacts": {
+        "segmentation": {
+          "type": "neuro:labelmap",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "maximum": 1,
+          "space": "atlas"
+        },
+        "whole_mask": {
+          "type": "neuro:mask",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "maximum": 1,
+          "space": "atlas"
+        },
+        "metastasis_mask": {
+          "type": "neuro:mask",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "maximum": 1,
+          "space": "atlas"
+        },
+        "volumes": {
+          "type": "neuro:table",
+          "mediaType": "text/tab-separated-values",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

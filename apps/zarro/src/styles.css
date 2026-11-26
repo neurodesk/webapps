@@ -37,7 +37,9 @@ a:focus-visible {
   display: none !important;
 }
 
-.nd-imaging-workspace {
+/* The page before it mounts: outranks the shared grid, yields to the shared phone layout. */
+.nd-imaging-workspace,
+[id="app"]:has(> .nd-imaging-controls):has(> .nd-imaging-viewer):has(> .nd-imaging-status) {
   grid-template-columns: minmax(340px, 376px) minmax(0, 1fr);
   grid-template-rows: 62px minmax(0, 1fr);
 }
@@ -1016,7 +1018,8 @@ a:focus-visible {
 }
 
 @media (max-width: 900px) {
-  .nd-imaging-workspace {
+  .nd-imaging-workspace,
+  [id="app"]:has(> .nd-imaging-controls):has(> .nd-imaging-viewer):has(> .nd-imaging-status) {
     grid-template-columns: minmax(300px, 340px) minmax(0, 1fr);
   }
 

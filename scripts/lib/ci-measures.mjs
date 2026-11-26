@@ -9,7 +9,7 @@
 // entry for every workflow file and every job of ci.yml.
 import { percentile } from './ci-minutes.mjs';
 import { LARGE_RUN_JOBS, ofPullRequest } from './ci-usage.mjs';
-import { isDispatcher } from './workflow-gate.mjs';
+import { isDispatcher } from './native-dispatcher.mjs';
 
 // What a job spends its runner on.
 //   plan: decides what to run (planner, gate, plan marker); tests nothing
@@ -103,6 +103,7 @@ export const WORKFLOWS = Object.freeze({
   'histo2mri-native': TEST,
   'hmc-native': TEST,
   'hmc-registration': TEST,
+  'laynii-wasm-source': TEST,
   'lcmodel-native': TEST,
   'lightsheet-atlas-native': TEST,
   'microscope-qc-native': TEST,
@@ -147,6 +148,7 @@ export const WORKFLOWS = Object.freeze({
   'tumour-report-native': TEST,
   'unused-code': TEST,
   'vesselboost-native': TEST,
+  'vesselcharter-native': TEST,
   'white-matter-lesions-native': TEST,
   'windows-signing-policy': TEST,
   'wound-planimetry-native': TEST,
@@ -160,6 +162,7 @@ export const WORKFLOWS = Object.freeze({
   'CI approval report': 'report',
   'ci-usage': 'report',
   'scheduled workflow failure reports': 'report',
+  'unused-code-triage': 'report',
   'workflow failure reports': 'report',
 });
 

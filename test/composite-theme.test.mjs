@@ -250,3 +250,32 @@ test('the theme controller, which installs the WebMCP recorder, is the first scr
   assert.equal((rethemed.match(/data-neurodesk-theme-controller/g) ?? []).length, 1);
   assert.equal(injectCompositeTheme(rethemed, metadata), rethemed);
 });
+
+test('an imaging workspace page carries its region classes, so it is laid out before the app bundle runs', () => {
+  const page = '<!doctype html><html lang="en"><head><title>Example</title></head><body>'
+    + '<header id="controls"></header><main id="viewer" class="app-viewer"></main><footer id="status"></footer></body></html>';
+  const themed = injectCompositeTheme(page, { ...metadata, shell: 'imaging-workspace' });
+
+  assert.match(themed, /<header id="controls" class="nd-imaging-controls">/);
+  assert.match(themed, /<main id="viewer" class="app-viewer nd-imaging-viewer">/);
+  assert.match(themed, /<footer id="status" class="nd-imaging-status">/);
+  assert.equal(injectCompositeTheme(themed, { ...metadata, shell: 'imaging-workspace' }), themed);
+
+  assert.doesNotMatch(injectCompositeTheme(page, metadata), /nd-imaging-/, 'other shells keep their own layout');
+  const inert = page.replace('<header id="controls">', '<header title="1 > 0" id=\'controls\'>')
+    .replace('<body>', '<body><!-- <main id="viewer"> --><template><footer id="status"></footer></template>'
+      + '<script>const markup = \'<header id="controls">\';</script>');
+  const stamped = injectCompositeTheme(inert, { ...metadata, shell: 'imaging-workspace' });
+  assert.match(stamped, /<!-- <main id="viewer"> --><template><footer id="status"><\/footer><\/template>/, 'comments and templates are not markup of the page');
+  assert.match(stamped, /const markup = '<header id="controls">';/);
+  assert.match(stamped, /<header title="1 > 0" id='controls' class="nd-imaging-controls">/);
+  assert.match(stamped, /<footer id="status" class="nd-imaging-status">/);
+
+  const quoted = injectCompositeTheme(page.replace('class="app-viewer"', 'class=\'a"b\''), { ...metadata, shell: 'imaging-workspace' });
+  assert.match(quoted, /<main id="viewer" class='a"b nd-imaging-viewer'>/, 'a class keeps its own quotes');
+  const nested = page.replace('<header id="controls"></header>', '<template><template></template><header id="controls"></header></template>');
+  assert.doesNotMatch(injectCompositeTheme(nested, { ...metadata, shell: 'imaging-workspace' }), /nd-imaging-/, 'a region inside a template is not a region of the page');
+
+  const partial = page.replace(' id="viewer"', ' id="canvas"');
+  assert.doesNotMatch(injectCompositeTheme(partial, { ...metadata, shell: 'imaging-workspace' }), /nd-imaging-/, 'a page without all three regions is left to its app');
+});

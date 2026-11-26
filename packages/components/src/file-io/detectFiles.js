@@ -111,7 +111,7 @@ function getName(fileOrName) {
 }
 
 function traverseEntry(entry, path, files) {
-  return new Promise(resolve => {
+  return new Promise(/** @param {(value?: void) => void} resolve */ resolve => {
     if (entry.isFile) {
       entry.file(file => {
         file._webkitRelativePath = path + file.name;

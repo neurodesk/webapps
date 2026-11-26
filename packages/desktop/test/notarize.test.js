@@ -4,7 +4,15 @@ import { createRequire } from 'node:module';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { macNotarizeConfig, retryTransient, stapleApp, transientStapleError } from '../../../scripts/desktop/mac-notarize.mjs';
+import {
+  macNotarizeConfig,
+  retryTransient,
+  stapleApp,
+  transientNotaryWaitError,
+  transientStapleError,
+  transientSubmissionId,
+  waitForNotarization,
+} from '../../../scripts/desktop/mac-notarize.mjs';
 
 const directory = resolve(import.meta.dirname, '..');
 const require = createRequire(resolve(directory, 'package.json'));
@@ -22,6 +30,15 @@ const connectionLost = new Error(stapleOutput('-1005 "The network connection was
 const tlsTrust = new Error(stapleOutput('-1202 "The certificate for this server is invalid."'));
 const ticketNotFound = new Error('Failed to staple your application with code: 65\n\nThe staple and validate action failed! Error 65.');
 const notaryLost = new Error('Failed to complete notarization: Error Domain=NSURLErrorDomain Code=-1005 "The network connection was lost."');
+const SUBMISSION_ID = '685b19e7-f973-4ce7-b231-70c875ab0fbd';
+const notaryPollOutput = (urlError, id = SUBMISSION_ID) => `Failed to notarize via notarytool.  Failed with unexpected result: 
+
+Error: HTTPError(statusCode: nil, error: Error Domain=NSURLErrorDomain Code=${urlError} UserInfo={NSErrorFailingURLStringKey=https://appstoreconnect.apple.com/notary/v2/submissions/${id}?})`;
+const pollOffline = new Error(notaryPollOutput('-1009 "The Internet connection appears to be offline."'));
+const pollHttp503 = new Error('Failed to notarize via notarytool.  Failed with unexpected result: \n\nError: HTTP status code: 503. Service Unavailable');
+const pollTlsTrust = new Error(notaryPollOutput('-1202 "The certificate for this server is invalid."'));
+const pollAgreement = new Error('Failed to notarize via notarytool.  Failed with unexpected result: \n\nError: HTTP status code: 403. A required agreement is missing or has expired.');
+const pollInvalid = new Error(`Failed to notarize via notarytool\n\n{"status":"Invalid","id":"${SUBMISSION_ID}","message":"Processing complete"}`);
 const credentials = { APPLE_ID: 'id', APPLE_APP_SPECIFIC_PASSWORD: 'secret', APPLE_TEAM_ID: 'team' };
 const packager = { appInfo: { productFilename: 'neurodesk-webapps' } };
 const appPath = '/release/mac-arm64/neurodesk-webapps.app';
@@ -87,10 +104,16 @@ test('the hook replaces electron-builder notarization only on macOS with Apple c
 function hook(outcomes) {
   const calls = [];
   const waits = [];
+  const logs = [];
   const { afterSign } = macNotarizeConfig('darwin', credentials, {
     notarize: async options => {
       calls.push(['notarize', options]);
       const outcome = outcomes.notarize.shift();
+      if (outcome) throw outcome;
+    },
+    waitNotary: async (id, creds) => {
+      calls.push(['waitNotary', id, creds]);
+      const outcome = (outcomes.waitNotary ?? []).shift();
       if (outcome) throw outcome;
     },
     staple: async path => {
@@ -99,9 +122,9 @@ function hook(outcomes) {
       if (outcome) throw outcome;
     },
     sleep: async ms => { waits.push(ms); },
-    log: () => {},
+    log: line => { logs.push(line); },
   });
-  return { calls, waits, run: () => afterSign({ appOutDir: '/release/mac-arm64', electronPlatformName: 'darwin', packager }) };
+  return { calls, waits, logs, run: () => afterSign({ appOutDir: '/release/mac-arm64', electronPlatformName: 'darwin', packager }) };
 }
 
 test('the hook notarizes once, then retries only stapling after a transient staple failure', async () => {
@@ -159,5 +182,184 @@ test('stapleApp turns a stapler exit code and its output into the error the pred
   await assert.rejects(stapleApp(join(release, 'neurodesk-webapps.app')), error => {
     assert.match(error.message, /^Failed to staple your application with code: 68\n\nstapler staple -v neurodesk-webapps.app\n/);
     return transientStapleError(error);
+  });
+});
+
+test('transientNotaryWaitError and transientSubmissionId match only transient notarytool transport or 5xx errors', () => {
+  assert.equal(transientNotaryWaitError(pollOffline), true);
+  assert.equal(transientSubmissionId(pollOffline), SUBMISSION_ID);
+  assert.equal(transientNotaryWaitError(new Error(notaryPollOutput('-1005 "The network connection was lost."'))), true);
+  assert.equal(transientNotaryWaitError(new Error(notaryPollOutput('-1003 "A server with the specified hostname could not be found."'))), true);
+  assert.equal(transientNotaryWaitError(pollHttp503), true);
+  assert.equal(transientSubmissionId(pollHttp503), null);
+  assert.equal(transientNotaryWaitError(pollTlsTrust), false);
+  assert.equal(transientSubmissionId(pollTlsTrust), null);
+  assert.equal(transientNotaryWaitError(pollAgreement), false);
+  assert.equal(transientNotaryWaitError(pollInvalid), false);
+  assert.equal(transientNotaryWaitError(notaryLost), false);
+  assert.equal(transientSubmissionId(notaryLost), null);
+});
+
+test('a transient polling drop with a submission id resumes waiting on that submission and then staples', async () => {
+  const { calls, waits, logs, run } = hook({
+    notarize: [pollOffline],
+    waitNotary: [pollHttp503, null],
+    staple: [connectionLost, null],
+  });
+  await run();
+  const expectedCreds = { appleId: 'id', appleIdPassword: 'secret', teamId: 'team' };
+  assert.deepEqual(calls, [
+    ['notarize', { tool: 'notarytool', appPath, ...expectedCreds }],
+    ['waitNotary', SUBMISSION_ID, expectedCreds],
+    ['waitNotary', SUBMISSION_ID, expectedCreds],
+    ['staple', appPath],
+    ['staple', appPath],
+  ]);
+  assert.deepEqual(waits, [30000, 60000, 15000]);
+  assert.match(logs[0], new RegExp(`waiting for notarization ${SUBMISSION_ID} on attempt 1 of 5`));
+});
+
+test('exhausting all wait retries throws the last transient error without stapling', async () => {
+  const finalError = new Error(notaryPollOutput('-1001 "The request timed out."'));
+  const { calls, waits, run } = hook({
+    notarize: [pollOffline],
+    waitNotary: [pollHttp503, pollOffline, pollHttp503, finalError],
+    staple: [],
+  });
+  await assert.rejects(run(), finalError);
+  assert.deepEqual(calls.map(([name]) => name), ['notarize', 'waitNotary', 'waitNotary', 'waitNotary', 'waitNotary']);
+  assert.deepEqual(waits, [30000, 60000, 120000, 240000]);
+});
+
+test('a rejected or refused resumed wait fails at once without stapling', async () => {
+  for (const permanent of [pollInvalid, pollAgreement, pollTlsTrust]) {
+    const { calls, waits, run } = hook({ notarize: [pollOffline], waitNotary: [permanent], staple: [] });
+    await assert.rejects(run(), permanent);
+    assert.deepEqual(calls.map(([name]) => name), ['notarize', 'waitNotary']);
+    assert.deepEqual(waits, [30000]);
+  }
+});
+
+test('waitForNotarization runs xcrun notarytool wait, reports diagnostics on rejection, redacts credentials, and preserves stderr/signal errors', { skip: process.platform === 'win32' }, async (t) => {
+  const release = await mkdtemp(join(tmpdir(), 'notary-wait-'));
+  t.after(() => rm(release, { recursive: true, force: true }));
+  const creds = { appleId: 'user@example.com', appleIdPassword: 'super-secret-password', teamId: 'TEAM123' };
+  const assertNoCreds = error => {
+    const serialized = `${error.message}\n${JSON.stringify(error)}`;
+    for (const secret of Object.values(creds)) assert.ok(!serialized.includes(secret), `leaked ${secret}`);
+  };
+  const path = process.env.PATH;
+  t.after(() => { process.env.PATH = path; });
+
+  await writeFile(join(release, 'xcrun'), `#!/bin/sh
+if [ "$1" = "notarytool" ] && [ "$2" = "wait" ]; then
+  echo '{"status":"Accepted","id":"${SUBMISSION_ID}","message":"Processing complete"}'
+  exit 0
+fi
+exit 1
+`, { mode: 0o755 });
+  process.env.PATH = `${release}:${path}`;
+  const accepted = await waitForNotarization(SUBMISSION_ID, creds);
+  assert.equal(accepted.status, 'Accepted');
+  assert.equal(accepted.id, SUBMISSION_ID);
+
+  // Explicit rejection with diagnostics, echoing credentials on both streams to verify redaction.
+  await writeFile(join(release, 'xcrun'), `#!/bin/sh
+if [ "$2" = "wait" ]; then
+  echo '{"status":"Invalid","id":"${SUBMISSION_ID}","message":"failed for user@example.com TEAM123"}'
+  echo "stderr echo super-secret-password user@example.com TEAM123" >&2
+  exit 0
+fi
+if [ "$2" = "log" ]; then
+  echo '{"status":"Invalid","issues":[{"message":"The binary is not signed (super-secret-password)."}]}'
+  exit 0
+fi
+exit 1
+`, { mode: 0o755 });
+  await assert.rejects(waitForNotarization(SUBMISSION_ID, creds), error => {
+    assert.match(error.message, /^Failed to notarize via notarytool\n\n\{"status":"Invalid"/);
+    assert.match(error.message, /Diagnostics from notarytool log:.*"The binary is not signed \(\*\*\*\)\."/);
+    assertNoCreds(error);
+    assert.equal(transientNotaryWaitError(error), false);
+    return true;
+  });
+
+  // Explicit rejection when fetching diagnostics log fails still throws cleanly without diagnostics.
+  await writeFile(join(release, 'xcrun'), `#!/bin/sh
+if [ "$2" = "wait" ]; then
+  echo '{"status":"Invalid","id":"${SUBMISSION_ID}","message":"Processing complete"}'
+  exit 0
+fi
+exit 1
+`, { mode: 0o755 });
+  await assert.rejects(waitForNotarization(SUBMISSION_ID, creds), error => {
+    assert.match(error.message, /^Failed to notarize via notarytool\n\n\{"status":"Invalid"/);
+    assert.doesNotMatch(error.message, /Diagnostics from notarytool log:/);
+    assert.equal(transientNotaryWaitError(error), false);
+    return true;
+  });
+
+  // Nonzero exit with Accepted JSON on stdout is still rejected.
+  await writeFile(join(release, 'xcrun'), `#!/bin/sh
+if [ "$2" = "wait" ]; then
+  echo '{"status":"Accepted","id":"${SUBMISSION_ID}","message":"Processing complete"}'
+  exit 1
+fi
+exit 1
+`, { mode: 0o755 });
+  await assert.rejects(waitForNotarization(SUBMISSION_ID, creds), error => {
+    assert.match(error.message, /^Failed to notarize via notarytool\n\n\{"status":"Accepted"/);
+    assert.equal(transientNotaryWaitError(error), false);
+    return true;
+  });
+
+  // Nonzero exit with parseable non-rejection JSON on stdout and retryable error on stderr stays transient without calling log.
+  await writeFile(join(release, 'xcrun'), `#!/bin/sh
+if [ "$2" = "wait" ]; then
+  echo '{"status":"In Progress","id":"${SUBMISSION_ID}"}'
+  echo 'Error: HTTP status code: 503. Service Unavailable for user@example.com super-secret-password TEAM123' >&2
+  exit 1
+fi
+echo 'log should not be called' >&2
+exit 99
+`, { mode: 0o755 });
+  await assert.rejects(waitForNotarization(SUBMISSION_ID, creds), error => {
+    assert.equal(transientNotaryWaitError(error), true);
+    assert.doesNotMatch(error.message, /Diagnostics from notarytool log:/);
+    assertNoCreds(error);
+    return true;
+  });
+
+  // Killed by signal includes signal name in error and is not retried.
+  await writeFile(join(release, 'xcrun'), `#!/bin/sh
+kill -KILL $$
+`, { mode: 0o755 });
+  await assert.rejects(waitForNotarization(SUBMISSION_ID, creds), error => {
+    assert.match(error.message, /Process terminated by signal: SIGKILL/);
+    assert.equal(transientNotaryWaitError(error), false);
+    assertNoCreds(error);
+    return true;
+  });
+
+  // Transient error echoing all credentials on stderr is redacted and retryable.
+  await writeFile(join(release, 'xcrun'), `#!/bin/sh
+echo 'Error: HTTPError(statusCode: nil, error: Error Domain=NSURLErrorDomain Code=-1009 "The Internet connection appears to be offline.") user@example.com super-secret-password TEAM123' >&2
+exit 1
+`, { mode: 0o755 });
+  await assert.rejects(waitForNotarization(SUBMISSION_ID, creds), error => {
+    assert.equal(transientNotaryWaitError(error), true);
+    assertNoCreds(error);
+    return true;
+  });
+
+  // Missing xcrun fails with ENOENT and does not expose spawnargs/credentials on the error object.
+  process.env.PATH = release;
+  await rm(join(release, 'xcrun'));
+  await assert.rejects(waitForNotarization(SUBMISSION_ID, creds), error => {
+    assert.equal(error.code, 'ENOENT');
+    assert.equal(error.spawnargs, undefined);
+    assertNoCreds(error);
+    assert.equal(transientNotaryWaitError(error), false);
+    return true;
   });
 });

@@ -1,0 +1,12 @@
+@neurodesk/aurora
+Copyright 2026 Neurodesk contributors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This package implements browser inference for BrainLesion/AURORA v0.2.7
+(https://github.com/BrainLesion/AURORA, Apache-2.0), developed by the BrainLesion
+team (Buchner JA, Kofler F, Peeken JC, Menze BH, Wiestler B, et al.).
+
+The pretrained model weights (t1c-o_best.tar from Zenodo 10.5281/zenodo.10557069,
+converted to aurora-t1c-o_best.onnx) are distributed separately under CC-BY-4.0
+and fetched at runtime from the pinned Hugging Face revision in model.manifest.json.

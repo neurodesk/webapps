@@ -39,7 +39,10 @@ nd-imaging-brand {
   box-sizing: border-box;
 }
 
-.nd-imaging-workspace {
+/* Until mountImagingWorkspace wraps them, the regions the hosted page already
+   carries are laid out on their parent, so the first paint matches the mounted one. */
+.nd-imaging-workspace,
+:where(:root[data-neurodesk-shell="imaging-workspace"]) :not(.nd-imaging-workspace):has(> .nd-imaging-controls):has(> .nd-imaging-viewer) {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -221,6 +224,10 @@ nd-imaging-brand {
   display: flex;
   flex-direction: column;
   background: var(--nd-color-bg);
+}
+
+:where(:root[data-neurodesk-shell="imaging-workspace"]) body:has(> .nd-imaging-controls):has(> .nd-imaging-viewer) {
+  margin: 0;
 }
 
 .nd-imaging-status {

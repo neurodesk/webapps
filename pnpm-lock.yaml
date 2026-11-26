@@ -153,6 +153,28 @@ importers:
         specifier: ^5.0.0
         version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
 
+  apps/aurora:
+    dependencies:
+      '@neurodesk/aurora':
+        specifier: workspace:*
+        version: link:../../packages/aurora
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.33
+        version: 1.0.0-rc.33
+      onnxruntime-web:
+        specifier: 1.29.0
+        version: 1.29.0
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1)
+
   apps/bison:
     dependencies:
       '@neurodesk/bison':
@@ -1187,6 +1209,28 @@ importers:
         specifier: ^5.0.0
         version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
 
+  apps/laynii:
+    dependencies:
+      '@neurodesk/laynii':
+        specifier: workspace:*
+        version: link:../../packages/laynii
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../../packages/runtime-support
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.33
+        version: 1.0.0-rc.33
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
+
   apps/lcmodel:
     dependencies:
       '@brainchop/core':
@@ -2014,6 +2058,25 @@ importers:
         specifier: 1.64.0
         version: 1.64.0
 
+  apps/vesselcharter:
+    dependencies:
+      '@neurodesk/vesselcharter':
+        specifier: workspace:*
+        version: link:../../packages/vesselcharter
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.26
+        version: 1.0.0-rc.26
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
+
   apps/white-matter-lesions:
     dependencies:
       '@neurodesk/runtime-support':
@@ -2118,6 +2181,16 @@ importers:
         version: link:../components
 
   packages/ants-denoise: {}
+
+  packages/aurora:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+    devDependencies:
+      onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
 
   packages/bison:
     dependencies:
@@ -2604,6 +2677,8 @@ importers:
         specifier: 1.64.0
         version: 1.64.0
 
+  packages/laynii: {}
+
   packages/lcmodel:
     dependencies:
       '@brainchop/core':
@@ -3045,6 +3120,12 @@ importers:
       '@playwright/test':
         specifier: 1.64.0
         version: 1.64.0
+
+  packages/vesselcharter:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
 
   packages/white-matter-lesions:
     dependencies:
@@ -15250,6 +15331,10 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.5
 
+  fdir@6.5.0(picomatch@4.0.7):
+    optionalDependencies:
+      picomatch: 4.0.7
+
   fflate@0.8.2: {}
 
   fflate@0.8.3: {}
@@ -18196,8 +18281,8 @@ snapshots:
 
   tinyglobby@0.2.17:
     dependencies:
-      fdir: 6.5.0(picomatch@4.0.5)
-      picomatch: 4.0.5
+      fdir: 6.5.0(picomatch@4.0.7)
+      picomatch: 4.0.7
 
   tinypool@1.1.1: {}
 
@@ -18536,8 +18621,8 @@ snapshots:
   vite@6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0):
     dependencies:
       esbuild: 0.25.12
-      fdir: 6.5.0(picomatch@4.0.5)
-      picomatch: 4.0.5
+      fdir: 6.5.0(picomatch@4.0.7)
+      picomatch: 4.0.7
       postcss: 8.5.17
       rollup: 4.62.2
       tinyglobby: 0.2.17
@@ -18552,8 +18637,8 @@ snapshots:
   vite@6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.1):
     dependencies:
       esbuild: 0.25.12
-      fdir: 6.5.0(picomatch@4.0.5)
-      picomatch: 4.0.5
+      fdir: 6.5.0(picomatch@4.0.7)
+      picomatch: 4.0.7
       postcss: 8.5.17
       rollup: 4.62.2
       tinyglobby: 0.2.17

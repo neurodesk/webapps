@@ -7,11 +7,18 @@ request and main push. It writes a GitHub job summary and uploads `quality-artif
 `knip.json`, `summary.md` and `diagnostics.log`. Scan warnings also appear in the
 summary so incomplete analysis is visible without downloading diagnostics.
 
-Findings are candidates for review. They do not fail CI yet. Invalid configuration,
+First-party unused files (`kind: "files"`, excluding upstream-tracked apps with
+`upstream.json`) are ratcheted against `config/unused-code-baseline.json` using
+normalized path, finding kind and symbol identity without line numbers. Each
+baseline entry requires a specific reason; adding a new unbaselined unused file
+or leaving a resolved entry in the baseline fails the job. Unused exports,
+types, duplicate symbols, dependencies, devDependencies and upstream-tracked
+apps remain report-only candidates for review. Invalid configuration,
 configuration modules that throw, scanner crashes, missing executables and invalid
 JSON output fail the job. The pinned Knip CLI's `--no-exit-code` suppresses findings
-only; the adapter requires a successful process and a valid report. Tests exercise
-both successful canary findings and real configuration failures.
+only; the adapter requires a successful process, a valid report and a clean
+first-party unused-file baseline. Tests exercise
+both successful canary findings, baseline ratchets and real configuration failures.
 
 ## Coverage and entry rules
 
@@ -36,8 +43,11 @@ Ordinary source files are not all entries. The following roots account for exter
   which `site/app-shell.js` imports from their staged copies by URL.
 - fastprep's report script `exes/fastprep/core/src/assets/sdc.js`, which the Rust
   report inlines with `include_str!`.
-- Shared JavaScript sources named in `runtime-assets/manifest.json`.
-- NeSVoR verification programs and surfannotate's icon renderer invoked manually.
+- Shared JavaScript sources named in `runtime-assets/manifest.json` and the
+  runtime module worker `packages/greedy/src/worker.js` loaded by URL.
+- NeSVoR verification programs, surfannotate's icon renderer, the isolated lint
+  canary runner `test-utils/lint-coverage-suite.mjs`, and the DR-BUDDI validation
+  runner (`exes/drbuddi-probe/validation/{browser,worker}.mjs`).
 
 Knip follows imports, literal dynamic imports and `new URL(..., import.meta.url)`
 worker references. New runtime modules loaded through constructed URLs need an

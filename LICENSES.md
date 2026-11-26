@@ -39,6 +39,10 @@ for each app are recorded in `registry/apps.yml`.
   N4 WebAssembly module and the n4 command line
 - `packages/dwidenoise`: BSD-3-Clause (`packages/dwidenoise/LICENSE`), as the DIPY 1.12.1 Patch2Self source it ports;
   attribution in `packages/dwidenoise/NOTICE`. It holds the dwidenoise WebAssembly module and command line
+- `packages/laynii`: BSD-3-Clause (`packages/laynii/LICENSE`), compiled from pinned upstream LayNii v2.10.0 (`LN2_LAYERS` and `LN2_PROFILE`) in single-threaded WebAssembly; attribution in `packages/laynii/NOTICE`
+- `apps/laynii`: BSD-3-Clause (`packages/laynii/LICENSE`), browser interface for `@neurodesk/laynii`
+- `packages/aurora`: Apache-2.0 (`packages/aurora/LICENSE`, `packages/aurora/NOTICE`), browser inference pipeline for `BrainLesion/AURORA` v0.2.7 (`t1c-o_best`); pretrained model weights from Zenodo 10557069 are CC-BY-4.0 (`models/aurora.manifest.json`)
+- `apps/aurora`: Apache-2.0 (`packages/aurora/LICENSE`), browser interface for `@neurodesk/aurora`
 - `apps/stardist`: BSD-3-Clause (`apps/stardist/LICENSE`), as the StarDist 0.9.1 and CSBDeep 0.8.1 code it
   ports and the pretrained `2D_versatile_fluo`, `2D_versatile_he`, `2D_paper_dsb2018` and `3D_demo` models
   it runs; attribution, and the Boost Software License of the bundled `clipper-lib`, in `apps/stardist/NOTICE`.
@@ -90,6 +94,7 @@ for each app are recorded in `registry/apps.yml`.
 - `apps/browserqc`: BSD-2-Clause (`apps/browserqc/LICENSE`)
 - `apps/surfannotate`: MIT (`apps/surfannotate/LICENSE`); bundled third-party
   notices in `apps/surfannotate/THIRD-PARTY.md`
+- `apps/openads`, `packages/openads`: JHU Non-Profit Research Software License Agreement (`apps/openads/LICENSE`, `packages/openads/LICENSE`, `© The Johns Hopkins University`); derived from OpenADS (ADSWeb) and StrokeView by Andreia V. Faria, Chin-Fu Liu, and the Faria Lab (Johns Hopkins University School of Medicine). Non-commercial academic and non-profit research use only; attribution and third-party notices are in `apps/openads/NOTICE` and `packages/openads/NOTICE`.
 - `packages/vesselboost`: UNLICENSED / NOASSERTION; extracted source preserves the upstream app status. QSM.rs and Rust third-party notices are included under `packages/vesselboost/preprocessing/`.
 - `packages/spinalcordtoolbox`: UNLICENSED / NOASSERTION; extracted source preserves the upstream app status.
 - `apps/vesselboost`, `apps/spinalcordtoolbox`, `apps/calmar`, and `apps/dicompare`:

@@ -2147,6 +2147,85 @@ apps:
       shared_runtime: false
       browser_test: true
       release: true
+  - id: vesselcharter
+    path: vesselcharter
+    catalog: neuro
+    title: VesselCharter
+    description: Measure vessel diameter, branching and tortuosity in 3D.
+    categories: [quantitative-mri]
+    keywords: [blood vessels, vasculature, angiography, diameter, branching, tortuosity, skeleton, centerline, VesselBoost, VesselCharter]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [nifti]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-webgpu
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: MIT
+    maintainers: [neurodesk]
+    support_status: experimental
+    handoff: none
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: true
+  - id: laynii
+    path: laynii
+    catalog: neuro
+    title: LayNii
+    description: Compute cortical layers and laminar profiles with LayNii.
+    categories: [functional-imaging]
+    keywords: [layer-fMRI, laminar, cortical layers, equivolume, equidistant, cortical depth, thickness, profile, 7T, LayNii]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [nifti, dicom]
+    hardware: cpu
+    handoff: none
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: BSD-3-Clause
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: true
+  - id: aurora
+    path: aurora
+    catalog: neuro
+    title: AURORA
+    description: Segment brain metastases on T1c MRI with AURORA.
+    categories: [segmentation, lesion-mapping]
+    keywords: [brain metastasis, metastases, lesion, oncology, segmentation, BraTS-MET, AURORA, BrainLesion, T1c, MONAI]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [nifti]
+    hardware: webgpu-optional
+    handoff: none
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: models/aurora.manifest.json
+    asset_manifest_schema: scientific-assets-v1
+    source: neurodesk/webapps@local
+    license: Apache-2.0
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    app_scoped_runtime_families: [ort-web-asyncify]
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: true
   - id: openads
     path: openads
     catalog: neuro
@@ -2171,4 +2250,4 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true

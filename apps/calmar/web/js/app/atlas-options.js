@@ -1,5 +1,6 @@
 export const ATLAS_OPTION_IDS = {
   SCHAEFER400: 'schaefer400',
+  ARTERIAL: 'arterial',
   YEO7: 'yeo7'
 };
 
@@ -23,6 +24,13 @@ export const ATLAS_OPTIONS = [
     displayName: 'Harvard–Oxford cortical + subcortical (25% maximum probability, 2 mm)',
     overlapAtlasAssetId: 'harvardoxford-cort-maxprob-thr25-2mm',
     subcorticalAtlasAssetId: 'harvardoxford-sub-maxprob-thr25-2mm',
+    weightSource: 'parcel',
+    colormap: 'random'
+  },
+  {
+    id: ATLAS_OPTION_IDS.ARTERIAL,
+    displayName: 'Arterial territories (Liu et al., 2023; 1 mm)',
+    overlapAtlasAssetId: 'arterial-territories-mni152-1mm',
     weightSource: 'parcel',
     colormap: 'random'
   },
