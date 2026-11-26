@@ -641,8 +641,8 @@ async function runJob(job) {
       }
     }
     let rawTr;
-    if (pwiMeta && 'RepetitionTime' in pwiMeta && pwiMeta.RepetitionTime != null) {
-      if (!Number.isFinite(pwiMeta.RepetitionTime) || pwiMeta.RepetitionTime <= 0) {
+    if (pwiMeta && Object.hasOwn(pwiMeta, 'RepetitionTime')) {
+      if (typeof pwiMeta.RepetitionTime !== 'number' || !Number.isFinite(pwiMeta.RepetitionTime) || pwiMeta.RepetitionTime <= 0) {
         throw new Error(`Invalid BIDS RepetitionTime (${pwiMeta.RepetitionTime}) in PWI JSON sidecar.`);
       }
       rawTr = pwiMeta.RepetitionTime;
@@ -653,16 +653,23 @@ async function runJob(job) {
     }
 
     let echoTime = TTP_DEFAULTS.echoTime;
-    if (pwiMeta && 'EchoTime' in pwiMeta && pwiMeta.EchoTime != null) {
-      if (!Number.isFinite(pwiMeta.EchoTime) || pwiMeta.EchoTime <= 0) {
+    if (pwiMeta && Object.hasOwn(pwiMeta, 'EchoTime')) {
+      if (typeof pwiMeta.EchoTime !== 'number' || !Number.isFinite(pwiMeta.EchoTime) || pwiMeta.EchoTime <= 0) {
         throw new Error(`Invalid BIDS EchoTime (${pwiMeta.EchoTime}) in PWI JSON sidecar.`);
       }
       echoTime = pwiMeta.EchoTime;
     }
 
-    const sliceEncodingDirection = pwiMeta?.SliceEncodingDirection ?? 'k';
+    let sliceEncodingDirection = 'k';
+    if (pwiMeta && Object.hasOwn(pwiMeta, 'SliceEncodingDirection')) {
+      if (typeof pwiMeta.SliceEncodingDirection !== 'string') {
+        throw new Error(`Invalid BIDS SliceEncodingDirection (${pwiMeta.SliceEncodingDirection}) in PWI JSON sidecar.`);
+      }
+      sliceEncodingDirection = pwiMeta.SliceEncodingDirection;
+    }
+
     let sliceTiming = null;
-    if (pwiMeta && 'SliceTiming' in pwiMeta && pwiMeta.SliceTiming != null) {
+    if (pwiMeta && Object.hasOwn(pwiMeta, 'SliceTiming')) {
       if (!Array.isArray(pwiMeta.SliceTiming)) {
         throw new Error('Invalid BIDS SliceTiming in PWI JSON sidecar: expected an array of numbers.');
       }

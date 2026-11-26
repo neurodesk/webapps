@@ -66,13 +66,19 @@ test('example selector loads StrokeFAIR MNI case, runs reporting + TreeSHAP + St
   expect(view.getInt32(0, true)).toBe(348);
   expect([view.getInt16(42, true), view.getInt16(44, true), view.getInt16(46, true)]).toEqual([182, 218, 182]);
 
-  // Verify mask editor opens via start() and applies edits cleanly
+  // Verify mask editor opens via start(), applies edits, and feeds the edited mask into re-runs
   await page.locator('#resultList .nd-volume-toggle[data-stage="stroke_mni"] .nd-edit-btn').click();
   const editor = page.locator('nd-mask-editor');
   await expect(editor).toBeVisible({ timeout: 20_000 });
   await editor.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(editor).toBeHidden({ timeout: 20_000 });
   await expect(page.locator('#resultList .nd-volume-toggle[data-stage="stroke_mni"]')).toContainText('(edited)');
+  await expect(page.locator('#maskSelect option:checked')).toContainText('sub-02e8eb42_stroke-mask_space-MNI152');
+  await expect(page.locator('.openads-edit-note')).toHaveCount(1);
+  await page.locator('#runButton').click();
+  await expect(page.locator('#statusText')).toContainText(/Done in /, { timeout: 120_000 });
+  await expect(page.locator('.openads-edit-note')).toHaveCount(0);
+  await expect(page.locator('#resultList .nd-volume-toggle[data-stage="stroke_mni"]')).not.toContainText('(edited)');
 });
 
 test('page drop via the shared shell loads and classifies a dropped NIfTI file', async ({ page }) => {

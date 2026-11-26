@@ -57,15 +57,23 @@ export function defaultSliceTiming(nz, tr, code = 3) {
   return timing;
 }
 
-const SLICE_DIRECTION_AXIS = { i: 0, 'i-': 0, j: 1, 'j-': 1, k: 2, 'k-': 2 };
+const SLICE_DIRECTION_AXIS = Object.assign(Object.create(null), {
+  i: 0,
+  'i-': 0,
+  j: 1,
+  'j-': 1,
+  k: 2,
+  'k-': 2,
+});
 
 export function sliceTimeCorrection(pwi, dims, tr, sliceTiming, options = {}) {
   const epsilon = typeof options === 'number' ? options : (options.epsilon ?? 1e-6);
-  const sliceEncodingDirection = typeof options === 'object' && options?.sliceEncodingDirection
-    ? String(options.sliceEncodingDirection).trim()
+  const rawDir = typeof options === 'object' && options && Object.hasOwn(options, 'sliceEncodingDirection')
+    ? options.sliceEncodingDirection
     : 'k';
-  if (!(sliceEncodingDirection in SLICE_DIRECTION_AXIS)) {
-    throw new Error(`Unsupported BIDS SliceEncodingDirection "${sliceEncodingDirection}".`);
+  const sliceEncodingDirection = typeof rawDir === 'string' ? rawDir.trim() : '';
+  if (!Object.hasOwn(SLICE_DIRECTION_AXIS, sliceEncodingDirection)) {
+    throw new Error(`Unsupported BIDS SliceEncodingDirection "${String(rawDir)}".`);
   }
   const sliceAxis = SLICE_DIRECTION_AXIS[sliceEncodingDirection];
   const reverseOrder = sliceEncodingDirection.endsWith('-');

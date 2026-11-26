@@ -180,12 +180,21 @@ const results = createResultList({
             if (!stage || !outputs[stage]) return;
             outputs[stage].file = editedFile;
             outputs[stage].edited = true;
+            const reusedDirectly = stage === 'stroke_mni' && assigned.mask !== null;
+            if (reusedDirectly) {
+              files[assigned.mask] = editedFile;
+              if (outputs.input_mask) outputs.input_mask.file = editedFile;
+              syncInputFiles(files);
+              renderInputs();
+            }
             const note = $('reportView').querySelector('.openads-edit-note');
             if (!note && lastResult) {
               $('reportView').prepend(
                 createElement('p', {
                   className: 'nd-report-notes openads-edit-note',
-                  text: 'Mask edited after report generation — re-run MNI reporting with the updated mask to refresh volumes, RF calls and StrokeView cohort.',
+                  text: reusedDirectly
+                    ? 'Mask edited after report generation — click Run analysis to refresh volumes, RF calls and StrokeView cohort.'
+                    : 'Mask edited after report generation — download or assign the edited mask under MNI lesion mask to refresh reporting.',
                 }),
               );
             }
@@ -238,7 +247,14 @@ function refreshControls() {
   $('runButton').disabled = busy || !plan.ready;
 }
 
-function begin(kind, message) {
+function syncInputFiles(list) {
+  $('imageInput').dispatchEvent(new CustomEvent('nd-files', { bubbles: true, detail: { files: list } }));
+}
+
+function begin(kind, message, signal = null) {
+  if (signal?.aborted) {
+    throw signal.reason || new DOMException('Aborted.', 'AbortError');
+  }
   if (job) {
     const previous = job;
     previous.controller.abort(new DOMException('Superseded by a new operation.', 'AbortError'));
@@ -246,15 +262,26 @@ function begin(kind, message) {
   }
   void maskEditor?.cancel();
   const controller = new AbortController();
-  job = { kind, controller, worker: null };
+  const current = { kind, controller, worker: null, detachSignal: null };
+  if (signal) {
+    const onAbort = () => {
+      if (job !== current) return;
+      current.controller.abort(signal.reason || new DOMException('Aborted.', 'AbortError'));
+      end(current, 'Cancelled.', { success: false });
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    current.detachSignal = () => signal.removeEventListener('abort', onAbort);
+  }
+  job = current;
   progress.begin(message);
   status(message);
   refreshControls();
-  return job;
+  return current;
 }
 
 function end(current, message, { success = true, error = false, value } = {}) {
   if (job !== current) return false;
+  current.detachSignal?.();
   current.worker?.terminate();
   job = null;
   progress.end(message, { success });
@@ -401,10 +428,15 @@ toolbar.control('overlayOpacity').addEventListener('input', (event) => {
   }
 });
 
-async function loadInputFiles(incoming, explicitRoleByFile = null) {
+async function loadInputFiles(incoming, explicitRoleByFile = null, signal = null) {
   const list = Array.from((await incoming) || []);
   if (!list.length) return;
-  const current = begin('loading', 'Reading input files…');
+  const current = begin('loading', 'Reading input files…', signal);
+  const assertStillCurrent = () => {
+    if (job !== current || current.controller.signal.aborted) {
+      throw current.controller.signal.reason || new DOMException('Import superseded.', 'AbortError');
+    }
+  };
   try {
     const jsonFiles = list.filter((f) => f.name.toLowerCase().endsWith('.json'));
     const imageCandidates = list.filter((f) => !f.name.toLowerCase().endsWith('.json'));
@@ -415,11 +447,11 @@ async function loadInputFiles(incoming, explicitRoleByFile = null) {
         converted.push(...imageCandidates);
       } else {
         const result = await readImageFiles(imageCandidates, { niftiOnly: false });
-        if (job !== current || current.controller.signal.aborted) return;
+        assertStillCurrent();
         for (const item of result) converted.push(item);
       }
     }
-    if (job !== current || current.controller.signal.aborted) return;
+    assertStillCurrent();
     const all = [...converted, ...jsonFiles];
     if (!all.length) throw new Error('No supported NIfTI, DICOM or JSON files found.');
     const explicitRoles = {};
@@ -431,6 +463,7 @@ async function loadInputFiles(incoming, explicitRoleByFile = null) {
     }
     files = all;
     assigned = assignRoles(files, explicitRoles);
+    syncInputFiles(files);
     renderInputs();
     clearResults();
     end(current, `Loaded ${files.length} file${files.length === 1 ? '' : 's'}.`);
@@ -440,7 +473,9 @@ async function loadInputFiles(incoming, explicitRoleByFile = null) {
       log.log(`Viewer preview unavailable: ${viewerErr?.message || viewerErr}`, 'error');
     }
   } catch (err) {
-    end(current, err.message || 'Could not read input files.', { success: false, error: true });
+    if (job === current) {
+      end(current, err.message || 'Could not read input files.', { success: false, error: err?.name !== 'AbortError' });
+    }
     throw err;
   }
 }
@@ -449,7 +484,7 @@ const exampleControl = createExampleSelector({
   examples,
   scope: $('inputSection'),
   onStatus: status,
-  onLoad: async (example, { fetchFiles, assertCurrent }) => {
+  onLoad: async (example, { fetchFiles, assertCurrent, signal }) => {
     const fetched = await fetchFiles();
     assertCurrent();
     const roleByName = new Map(example.files.map(({ name, role }) => [name, role]));
@@ -458,7 +493,7 @@ const exampleControl = createExampleSelector({
       const role = roleByName.get(file.name);
       if (role) explicitRoleByFile.set(file, role);
     }
-    await loadInputFiles(fetched, explicitRoleByFile);
+    await loadInputFiles(fetched, explicitRoleByFile, signal);
     assertCurrent();
   },
 });
@@ -466,7 +501,7 @@ $('exampleControl').append(exampleControl);
 
 $('imageInput').addEventListener('change', (event) => {
   const picked = event.target.files;
-  if (picked?.length) void loadInputFiles(picked);
+  if (picked?.length) void loadInputFiles(picked).catch(() => {});
 });
 
 function buildDownloads(reporting) {
@@ -483,7 +518,7 @@ function buildDownloads(reporting) {
   return list;
 }
 
-function runAnalysis(options = {}) {
+function runAnalysis(options = {}, signal = null) {
   const plan = detectMode(assigned);
   if (!plan.ready) {
     status('Load DWI + b0/ADC or an MNI152 lesion mask first.', true);
@@ -500,7 +535,12 @@ function runAnalysis(options = {}) {
     if (assigned[role] !== null) selectedFiles[role] = files[assigned[role]];
   }
 
-  const current = begin('running', `Running OpenADS (${plan.mode})…`);
+  let current;
+  try {
+    current = begin('running', `Running OpenADS (${plan.mode})…`, signal);
+  } catch (err) {
+    return Promise.reject(err);
+  }
   let resolveCompletion;
   let rejectCompletion;
   const completion = new Promise((res, rej) => {
@@ -666,17 +706,13 @@ registerAppAutomation({
         }
       }
       if (!incoming.length) throw new Error('Supply DWI+b0/ADC or an MNI152 stroke mask.');
-      await loadInputFiles(incoming, explicitRoleByFile);
+      await loadInputFiles(incoming, explicitRoleByFile, signal);
+      signal?.throwIfAborted();
       if (parameters?.runSyn !== undefined) $('runSyn').checked = Boolean(parameters.runSyn);
       if (parameters?.runShap !== undefined) $('runShap').checked = Boolean(parameters.runShap);
       if (parameters?.threshold !== undefined) $('threshold').value = String(parameters.threshold);
       if (parameters?.cohortK !== undefined) $('cohortK').value = String(parameters.cohortK);
-      return runAbortable(signal, () => runAnalysis(parameters || {}), () => {
-        if (job) {
-          job.controller.abort(new DOMException('Aborted.', 'AbortError'));
-          end(job, 'Cancelled.', { success: false });
-        }
-      });
+      return runAbortable(signal, () => runAnalysis(parameters || {}, signal));
     },
   },
   reset: () => {
@@ -687,6 +723,7 @@ registerAppAutomation({
     }
     files = [];
     assigned = Object.fromEntries(ROLES.map(({ role }) => [role, null]));
+    syncInputFiles([]);
     renderInputs();
     clearResults();
     progress.reset();

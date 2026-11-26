@@ -540,4 +540,9 @@ test('readNifti derives voxel spacing from affine, rejects oversized buffers, an
   const jDir = sliceTimeCorrection(pwi, dims, 2.0, [0.0, 0.5, 1.0], { sliceEncodingDirection: 'j' });
   assert.ok(Math.abs(jDir.data[0 + n3] - 12) < 1e-4);
   assert.ok(Math.abs(jDir.data[4 + n3] - 11) < 1e-4);
+
+  assert.throws(
+    () => sliceTimeCorrection(pwi, dims, 2.0, null, { sliceEncodingDirection: 'constructor' }),
+    /Unsupported BIDS SliceEncodingDirection/,
+  );
 });
