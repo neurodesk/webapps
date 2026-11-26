@@ -585,6 +585,27 @@ test('mergeBeadsMaps preserves closed status, bumps revision on merge, caps evid
   assert.equal(mergedUnprefixedTombstone.get(idA).status, 'open');
   assert.equal(mergedUnprefixedTombstone.get(idA).lease, null);
 
+  // Mixed-version sync deduplicates equivalent v2:<x> and <x> tombstones so 26 releases never overflow the 50-entry cap
+  let mixed26 = base;
+  for (let i = 0; i < 26; i++) {
+    const stepMs = t1.getTime() + 5000 + i * 20;
+    mixed26 = applyOperations(mixed26, [
+      { op: 'claim', id: idA, owner: `mv-${i}`, ttlHours: 1 },
+      { op: 'release', id: idA, owner: `mv-${i}` },
+    ], { actor: `mv-${i}`, now: new Date(stepMs) }).beads;
+  }
+  const unprefixed26 = new Map([[idA, validateBead({
+    ...structuredClone(mixed26.get(idA)),
+    releasedLeases: mixed26.get(idA).releasedLeases.map((k) => k.slice(3)),
+  })]]);
+  const activeWith26 = mergeBeadsMaps(mixed26, applyOperations(base, [
+    { op: 'claim', id: idA, owner: 'still-active', ttlHours: 48 },
+  ], { actor: 'still-active', now: t1 }).beads);
+  const mergedMixedVersions = mergeBeadsMaps(activeWith26, unprefixed26);
+  assert.equal(mergedMixedVersions.get(idA).releasedLeases.length, 26);
+  assert.equal(mergedMixedVersions.get(idA).leaseFloorAt, null);
+  assert.equal(mergedMixedVersions.get(idA).lease?.owner, 'still-active');
+
   // Adding audit notes to a tied branch must NEVER flip which scheduling edit wins
   const tiedTitle = applyOperations(base, [{ op: 'update', id: idA, title: 'Tied title' }], { actor: 'host-1', now: t1 }).beads;
   const tiedDep = applyOperations(base, [{ op: 'dep_add', id: idA, blockedBy: idB }], { actor: 'host-2', now: t1 }).beads;

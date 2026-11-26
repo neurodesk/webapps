@@ -312,7 +312,13 @@ function tombstoneClaimedAt(entry) {
 }
 
 function sortTombstones(entries) {
-  return [...new Set(entries)].sort((a, b) =>
+  const unique = new Set(entries);
+  for (const entry of [...unique]) {
+    if (entry.startsWith('v2:') && unique.has(entry.slice(3))) {
+      unique.delete(entry.slice(3));
+    }
+  }
+  return [...unique].sort((a, b) =>
     tombstoneClaimedAt(a).localeCompare(tombstoneClaimedAt(b)) || a.localeCompare(b),
   );
 }
@@ -1481,6 +1487,12 @@ function commitTree(repoTop, treeSha, parents, message, authorName, authorEmail)
   }).trim();
 }
 
+function updateMemoryRefCas(repoTop, ref, newSha, oldSha) {
+  assertNotSymbolicRef(repoTop, ref);
+  assertRefNotCheckedOut(repoTop, ref);
+  git(['update-ref', '--no-deref', ref, newSha, oldSha], { cwd: repoTop });
+}
+
 export function commitBeadsToRef(cwd, beadsMap, { ref = DEFAULT_BEADS_REF, expectedParentSha = null, message = 'beads: update work graph', authorName = 'neurodesk-beads', authorEmail = 'beads@neurodesk.local' } = {}) {
   assertMemoryRef(ref);
   const repoTop = resolveGitRoot(cwd);
@@ -1491,8 +1503,9 @@ export function commitBeadsToRef(cwd, beadsMap, { ref = DEFAULT_BEADS_REF, expec
   const commitSha = commitTree(repoTop, treeSha, parents, message, authorName, authorEmail);
   const oldArg = expectedParentSha ?? ZERO_OID;
   try {
-    git(['update-ref', '--no-deref', ref, commitSha, oldArg], { cwd: repoTop });
+    updateMemoryRefCas(repoTop, ref, commitSha, oldArg);
   } catch (error) {
+    if (error instanceof BeadsConflictError || error instanceof BeadsValidationError) throw error;
     throw new BeadsConflictError(`Concurrent update detected on ${ref}: ${error.message}`);
   }
   return commitSha;
@@ -1585,11 +1598,12 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
 
     if (remoteState.sha && !localState.sha) {
       try {
-        git(['update-ref', '--no-deref', ref, remoteState.sha, ZERO_OID], { cwd: repoTop });
+        updateMemoryRefCas(repoTop, ref, remoteState.sha, ZERO_OID);
         finalSha = remoteState.sha;
         mergedCount = remoteState.beads.size;
         break;
-      } catch {
+      } catch (error) {
+        if (error instanceof BeadsConflictError || error instanceof BeadsValidationError) throw error;
         if (attempt + 1 < maxRetries) continue;
         throw new BeadsConflictError(`Concurrent initialization conflict on ${ref}`);
       }
@@ -1601,11 +1615,12 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
       }
       if (isAncestor(repoTop, localState.sha, remoteState.sha)) {
         try {
-          git(['update-ref', '--no-deref', ref, remoteState.sha, localState.sha], { cwd: repoTop });
+          updateMemoryRefCas(repoTop, ref, remoteState.sha, localState.sha);
           finalSha = remoteState.sha;
           mergedCount = remoteState.beads.size;
           break;
-        } catch {
+        } catch (error) {
+          if (error instanceof BeadsConflictError || error instanceof BeadsValidationError) throw error;
           if (attempt + 1 < maxRetries) continue;
           throw new BeadsConflictError(`Concurrent fast-forward conflict on ${ref}`);
         }
@@ -1626,11 +1641,12 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
         'beads@neurodesk.local',
       );
       try {
-        git(['update-ref', '--no-deref', ref, commitSha, localState.sha], { cwd: repoTop });
+        updateMemoryRefCas(repoTop, ref, commitSha, localState.sha);
         finalSha = commitSha;
         mergedCount = merged.size;
         break;
-      } catch {
+      } catch (error) {
+        if (error instanceof BeadsConflictError || error instanceof BeadsValidationError) throw error;
         if (attempt + 1 < maxRetries) continue;
         throw new BeadsConflictError(`Concurrent merge conflict on ${ref}`);
       }
