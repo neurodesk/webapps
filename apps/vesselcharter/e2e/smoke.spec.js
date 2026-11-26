@@ -85,8 +85,81 @@ for (const example of examples) {
     await expect(page.locator('#outputSection')).toHaveJSProperty('open', true, { timeout: 60000 });
     await expect(page.locator('#statusText')).toContainText('segments');
 
-    // Open the quantitative Report tab and verify tables populated.
+    // Colour scale legend and colormap selector appear for the 3D Vessel Tree.
+    const legend = page.locator('#colorLegend');
+    await expect(legend).toBeVisible();
+    await expect(legend).toHaveAttribute('data-kind', 'diameter');
+    await expect(legend).toContainText('Diameter (mm)');
+    await expect(legend).toContainText('Turbo');
+
+    // Clicking View on a report row and returning to the 3D tab preserves the 3D legend and label.
+    await page
+      .locator('#resultList .nd-volume-toggle')
+      .filter({ hasText: 'Summary Metrics (JSON)' })
+      .getByRole('button', { name: 'View', exact: true })
+      .click();
+    await expect(legend).toBeHidden();
+    await page.locator('.nd-view-tab[data-view="3d"]').click();
+    await expect(legend).toBeVisible();
+    await expect(legend).toHaveAttribute('data-kind', 'diameter');
+    await expect(page.locator('#imageLabel')).toContainText('3D Vessel Tree');
+
+    // Switching to Diameter Map (NIfTI) keeps the diameter legend and updates NiiVue's volume colormap/range.
+    await page
+      .locator('#resultList .nd-volume-toggle')
+      .filter({ hasText: 'Diameter Map (NIfTI)' })
+      .getByRole('button', { name: 'View', exact: true })
+      .click();
+    await expect(legend).toBeVisible();
+    await expect(legend).toHaveAttribute('data-kind', 'diameter');
+    const colormapSelect = page.locator('select[aria-label="Diameter colormap"]');
+    await expect(colormapSelect).toBeVisible();
+    await colormapSelect.selectOption('viridis');
+    await expect(legend).toContainText('Viridis');
+
+    await page.locator('#diameterScaleSection summary').click();
+    await page.locator('#diameterMax').fill('2.5');
+    await page.locator('#diameterMax').dispatchEvent('change');
+    await expect(legend).toContainText('2.50 mm');
+
+    // Verify NiiVue's actual volume display state reflects the chosen colormap and calMax.
+    const volumes = await page.evaluate(() =>
+      globalThis.neurodeskAutomation.dispatch('viewers.volumes', { viewerId: 'main' }),
+    );
+    expect(volumes[0].colormap.toLowerCase()).toBe('viridis');
+    expect(Math.abs(volumes[0].calMax - 2.5)).toBeLessThan(0.05);
+
+    // Invalid scale (max <= min) flags validation without overwriting the active range.
+    await page.locator('#diameterMax').fill('0.005');
+    await page.locator('#diameterMax').dispatchEvent('change');
+    const maxValid = await page.locator('#diameterMax').evaluate((el) => el.validity.valid);
+    expect(maxValid).toBe(false);
+    await expect(legend).toContainText('2.50 mm');
+
+    // Raising min above dataMin notes hidden thin voxels on the Diameter Map legend.
+    await page.locator('#diameterMax').fill('2.5');
+    await page.locator('#diameterMin').fill('1.0');
+    await page.locator('#diameterMin').dispatchEvent('change');
+    await expect(legend).toContainText('< 1.00 mm hidden');
+
+    await page.locator('#resetDiameterScaleBtn').click();
+    await expect(legend).not.toContainText('2.50 mm');
+    await expect(legend).not.toContainText('hidden');
+
+    // Switching to Skeleton Topology (NIfTI) renders the categorical topology legend.
+    await page
+      .locator('#resultList .nd-volume-toggle')
+      .filter({ hasText: 'Skeleton Topology (NIfTI)' })
+      .getByRole('button', { name: 'View', exact: true })
+      .click();
+    await expect(legend).toBeVisible();
+    await expect(legend).toHaveAttribute('data-kind', 'skeleton');
+    await expect(legend).toContainText('Segment');
+    await expect(legend).toContainText('Junction');
+
+    // Open the quantitative Report tab and verify tables populated (legend hides in Report view).
     await page.locator('.nd-view-tab[data-view="report"]').click();
+    await expect(legend).toBeHidden();
     await expect(page.locator('#resultsReport')).toBeVisible();
     await expect(page.locator('#resultsReport')).toContainText('Network summary');
     await expect(page.locator('#resultsReport')).toContainText('Diameter-stratified distribution');

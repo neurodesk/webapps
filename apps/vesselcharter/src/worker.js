@@ -1,5 +1,9 @@
 // Module Web Worker executing @neurodesk/vesselcharter off the UI thread.
-import { characterizeVesselNifti } from '@neurodesk/vesselcharter';
+import {
+  buildVesselTreeScalars,
+  characterizeVesselNifti,
+  computeDiameterDisplayRange,
+} from '@neurodesk/vesselcharter';
 
 self.onmessage = async (event) => {
   const { runId, vesselBytes, brainMaskBytes, parameters, baseName } = event.data;
@@ -27,9 +31,19 @@ self.onmessage = async (event) => {
       };
     }
 
+    const diameterRange = computeDiameterDisplayRange(result.segments, result.diameterMap);
+    const meshScalars = buildVesselTreeScalars(result.segments);
+    let vesselMeshScalars = null;
+    if (meshScalars) {
+      const scalarCopy = new Float32Array(meshScalars);
+      transferList.push(scalarCopy.buffer);
+      vesselMeshScalars = scalarCopy.buffer;
+    }
+
     // Keep lightweight summary + table rows for the interactive Report tab.
     const reportData = {
       summary: result.summary,
+      diameterRange,
       segments: result.segments.map((s) => ({
         id: s.id,
         componentId: s.componentId,
@@ -68,6 +82,7 @@ self.onmessage = async (event) => {
         runId,
         reportData,
         artifacts: serializedArtifacts,
+        vesselMeshScalars,
       },
       transferList,
     );

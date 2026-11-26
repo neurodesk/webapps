@@ -356,3 +356,20 @@ test('a label legend shows each label with its swatch, name and volume, styled f
   }
   assert.ok(rules.every((line) => !/#[0-9a-f]{3,8}\b|\brgba?\(/i.test(line)), 'no colour literals');
 });
+
+test('viewer colour-scale legend strip defines continuous and categorical classes from tokens alone', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  const rules = css.split('\n').filter((line) => /^\.nd-viewer-legend/.test(line));
+  for (const selector of [
+    '.nd-viewer-legend',
+    '.nd-viewer-legend-header',
+    '.nd-viewer-legend-title',
+    '.nd-viewer-legend-ramp',
+    '.nd-viewer-legend-ticks',
+    '.nd-viewer-legend-swatches',
+    '.nd-viewer-legend-chip',
+  ]) {
+    assert.ok(rules.some((line) => line.startsWith(`${selector} {`)), `imaging-workspace.css must define ${selector}`);
+  }
+  assert.ok(rules.every((line) => !/#[0-9a-f]{3,8}\b|\brgba?\(/i.test(line)), 'no colour literals');
+});

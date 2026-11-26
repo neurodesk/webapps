@@ -1064,6 +1064,15 @@ nd-result-list {
 .nd-legend-name { color: var(--nd-color-text); overflow-wrap: anywhere; }
 .nd-legend-volume { color: var(--nd-color-text-muted); font-variant-numeric: tabular-nums; text-align: right; }
 
+/* Viewer colour-scale legend strip: continuous gradient + ticks, or inline categorical swatches. */
+.nd-viewer-legend { display: flex; flex-direction: column; gap: var(--nd-space-xs); padding: var(--nd-space-xs) var(--nd-space-md); background: var(--nd-color-surface); border-top: 1px solid var(--nd-color-border); flex-shrink: 0; }
+.nd-viewer-legend-header { display: flex; justify-content: space-between; align-items: baseline; gap: var(--nd-space-sm); font-size: 0.7rem; color: var(--nd-color-text-muted); }
+.nd-viewer-legend-title { font-weight: 600; color: var(--nd-color-text); }
+.nd-viewer-legend-ramp { height: 10px; border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); }
+.nd-viewer-legend-ticks { display: flex; justify-content: space-between; gap: var(--nd-space-xs); font-size: 0.7rem; font-variant-numeric: tabular-nums; color: var(--nd-color-text-muted); }
+.nd-viewer-legend-swatches { display: flex; flex-wrap: wrap; align-items: center; gap: var(--nd-space-xs) var(--nd-space-md); font-size: 0.72rem; color: var(--nd-color-text); }
+.nd-viewer-legend-chip { display: inline-flex; align-items: center; gap: var(--nd-space-xs); }
+
 /* Embedded FreeBrowse 2.5: its own stylesheet stays inside an open shadow root. */
 .nd-viewer-embed {
   position: absolute;

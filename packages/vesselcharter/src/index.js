@@ -7,12 +7,16 @@ import { DIAMETER_BINS, computeSoamRadPerMm, measureVesselNetwork, smoothCenterl
 import { extractVesselGraph } from './graph.js';
 import { EULER_LUT, isEulerInvariant, isSimplePoint, lee94Skeletonize } from './lee94.js';
 import {
+  TURBO_COLORMAP,
   buildOutputArtifacts,
   buildVesselTreeMz3,
+  buildVesselTreeScalars,
+  computeDiameterDisplayRange,
   formatDiameterBinsCsv,
   formatGraphJson,
   formatJunctionsCsv,
   formatSegmentsCsv,
+  sampleColormapRgba,
   stemFromFilename,
 } from './outputs.js';
 import {
@@ -37,9 +41,12 @@ export {
   MAX_DECOMPRESSED_BYTES,
   MAX_VOXELS,
   PARAMETERS,
+  TURBO_COLORMAP,
   assertMatchingGrid,
   buildOutputArtifacts,
   buildVesselTreeMz3,
+  buildVesselTreeScalars,
+  computeDiameterDisplayRange,
   computeForegroundBBox,
   computeSoamRadPerMm,
   cropMaskWithPad,
@@ -60,6 +67,7 @@ export {
   measureVesselNetwork,
   pointToBackgroundBoxDistance,
   readBinaryMaskNifti,
+  sampleColormapRgba,
   smoothCenterlineVox,
   spatialUnitsToMm,
   stemFromFilename,
