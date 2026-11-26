@@ -917,39 +917,52 @@ test('unused-code-triage mcp-scripts enforce strict file caps, byte caps, and an
     });
   };
 
-  // list_app_files strictly caps at 500 across two directories
+  // list_app_files caps serialized JSON response strictly <= 16384 bytes (below Copilot CLI's 20 KiB inline limit)
   const listed = runTool('list_app_files', { app: 'many' });
   assert.equal(listed.status, 0, listed.stderr);
+  assert.ok(Buffer.byteLength(listed.stdout.trim(), 'utf8') <= 16384, 'list_app_files serialized response must stay <= 16384 bytes');
   const listOut = JSON.parse(listed.stdout);
-  assert.equal(listOut.count, 500);
-  assert.equal(listOut.files.length, 500);
+  assert.equal(listOut.files.length, listOut.count);
+  assert.ok(listOut.count > 0 && listOut.count <= 500);
   assert.equal(listOut.truncated, true);
 
-  // read_app_file caps output strictly at 32768 UTF-8 bytes even for multi-byte Unicode and supports char_offset paging to the tail
-  const readPage1 = runTool('read_app_file', { app: 'many', file: 'apps/many/huge.js' });
-  assert.equal(readPage1.status, 0, readPage1.stderr);
-  const page1 = JSON.parse(readPage1.stdout);
-  assert.equal(page1.truncated, true);
-  assert.ok(Buffer.byteLength(page1.content, 'utf8') <= 32768, 'UTF-8 output must never exceed 32768 bytes');
-  assert.equal(typeof page1.next_char_offset, 'number');
+  // read_app_file caps FULL serialized JSON response <= 16384 bytes even for multi-byte Unicode and JSON-escaped quotes/backslashes,
+  // and char_offset paging recovers the complete content to the tail across multiple pages.
+  writeFileSync(join(scratch, 'apps', 'many', 'escaped.js'), `${'"\\'.repeat(10000)}END_ESC\n`, 'utf8');
+  let cursor = 0;
+  let recovered = '';
+  let pages = 0;
+  while (cursor !== null) {
+    const res = runTool('read_app_file', { app: 'many', file: 'apps/many/huge.js', char_offset: cursor });
+    assert.equal(res.status, 0, res.stderr);
+    assert.ok(Buffer.byteLength(res.stdout.trim(), 'utf8') <= 16384, 'read_app_file serialized response must stay <= 16384 bytes');
+    const page = JSON.parse(res.stdout);
+    recovered += page.content;
+    cursor = page.next_char_offset;
+    pages += 1;
+    assert.ok(pages <= 10, 'paging must make forward progress');
+  }
+  assert.ok(pages >= 3, '48 KiB multi-byte file must paginate cleanly into <= 16 KiB responses');
+  assert.ok(recovered.endsWith('TAIL_MARKER\n'), 'char_offset paging must recover the tail of a long single-line file');
 
-  const readPage2 = runTool('read_app_file', { app: 'many', file: 'apps/many/huge.js', char_offset: page1.next_char_offset });
-  assert.equal(readPage2.status, 0, readPage2.stderr);
-  const page2 = JSON.parse(readPage2.stdout);
-  assert.equal(page2.truncated, false);
-  assert.equal(page2.next_char_offset, null);
-  assert.ok(page2.content.endsWith('TAIL_MARKER\n'), 'char_offset paging must recover the tail of a long single-line file');
+  const escRes = runTool('read_app_file', { app: 'many', file: 'apps/many/escaped.js', start_line: 1, max_lines: 1 });
+  assert.equal(escRes.status, 0, escRes.stderr);
+  assert.ok(Buffer.byteLength(escRes.stdout.trim(), 'utf8') <= 16384, 'escaped JSON content must still fit within 16384-byte response');
+  const escPage = JSON.parse(escRes.stdout);
+  assert.equal(escPage.truncated, true);
+  assert.equal(typeof escPage.next_char_offset, 'number');
 
   // read_triage_artifact rejects symlinked quality-artifacts parent directory
   const symArtifact = runTool('read_triage_artifact', { name: 'summary.md' });
   assert.notEqual(symArtifact.status, 0);
   assert.match(symArtifact.stderr, /Artifact directory invalid/);
 
-  // search_app_files reports incomplete coverage when files > 512 KiB are skipped or > 100 matches exist
+  // search_app_files reports incomplete coverage and caps FULL serialized JSON response <= 16384 bytes
   mkdirSync(join(scratch, 'apps', 'searchable'), { recursive: true });
   writeFileSync(join(scratch, 'apps', 'searchable', 'small.js'), 'const foundToken = 1;\n', 'utf8');
   const cleanSearch = runTool('search_app_files', { app: 'searchable', query: 'foundToken' });
   assert.equal(cleanSearch.status, 0, cleanSearch.stderr);
+  assert.ok(Buffer.byteLength(cleanSearch.stdout.trim(), 'utf8') <= 16384);
   const cleanOut = JSON.parse(cleanSearch.stdout);
   assert.equal(cleanOut.complete, true);
   assert.equal(cleanOut.truncated_by_match_limit, false);
@@ -964,6 +977,7 @@ test('unused-code-triage mcp-scripts enforce strict file caps, byte caps, and an
   );
   const largeSkippedSearch = runTool('search_app_files', { app: 'searchable', query: 'NVImage' });
   assert.equal(largeSkippedSearch.status, 0, largeSkippedSearch.stderr);
+  assert.ok(Buffer.byteLength(largeSkippedSearch.stdout.trim(), 'utf8') <= 16384);
   const largeOut = JSON.parse(largeSkippedSearch.stdout);
   assert.equal(largeOut.complete, false);
   assert.equal(largeOut.truncated_by_match_limit, false);
@@ -973,15 +987,16 @@ test('unused-code-triage mcp-scripts enforce strict file caps, byte caps, and an
 
   writeFileSync(
     join(scratch, 'apps', 'searchable', 'many-hits.js'),
-    Array.from({ length: 105 }, (_, i) => `const hit_${i} = REPEAT_SYM;`).join('\n'),
+    Array.from({ length: 105 }, (_, i) => `const hit_${i} = REPEAT_SYM + "${'x'.repeat(180)}";`).join('\n'),
     'utf8',
   );
   const matchCapSearch = runTool('search_app_files', { app: 'searchable', query: 'REPEAT_SYM' });
   assert.equal(matchCapSearch.status, 0, matchCapSearch.stderr);
+  assert.ok(Buffer.byteLength(matchCapSearch.stdout.trim(), 'utf8') <= 16384, 'search_app_files serialized response must stay <= 16384 bytes');
   const matchCapOut = JSON.parse(matchCapSearch.stdout);
   assert.equal(matchCapOut.complete, false);
   assert.equal(matchCapOut.truncated_by_match_limit, true);
-  assert.equal(matchCapOut.count, 100);
+  assert.ok(matchCapOut.count > 0 && matchCapOut.count <= 100);
 });
 
 test('gh-aw triage workflow and safe-outputs bridge select no apps or site builds in app-plan', async () => {

@@ -92,7 +92,7 @@ mcp-scripts:
     script: |
       const fs = require('node:fs');
       const path = require('node:path');
-      const MAX_BYTES = 32768;
+      const MAX_RESPONSE_BYTES = 16384;
       const allowed = new Set(['summary.md', 'knip.json', 'beads-snapshot.json']);
       if (!allowed.has(name)) {
         throw new Error('Allowed artifacts: summary.md, knip.json, beads-snapshot.json');
@@ -122,16 +122,31 @@ mcp-scripts:
       const rawContent = slice.join('\n');
       const offset = Math.max(0, Number.isInteger(char_offset) ? char_offset : 0);
       const remaining = rawContent.slice(offset);
+      const baseBytes = Buffer.byteLength(
+        JSON.stringify({
+          total_lines: lines.length,
+          start_line: start,
+          end_line: start + slice.length - 1,
+          char_offset: offset,
+          next_char_offset: Math.max(rawContent.length, 9999),
+          bytes: MAX_RESPONSE_BYTES,
+          truncated: false,
+          content: '',
+        }),
+        'utf8',
+      );
+      const maxContentJsonBytes = Math.max(0, MAX_RESPONSE_BYTES - baseBytes);
       let content = '';
-      let usedBytes = 0;
+      let usedJsonBytes = 0;
       let consumedChars = 0;
       for (const ch of remaining) {
-        const chBytes = Buffer.byteLength(ch, 'utf8');
-        if (usedBytes + chBytes > MAX_BYTES) break;
+        const chJsonBytes = Buffer.byteLength(JSON.stringify(ch), 'utf8') - 2;
+        if (usedJsonBytes + chJsonBytes > maxContentJsonBytes) break;
         content += ch;
-        usedBytes += chBytes;
+        usedJsonBytes += chJsonBytes;
         consumedChars += ch.length;
       }
+      const usedBytes = Buffer.byteLength(content, 'utf8');
       const truncated = offset + consumedChars < rawContent.length;
       const next_char_offset = truncated ? offset + consumedChars : null;
       return { total_lines: lines.length, start_line: start, end_line: start + slice.length - 1, char_offset: offset, next_char_offset, bytes: usedBytes, truncated, content };
@@ -146,6 +161,7 @@ mcp-scripts:
       const fs = require('node:fs');
       const path = require('node:path');
       const MAX_FILES = 500;
+      const MAX_RESPONSE_BYTES = 16384;
       if (!/^[a-z][a-z0-9-]*$/.test(app || '')) throw new Error('Invalid app id');
       const root = process.env.GITHUB_WORKSPACE || process.cwd();
       const appsDir = path.join(root, 'apps');
@@ -156,24 +172,26 @@ mcp-scripts:
       const appReal = fs.realpathSync(appDir);
       const results = [];
       let truncated = false;
+      let usedBytes = Buffer.byteLength(JSON.stringify({ app, count: MAX_FILES, truncated: false, files: [] }), 'utf8');
       const walk = (dir) => {
-        if (results.length >= MAX_FILES) {
-          truncated = true;
-          return;
-        }
+        if (truncated) return;
         const entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
         for (const entry of entries) {
-          if (results.length >= MAX_FILES) {
-            truncated = true;
-            return;
-          }
+          if (truncated) return;
           if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === '.git') continue;
           const full = path.join(dir, entry.name);
           if (entry.isSymbolicLink()) continue;
           if (entry.isDirectory()) {
             walk(full);
           } else if (entry.isFile()) {
-            results.push(`apps/${app}/${path.relative(appReal, full).replaceAll(path.sep, '/')}`);
+            const relPath = `apps/${app}/${path.relative(appReal, full).replaceAll(path.sep, '/')}`;
+            const entryBytes = Buffer.byteLength(JSON.stringify(relPath), 'utf8') + (results.length > 0 ? 1 : 0);
+            if (results.length >= MAX_FILES || usedBytes + entryBytes > MAX_RESPONSE_BYTES) {
+              truncated = true;
+              return;
+            }
+            results.push(relPath);
+            usedBytes += entryBytes;
           }
         }
       };
@@ -205,7 +223,7 @@ mcp-scripts:
     script: |
       const fs = require('node:fs');
       const path = require('node:path');
-      const MAX_BYTES = 32768;
+      const MAX_RESPONSE_BYTES = 16384;
       if (!/^[a-z][a-z0-9-]*$/.test(app || '')) throw new Error('Invalid app id');
       if (typeof file !== 'string' || !file.startsWith(`apps/${app}/`) || file.includes('..') || file.includes('\\')) {
         throw new Error(`File must be inside apps/${app}/`);
@@ -231,16 +249,32 @@ mcp-scripts:
       const rawContent = slice.join('\n');
       const offset = Math.max(0, Number.isInteger(char_offset) ? char_offset : 0);
       const remaining = rawContent.slice(offset);
+      const baseBytes = Buffer.byteLength(
+        JSON.stringify({
+          file,
+          total_lines: lines.length,
+          start_line: start,
+          end_line: start + slice.length - 1,
+          char_offset: offset,
+          next_char_offset: Math.max(rawContent.length, 9999),
+          bytes: MAX_RESPONSE_BYTES,
+          truncated: false,
+          content: '',
+        }),
+        'utf8',
+      );
+      const maxContentJsonBytes = Math.max(0, MAX_RESPONSE_BYTES - baseBytes);
       let content = '';
-      let usedBytes = 0;
+      let usedJsonBytes = 0;
       let consumedChars = 0;
       for (const ch of remaining) {
-        const chBytes = Buffer.byteLength(ch, 'utf8');
-        if (usedBytes + chBytes > MAX_BYTES) break;
+        const chJsonBytes = Buffer.byteLength(JSON.stringify(ch), 'utf8') - 2;
+        if (usedJsonBytes + chJsonBytes > maxContentJsonBytes) break;
         content += ch;
-        usedBytes += chBytes;
+        usedJsonBytes += chJsonBytes;
         consumedChars += ch.length;
       }
+      const usedBytes = Buffer.byteLength(content, 'utf8');
       const truncated = offset + consumedChars < rawContent.length;
       const next_char_offset = truncated ? offset + consumedChars : null;
       return { file, total_lines: lines.length, start_line: start, end_line: start + slice.length - 1, char_offset: offset, next_char_offset, bytes: usedBytes, truncated, content };
@@ -258,6 +292,9 @@ mcp-scripts:
     script: |
       const fs = require('node:fs');
       const path = require('node:path');
+      const MAX_MATCHES = 100;
+      const MAX_SKIPPED_LIST = 50;
+      const MAX_RESPONSE_BYTES = 16384;
       if (!/^[a-z][a-z0-9-]*$/.test(app || '')) throw new Error('Invalid app id');
       if (typeof query !== 'string' || query.length < 2 || query.length > 120) {
         throw new Error('query must be 2-120 characters');
@@ -273,6 +310,22 @@ mcp-scripts:
       const skippedLargeFiles = [];
       let skippedLargeFileCount = 0;
       let truncatedByMatchLimit = false;
+      const baseBytes = Buffer.byteLength(
+        JSON.stringify({
+          app,
+          query,
+          count: MAX_MATCHES,
+          complete: false,
+          truncated_by_match_limit: false,
+          skipped_large_file_count: 999999,
+          skipped_large_files: [],
+          matches: [],
+        }),
+        'utf8',
+      );
+      const matchBudget = Math.max(0, Math.min(12000, MAX_RESPONSE_BYTES - baseBytes));
+      let usedMatchBytes = 0;
+      let usedSkippedBytes = 0;
       const walk = (dir) => {
         if (truncatedByMatchLimit) return;
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -287,7 +340,13 @@ mcp-scripts:
             const stat = fs.statSync(full);
             if (stat.size > 512 * 1024) {
               skippedLargeFileCount += 1;
-              if (skippedLargeFiles.length < 50) skippedLargeFiles.push(relFile);
+              if (skippedLargeFiles.length < MAX_SKIPPED_LIST) {
+                const entryBytes = Buffer.byteLength(JSON.stringify(relFile), 'utf8') + (skippedLargeFiles.length > 0 ? 1 : 0);
+                if (baseBytes + matchBudget + usedSkippedBytes + entryBytes <= MAX_RESPONSE_BYTES) {
+                  skippedLargeFiles.push(relFile);
+                  usedSkippedBytes += entryBytes;
+                }
+              }
               continue;
             }
             const text = fs.readFileSync(full, 'utf8');
@@ -295,11 +354,14 @@ mcp-scripts:
             const lines = text.split('\n');
             for (let i = 0; i < lines.length; i++) {
               if (lines[i].includes(query)) {
-                if (matches.length >= 100) {
+                const matchObj = { file: relFile, line: i + 1, text: lines[i].slice(0, 200) };
+                const matchBytes = Buffer.byteLength(JSON.stringify(matchObj), 'utf8') + (matches.length > 0 ? 1 : 0);
+                if (matches.length >= MAX_MATCHES || usedMatchBytes + matchBytes > matchBudget) {
                   truncatedByMatchLimit = true;
                   return;
                 }
-                matches.push({ file: relFile, line: i + 1, text: lines[i].slice(0, 200) });
+                matches.push(matchObj);
+                usedMatchBytes += matchBytes;
               }
             }
           }
