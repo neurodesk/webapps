@@ -313,6 +313,10 @@ apps:
         title: JHU white-matter tractography atlas
         reference: "Hua K, Zhang J, Wakana S, et al. Tract probability maps in stereotaxic spaces: analyses of white matter anatomy and tract-specific quantification. NeuroImage. 2008;39(1):336–347."
         doi: 10.1016/j.neuroimage.2007.07.053
+      - group: Overlap atlases
+        title: Digital 3D brain MRI arterial territories atlas
+        reference: "Liu CF, Hsu J, Xu X, et al. Digital 3D brain MRI arterial territories atlas. Scientific Data. 2023;10:74."
+        doi: 10.1038/s41597-022-01923-0
       - group: Knowledge-base report atlases
         title: XTRACT tract atlases
         reference: "Warrington S, Bryant KL, Khrapitchev AA, et al. XTRACT: standardised protocols for automated tractography in the human and macaque brain. NeuroImage. 2020;217:116923."

@@ -115,6 +115,24 @@ const shiftedAffine = [
     /affines differ/,
     'matching atlas ids must still reject affine mismatches'
   );
+  for (const invalidEntry of [null, '', false, '0', Number.NaN, Number.POSITIVE_INFINITY]) {
+    const malformedAffine = [
+      [1, 0, 0, invalidEntry],
+      [0, 1, 0, 0],
+      [0, 0, 1, 0],
+      [0, 0, 0, 1]
+    ];
+    const malformedFile = tagSpatialFile({ name: `malformed-${String(invalidEntry)}.nii` }, {
+      space: atlasVolumeSpace('schaefer400-7n-2mm'),
+      dims: [2, 2, 2],
+      affine: malformedAffine
+    });
+    assert.throws(
+      () => assertSameSpace(base, malformedFile, 'Schaefer overlay'),
+      /affines differ/,
+      `assertSameSpace must reject non-numeric or non-finite affine entry ${JSON.stringify(invalidEntry)}`
+    );
+  }
 }
 
 {

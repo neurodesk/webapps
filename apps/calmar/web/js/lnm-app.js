@@ -35,7 +35,7 @@ import {
   decodeFcPack
 } from './modules/fc-weighted-sum.js';
 import { applyThresholdDetailed } from './modules/threshold.js';
-import { affineFromHeader, resampleAffine } from './modules/resample.js';
+import { affineFromHeader, computeAtlasFovCoverage, resampleAffine } from './modules/resample.js';
 import { centroidOfMask, applyAffineToVoxel } from './modules/prealign.js';
 import { writeNifti1 } from './modules/nifti-writer.js';
 import { resampleBinaryMask, writeBinaryMaskNifti } from './modules/mask-transform.js';
@@ -113,6 +113,14 @@ function dimsEqual(a, b) {
     a.every((value, index) => value === b[index]);
 }
 
+function headerAffineOrNull(header) {
+  try {
+    return affineFromHeader(header);
+  } catch {
+    return null;
+  }
+}
+
 function affineNearlyEqual(a, b, tolerance = 1e-3) {
   if (!Array.isArray(a) || !Array.isArray(b) || a.length < 3 || b.length < 3) return false;
   for (let r = 0; r < 3; r++) {
@@ -120,7 +128,12 @@ function affineNearlyEqual(a, b, tolerance = 1e-3) {
       return false;
     }
     for (let c = 0; c < 4; c++) {
-      if (Math.abs(a[r][c] - b[r][c]) > tolerance) return false;
+      const av = a[r][c];
+      const bv = b[r][c];
+      if (typeof av !== 'number' || typeof bv !== 'number' || !Number.isFinite(av) || !Number.isFinite(bv)) {
+        return false;
+      }
+      if (Math.abs(av - bv) > tolerance) return false;
     }
   }
   return true;
@@ -260,6 +273,11 @@ export class LesionNetworkMappingApp {
     this.thresholdedMaskFile = null; // Phase 5: thresholded binary NIfTI
     this.patientThresholdedMaskFile = null;
     this.patientAtlasFile = null;
+    this.patientAtlasFovCoverage = null;
+    this._patientAtlasProjectionId = 0;
+    this._pendingPatientAtlasProjection = null;
+    this._atlasQcStatusShown = false;
+    this.registrationFovCoverage = null;
     this.registrationTemplateFile = null;
     this.registeredT1MniFile = null;
     this.displacementMagnitudeFile = null;
@@ -776,7 +794,9 @@ export class LesionNetworkMappingApp {
   }
 
   getAtlasColormap(atlasOption = this.getAtlasOption()) {
-    return atlasOption?.id === 'schaefer400' ? SCHAEFER400_COLORMAP : YEO7_COLORMAP;
+    if (atlasOption?.id === 'schaefer400') return SCHAEFER400_COLORMAP;
+    if (atlasOption?.id === 'yeo7') return YEO7_COLORMAP;
+    return null;
   }
 
   populateAtlasSelect() {
@@ -799,7 +819,12 @@ export class LesionNetworkMappingApp {
     this.selectedAtlasOptionId = option.id;
     this.clearDerivedResults();
     this.patientAtlasFile = null;
+    this.patientAtlasFovCoverage = null;
+    this._patientAtlasProjectionId += 1;
     this.functionProfiles = null;
+    this.removeViewerOverlay('atlas-qc');
+    this.clearAtlasQcStatus(`Atlas set to ${option.displayName}.`);
+    this.refreshViewerLayerControls();
     this.updateOutput(`Atlas set to ${option.displayName}.`);
   }
 
@@ -1009,6 +1034,7 @@ export class LesionNetworkMappingApp {
             .then(() => {
               if (!this.isCurrent(owner)) return;
               this.applyViewerLayerVisibility(config.layer);
+              if (config.layer === 'atlasQc') this.syncAtlasQcStatus();
               this.refreshViewerLayerControls();
             })
             .catch(this.unlessSuperseded(owner, (err) => {
@@ -1018,6 +1044,9 @@ export class LesionNetworkMappingApp {
             }));
         } else {
           this.applyViewerLayerVisibility(config.layer);
+          if (config.layer === 'atlasQc') {
+            this.clearAtlasQcStatus('Atlas alignment QC overlay hidden.');
+          }
           this.refreshViewerLayerControls();
         }
       });
@@ -1129,15 +1158,38 @@ export class LesionNetworkMappingApp {
         return;
       }
       if (layer === 'atlasQc') {
+        const startedAtlasId = this.selectedAtlasOptionId;
         if (!this.patientAtlasFile) {
           (yield this.projectAtlasToPatientSpace());
         }
-        if (!this.patientAtlasFile) throw new Error('No atlas projection is available.');
+        if (this.selectedAtlasOptionId !== startedAtlasId) {
+          throw new DOMException('The selected atlas changed.', 'AbortError');
+        }
+        if (!this.patientAtlasFile) {
+          throw new Error('No atlas projection is available.');
+        }
+        const expectedProjectionId = this._patientAtlasProjectionId;
+        const assertAtlasCurrent = this.atlasQcTurn(assertCurrent, startedAtlasId, expectedProjectionId);
         this.assertViewerOverlaySpace(this.patientAtlasFile, 'Atlas QC overlay');
-        (yield this.loadViewerOverlay(this.patientAtlasFile, this.getAtlasOption().colormap, 0.45, {
+        const loaded = (yield this.loadViewerOverlay(this.patientAtlasFile, this.getAtlasOption().colormap, 0.45, {
           stage: 'atlas-qc',
           visible: this.layerVisible('atlasQc')
-        }, assertCurrent));
+        }, assertAtlasCurrent));
+        assertAtlasCurrent();
+        if (loaded === false) {
+          throw new Error('Could not display atlas QC overlay in viewer.');
+        }
+        if (this.layerVisible('atlasQc')) {
+          const fov = this.patientAtlasFovCoverage?.atlasId === startedAtlasId ? this.patientAtlasFovCoverage : null;
+          this.setAtlasQcStatus(
+            fov?.unobservedVoxels > 0
+              ? this.formatFovCoverageStatus(fov)
+              : 'Atlas alignment QC overlay displayed.'
+          );
+        } else {
+          this.applyViewerLayerVisibility('atlasQc');
+          this.clearAtlasQcStatus('Atlas alignment QC overlay hidden.');
+        }
       }
     }.call(this));
   }
@@ -1211,7 +1263,16 @@ export class LesionNetworkMappingApp {
   // The report also gives way during mask review: the drawing tools need the canvas.
   refreshResultsView() {
     this.refreshPrimaryAction();
-    document.getElementById('thresholdControls')?.classList.toggle('hidden', !this.getAtlasOption()?.connectomeAssetId);
+    const atlasOption = this.getAtlasOption();
+    document.getElementById('thresholdControls')?.classList.toggle('hidden', !atlasOption?.connectomeAssetId);
+    const minClusterLabel = document.querySelector?.('label[for="networkThresholdMinCluster"]');
+    if (minClusterLabel) {
+      minClusterLabel.textContent = atlasOption?.id === 'arterial'
+        ? 'Min overlap per territory (voxels)'
+        : atlasOption && !atlasOption.connectomeAssetId
+          ? 'Min overlap per region (voxels)'
+          : 'Min cluster size (voxels)';
+    }
     const available = this.resultsViewAvailable();
     const tab = document.querySelector('.view-tab[data-view="results"]');
     if (tab) tab.disabled = !available;
@@ -1274,7 +1335,14 @@ export class LesionNetworkMappingApp {
     }
     const atlasOption = this.overlapResult?.atlasOption || this.getAtlasOption();
     if (atlasOption) {
-      steps.push(`direct overlap of the warped mask with the ${atlasSpaceName(atlasOption)} atlas`);
+      const fov = this.registrationFovCoverage?.atlasId === atlasOption.id ? this.registrationFovCoverage : null;
+      const unitPlural = atlasOption?.id === 'arterial' ? 'territory' : 'region';
+      steps.push(
+        `direct overlap of the warped mask with the ${atlasSpaceName(atlasOption)} atlas` +
+        (fov?.unobservedVoxels > 0
+          ? ` (${fov.unobservedVoxels.toLocaleString('en-US')} labeled atlas voxels fall outside the MNI160 registration field of view and are unobserved; ROI covered % uses full ${unitPlural} volumes)`
+          : '')
+      );
       if (this.networkMapFile) {
         const connectome = version(atlasOption.connectomeAssetId);
         const symmetric = document.getElementById('networkThresholdSymmetric')?.checked;
@@ -1523,9 +1591,12 @@ export class LesionNetworkMappingApp {
   }
 
   // The layer controls follow what the viewer holds, so they are read again with every new base.
-  commitViewerBase(file) {
+  commitViewerBase(file, { hasAtlasQc = false } = {}) {
     this.viewerBaseFile = file;
     this._viewerBase += 1;
+    if (!hasAtlasQc) {
+      this.clearAtlasQcStatus('Viewer updated.');
+    }
     this.refreshViewerLayerControls();
   }
 
@@ -1613,7 +1684,9 @@ export class LesionNetworkMappingApp {
         check();
         this.assertReviewKeepsBase(null);
       },
-      onCommit: () => this.commitViewerBase(entries[0]?.file || null)
+      onCommit: () => this.commitViewerBase(entries[0]?.file || null, {
+        hasAtlasQc: entries.some(entry => entry?.stage === 'atlas-qc')
+      })
     }), { assertCurrent });
   }
 
@@ -2106,7 +2179,6 @@ export class LesionNetworkMappingApp {
     this.maskOrigin = 'atlas-grid';
     if (!this.structuralFile) {
       this.tagFileSpace(file, {
-        space: atlasOptionSpace(this.getAtlasOption(), 'overlap'),
         role: 'lesion',
         sourceStage: 'input'
       });
@@ -2183,7 +2255,13 @@ export class LesionNetworkMappingApp {
 
     if (!dimsEqual(lesion.dims, atlas.dims)) {
       this.updateOutput(`Lesion dims ${lesion.dims.join('x')} do not match atlas ${atlas.dims.join('x')}. Re-register or warp the mask to the selected atlas first.`);
-      return;
+      return { stopPipeline: true };
+    }
+    const lesionAffine = headerAffineOrNull(lesion.header);
+    const atlasAffine = headerAffineOrNull(atlas.header);
+    if (!lesionAffine || !atlasAffine || !affineNearlyEqual(lesionAffine, atlasAffine, 1e-3)) {
+      this.updateOutput(`Lesion affine does not match ${atlasSpaceName(atlasOption)}. Re-register or warp the mask to the selected atlas first.`);
+      return { stopPipeline: true };
     }
     if (generation !== this._resultsGeneration) return this.discardStaleResult('Overlap');
     this.tagDecodedFileSpace(this.lesionFile, lesion, {
@@ -2478,12 +2556,22 @@ export class LesionNetworkMappingApp {
     return displaySummary;
   }
 
+  directOverlapHelpText(atlasOption) {
+    let copy = `${atlasSpaceName(atlasOption)}: lesion and atlas are compared on the atlas grid. Lesion % = overlapping voxels / all lesion voxels × 100. ROI covered % = overlapping voxels / all voxels in that atlas region × 100. ROI means region of interest.`;
+    if (atlasOption?.id === 'harvardoxford') {
+      copy += ' Cortical labels combine both hemispheres; subcortical labels are sided. Named subcortical structures take precedence; broad tissue and ventricular labels are excluded.';
+    } else if (atlasOption?.id === 'arterial') {
+      copy += ' Thirty sided supra- and infratentorial arterial territories (Liu et al., 2023) at 1 mm MNI152 (1 mm³ per voxel); lateral ventricles are unlabeled and remain in the whole-lesion denominator.';
+    }
+    return copy;
+  }
+
   renderDirectOverlapTable() {
     if (!this.overlapResult) return null;
     const tableEl = document.getElementById('networkOverlapTable');
     const atlasOption = this.overlapResult.atlasOption || this.getAtlasOption();
     const help = document.getElementById('directOverlapHelp');
-    if (help) help.textContent = `${atlasSpaceName(atlasOption)}: lesion and atlas are compared on the atlas grid. Lesion % = overlapping voxels / all lesion voxels × 100. ROI covered % = overlapping voxels / all voxels in that atlas region × 100. ROI means region of interest. Cortical labels combine both hemispheres; subcortical labels are sided. Named subcortical structures take precedence; broad tissue and ventricular labels are excluded.`;
+    if (help) help.textContent = this.directOverlapHelpText(atlasOption);
     const displaySummary = this.getDisplayOverlapSummary();
     if (tableEl) {
       renderOverlapTable(tableEl, displaySummary, {
@@ -2705,6 +2793,7 @@ export class LesionNetworkMappingApp {
   beginStatus(text) {
     this._pipelineRunning = true;
     this._statusOwner = {};
+    this._atlasQcStatusShown = false;
     this.setStatusError(false);
     this.progress.begin(text, { cancellable: false });
     // Node test harnesses must not be kept alive by the elapsed counter.
@@ -2719,6 +2808,7 @@ export class LesionNetworkMappingApp {
   endStatus(text) {
     this._pipelineRunning = false;
     this._statusOwner = null;
+    this._atlasQcStatusShown = false;
     this.setStatusError(false);
     this.progress.end(text);
   }
@@ -2726,8 +2816,48 @@ export class LesionNetworkMappingApp {
   failStatus(text) {
     this._pipelineRunning = false;
     this._statusOwner = null;
+    this._atlasQcStatusShown = false;
     this.progress.end(text, { success: false });
     this.setStatusError(true);
+  }
+
+  setAtlasQcStatus(text) {
+    if (!text || this._pipelineRunning) return;
+    this._atlasQcStatusShown = true;
+    this.progress?.setText?.(text);
+  }
+
+  clearAtlasQcStatus(text = '') {
+    if (!this._atlasQcStatusShown) return;
+    this._atlasQcStatusShown = false;
+    if (!this._pipelineRunning && text) {
+      this.progress?.setText?.(text);
+    }
+  }
+
+  syncAtlasQcStatus(atlasId = this.selectedAtlasOptionId) {
+    if (!this.isViewerLayerLoaded('atlasQc') || !this.layerVisible('atlasQc')) {
+      this.clearAtlasQcStatus('Atlas alignment QC overlay hidden.');
+      return;
+    }
+    const fov = this.patientAtlasFovCoverage?.atlasId === atlasId ? this.patientAtlasFovCoverage : null;
+    this.setAtlasQcStatus(
+      fov?.unobservedVoxels > 0
+        ? this.formatFovCoverageStatus(fov)
+        : 'Atlas alignment QC overlay displayed.'
+    );
+  }
+
+  atlasQcTurn(baseAssert, expectedAtlasId = this.selectedAtlasOptionId, expectedProjectionId = this._patientAtlasProjectionId) {
+    return () => {
+      baseAssert?.();
+      if (
+        this.selectedAtlasOptionId !== expectedAtlasId ||
+        this._patientAtlasProjectionId !== expectedProjectionId
+      ) {
+        throw new DOMException('The selected atlas changed.', 'AbortError');
+      }
+    };
   }
 
   setStatusError(isError) {
@@ -2927,7 +3057,20 @@ export class LesionNetworkMappingApp {
       return;
     }
     if (data.stage === 'atlas-patient' && data.niftiData) {
-      const atlasOption = this.getAtlasOption();
+      const pending = this._pendingPatientAtlasProjection;
+      this._pendingPatientAtlasProjection = null;
+      if (
+        !pending ||
+        pending.id !== this._patientAtlasProjectionId ||
+        pending.atlasOption.id !== this.selectedAtlasOptionId
+      ) {
+        const label = pending?.atlasOption ? atlasSpaceName(pending.atlasOption) : 'Stale atlas';
+        this.updateOutput(`${label} QC projection discarded: the selected atlas changed or results were reset.`, { level: 'warning' });
+        this._resolveStageData(data.stage, { ...data, discarded: true });
+        return;
+      }
+      const atlasOption = pending.atlasOption;
+      this.patientAtlasFovCoverage = pending.fovCoverage || null;
       this.patientAtlasFile = arrayBufferToFile(data.niftiData, `lnm-${atlasOption.id}-atlas-patient.nii`, {
         space: this.structuralSpace() || VOLUME_SPACES.MNI160,
         role: 'atlas-qc',
@@ -4029,13 +4172,23 @@ export class LesionNetworkMappingApp {
     return this.patientThresholdedMaskFile;
   }
 
-  runInverseWarpStage(settings, stage, assertRun = this.pipelineTurn()) {
+  runInverseWarpStage(settings, stage, assertRun = this.pipelineTurn(), { shouldDispatch, onDispatch, onSettled } = {}) {
     const run = this._inverseWarpQueue.catch(() => {}).then(() => runCurrent(assertRun, function* () {
+      if (shouldDispatch && !shouldDispatch()) {
+        return { discarded: true, skippedBeforeDispatch: true };
+      }
       const stageReady = this._waitForStageData(stage, assertRun);
       const inverseWarpDone = this._waitForStepComplete('inverse-warp-mask', assertRun);
+      onDispatch?.();
       yield this.sendToWorker(assertRun, () => this.executor.runInverseWarpMask(settings, assertRun));
-      yield Promise.all([stageReady, inverseWarpDone]);
-    }.call(this), { onSettled: error => this.finishWorkerTask(assertRun, error) }));
+      const [stageResult] = yield Promise.all([stageReady, inverseWarpDone]);
+      return stageResult;
+    }.call(this), {
+      onSettled: error => {
+        onSettled?.(error);
+        this.finishWorkerTask(assertRun, error);
+      }
+    }));
     this._inverseWarpQueue = run.catch(() => {});
     return run;
   }
@@ -4098,11 +4251,23 @@ export class LesionNetworkMappingApp {
       mni160.dims, mni160Affine,
       'nearest'
     );
+    const fovCoverage = {
+      atlasId: atlasOption.id,
+      ...computeAtlasFovCoverage(
+        atlas.data,
+        atlas.dims,
+        atlasAffine,
+        mni160.dims,
+        mni160Affine,
+        labelMapForAtlas(atlas, atlasOption)
+      )
+    };
     return {
       labels: resampled instanceof OutputCtor ? resampled : new OutputCtor(resampled),
       dims: mni160.dims,
       affine: mni160Affine,
-      atlasOption
+      atlasOption,
+      fovCoverage
     };
   }
 
@@ -4119,16 +4284,38 @@ export class LesionNetworkMappingApp {
       if (!this.hasRegistrationDisplacement) {
         throw new Error('Run MNI registration first.');
       }
-      const { labels, dims, atlasOption } = (yield this.projectAtlasToMni160Grid());
+      const projectionId = ++this._patientAtlasProjectionId;
+      const { labels, dims, atlasOption, fovCoverage } = (yield this.projectAtlasToMni160Grid());
+      if (projectionId !== this._patientAtlasProjectionId || this.selectedAtlasOptionId !== atlasOption.id) {
+        this.updateOutput(`${atlasSpaceName(atlasOption)} QC projection discarded: the selected atlas changed or results were reset.`, { level: 'warning' });
+        return null;
+      }
       const maskBuffer = labels.buffer.slice(labels.byteOffset, labels.byteOffset + labels.byteLength);
-      (yield this.runInverseWarpStage({
+      const stageResult = (yield this.runInverseWarpStage({
         maskBuffer,
         maskDims: dims,
         stage: 'atlas-patient',
         description: `${atlasSpaceName(atlasOption)} atlas projected to patient T1 space`,
         labelMap: true,
         labelDataType: labels instanceof Uint16Array ? 'uint16' : 'uint8'
-      }, 'atlas-patient', assertCurrent));
+      }, 'atlas-patient', assertCurrent, {
+        shouldDispatch: () => projectionId === this._patientAtlasProjectionId && this.selectedAtlasOptionId === atlasOption.id,
+        onDispatch: () => {
+          this._pendingPatientAtlasProjection = { id: projectionId, atlasOption, fovCoverage };
+        },
+        onSettled: () => {
+          if (this._pendingPatientAtlasProjection?.id === projectionId) {
+            this._pendingPatientAtlasProjection = null;
+          }
+        }
+      }));
+      if (stageResult?.skippedBeforeDispatch) {
+        this.updateOutput(`${atlasSpaceName(atlasOption)} QC projection discarded: the selected atlas changed or results were reset.`, { level: 'warning' });
+        return null;
+      }
+      if (stageResult?.discarded || projectionId !== this._patientAtlasProjectionId || this.selectedAtlasOptionId !== atlasOption.id) {
+        return null;
+      }
       return this.patientAtlasFile;
     }.call(this));
   }
@@ -4136,14 +4323,53 @@ export class LesionNetworkMappingApp {
   showSubjectSpaceAtlas() {
     const assertCurrent = this.owner('pipeline', 'mask');
     return runCurrent(assertCurrent, function* () {
+      const startedAtlasId = this.selectedAtlasOptionId;
       if (!this.patientAtlasFile) {
         this.updateOutput(`Projecting ${atlasSpaceName(this.getAtlasOption())} atlas to patient T1 space for visual alignment QC...`);
         (yield this.projectAtlasToPatientSpace());
       }
+      if (!this.patientAtlasFile || this.selectedAtlasOptionId !== startedAtlasId) {
+        return null;
+      }
+      const expectedProjectionId = this._patientAtlasProjectionId;
+      const assertAtlasCurrent = this.atlasQcTurn(assertCurrent, startedAtlasId, expectedProjectionId);
       this.viewerLayerVisibility.atlasQc = true;
-      (yield this.renderPatientLayerStack({ includeAtlas: true, includeThreshold: false }));
+      let displayed;
+      try {
+        displayed = (yield this.renderPatientLayerStack({
+          includeAtlas: true,
+          includeThreshold: false,
+          expectedAtlasId: startedAtlasId,
+          expectedProjectionId
+        }));
+        assertAtlasCurrent();
+      } catch (err) {
+        if (this.superseded(err)) return null;
+        throw err;
+      }
+      if (displayed === false) {
+        this.viewerLayerVisibility.atlasQc = false;
+        this.refreshViewerLayerControls();
+        this.updateOutput('Could not display atlas alignment QC overlay in viewer.', { level: 'error' });
+        return null;
+      }
       this.refreshViewerLayerControls();
-      this.updateOutput('Atlas alignment QC overlay displayed. This is a visual check, not an automated pass/fail score.');
+      if (this.layerVisible('atlasQc')) {
+        const fov = this.patientAtlasFovCoverage?.atlasId === startedAtlasId ? this.patientAtlasFovCoverage : null;
+        const fovNote = this.formatFovCoverageNote(fov);
+        this.updateOutput(
+          'Atlas alignment QC overlay displayed. This is a visual check, not an automated pass/fail score.' +
+          (fovNote ? ` ${fovNote}` : '')
+        );
+        this.setAtlasQcStatus(
+          fov?.unobservedVoxels > 0
+            ? this.formatFovCoverageStatus(fov)
+            : 'Atlas alignment QC overlay displayed.'
+        );
+      } else {
+        this.applyViewerLayerVisibility('atlasQc');
+        this.clearAtlasQcStatus('Atlas alignment QC overlay hidden.');
+      }
       return this.patientAtlasFile;
     }.call(this));
   }
@@ -4386,7 +4612,7 @@ export class LesionNetworkMappingApp {
     }.call(this));
   }
 
-  renderPatientLayerStack({ includeAtlas = false, includeThreshold = true } = {}) {
+  renderPatientLayerStack({ includeAtlas = false, includeThreshold = true, expectedAtlasId = null, expectedProjectionId = null } = {}) {
     const assertCurrent = this.owner('pipeline', 'mask');
     return runCurrent(assertCurrent, function* () {
       if (!this.structuralFile) return;
@@ -4413,13 +4639,25 @@ export class LesionNetworkMappingApp {
           visible: this.layerVisible('threshold')
         });
       }
+      const stackAssert = includeAtlas
+        ? this.atlasQcTurn(
+          assertCurrent,
+          expectedAtlasId || this.selectedAtlasOptionId,
+          expectedProjectionId ?? this._patientAtlasProjectionId
+        )
+        : assertCurrent;
       this.assertViewerStackSpaces(entries, 'Patient-space viewer stack');
-      (yield this.loadViewerVolumeStack(entries, assertCurrent));
+      const loaded = (yield this.loadViewerVolumeStack(entries, stackAssert));
+      stackAssert();
+      if (loaded === false) {
+        return false;
+      }
       this.applyViewerLayerVisibility();
       this.refreshViewerLayerControls();
       this.updateOutput(includeAtlas
         ? 'Patient-space atlas QC stack displayed.'
         : 'Final patient-space view displayed: structural T1 with threshold map.');
+      return true;
     }.call(this));
   }
 
@@ -4465,7 +4703,7 @@ export class LesionNetworkMappingApp {
     const url = URL.createObjectURL(this.patientAtlasFile);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `lnm-${this.getAtlasOption().id}-atlas-patient.nii`;
+    a.download = this.patientAtlasFile.name || `lnm-${this.getAtlasOption().id}-atlas-patient.nii`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -4789,6 +5027,17 @@ export class LesionNetworkMappingApp {
         atlas.dims, atlasAffine,
         'nearest'
       );
+      const registrationFovCoverage = {
+        atlasId: atlasOption.id,
+        ...computeAtlasFovCoverage(
+          atlas.data,
+          atlas.dims,
+          atlasAffine,
+          warped.dims,
+          warpedAffine,
+          labelMapForAtlas(atlas, atlasOption)
+        )
+      };
 
       // Wrap the atlas-grid mask as a NIfTI and adopt it as the lesion file.
       const flatAffine = flattenAffine3Rows(atlasAffine);
@@ -4806,6 +5055,7 @@ export class LesionNetworkMappingApp {
         affine: atlasAffine
       });
       this.clearDerivedResults();
+      this.registrationFovCoverage = registrationFovCoverage;
       this.lesionFile = atlasFile;
       this.refreshViewerLayerControls();
       this.updateOutput(
@@ -5041,6 +5291,9 @@ export class LesionNetworkMappingApp {
         case 'fc-weighted-sum':
           return yield this.runFcNetworkMap();
         case 'threshold':
+          // Direct-overlap-only atlases have no connectivity map; leave the
+          // user's overlap voxel cutoff untouched so table and CSV stay in sync.
+          if (!this.getAtlasOption()?.connectomeAssetId) return;
           // applyNetworkThreshold is sync and reads UI controls. If the
           // stage carries `defaults`, push them into the controls before
           // computing so the selected pipeline's defaults are honoured when the
@@ -5088,6 +5341,7 @@ export class LesionNetworkMappingApp {
     this.cancelKbReport();
     this._resultsGeneration += 1;
     this.overlapResult = null;
+    this.registrationFovCoverage = null;
     this.affectedNetworkResult = null;
     this.networkMapFile = null;
     this.networkMapData = null;
@@ -5138,6 +5392,9 @@ export class LesionNetworkMappingApp {
     this.setMaskReview3DRenderEnabled(true);
     this._pendingMaskResume = null;
     this.patientAtlasFile = null;
+    this.patientAtlasFovCoverage = null;
+    this._patientAtlasProjectionId += 1;
+    this.clearAtlasQcStatus(full ? 'Drag and drop files' : 'Results cleared.');
     this.registeredT1MniFile = null;
     this.displacementMagnitudeFile = null;
     this.registrationCheckerboardFile = null;
@@ -5202,7 +5459,10 @@ export class LesionNetworkMappingApp {
       const buf = await this.lesionFile.arrayBuffer();
       const decoded = await decodeNiftiBuffer(buf);
       const atlas = await loadAtlasFromManifest(this.getAtlasOption().overlapAtlasAssetId);
-      return dimsEqual(decoded.dims, atlas.dims);
+      const lesionAffine = headerAffineOrNull(decoded.header);
+      const atlasAffine = headerAffineOrNull(atlas.header);
+      return dimsEqual(decoded.dims, atlas.dims) &&
+        Boolean(lesionAffine && atlasAffine && affineNearlyEqual(lesionAffine, atlasAffine, 1e-3));
     } catch (err) {
       this.reportFailure('Could not inspect lesion file', owner)(err);
       return false;
@@ -5213,12 +5473,49 @@ export class LesionNetworkMappingApp {
     return this.showAtlasCoverageNote(outside, total);
   }
 
+  formatFovCoverageNote(fovCoverage) {
+    if (!fovCoverage || !(fovCoverage.unobservedVoxels > 0)) return '';
+    const regions = (fovCoverage.clippedRegions || [])
+      .slice(0, 4)
+      .map(region => `${region.name} ${(region.unobservedFraction * 100).toFixed(1)}%`);
+    const extraCount = Math.max(0, (fovCoverage.clippedRegions?.length || 0) - regions.length);
+    const summary = regions.length
+      ? ` (${regions.join(', ')}${extraCount > 0 ? `, +${extraCount} more` : ''})`
+      : '';
+    const unitSingular = fovCoverage.atlasId === 'arterial' ? 'territory' : 'region';
+    return `Registration FOV limit (MNI160 grid): ${fovCoverage.unobservedVoxels.toLocaleString('en-US')} labeled atlas voxels fall outside the registration field of view and are unobserved${summary}; ROI covered % divides by the full ${unitSingular} volume.`;
+  }
+
+  formatFovCoverageStatus(fovCoverage) {
+    if (!fovCoverage || !(fovCoverage.unobservedVoxels > 0)) return '';
+    const count = fovCoverage.unobservedVoxels.toLocaleString('en-US');
+    const regionCount = fovCoverage.clippedRegions?.length || 0;
+    const isArterial = fovCoverage.atlasId === 'arterial';
+    const unit = regionCount === 1
+      ? (isArterial ? 'territory' : 'region')
+      : (isArterial ? 'territories' : 'regions');
+    const suffix = regionCount > 0 ? ` (${regionCount} ${unit})` : '';
+    return `Atlas QC displayed: ${count} labeled voxels clipped outside MNI160 FOV${suffix}.`;
+  }
+
   showAtlasCoverageNote(outside, total) {
     const el = document.getElementById('outsideAtlasWarning');
     if (!el) return;
+    const atlasOption = this.overlapResult?.atlasOption || this.getAtlasOption();
+    const parts = [];
     if (outside > 0 && total > 0) {
       const assigned = total - outside;
-      el.textContent = `${assigned} of ${total} lesion voxels are assigned to ${atlasSpaceName(this.getAtlasOption())} labels; ${outside} are unlabeled by this atlas.`;
+      parts.push(
+        atlasOption?.id === 'arterial'
+          ? `${assigned} of ${total} lesion voxels fall inside ${atlasSpaceName(atlasOption)}; ${outside} are outside labeled arterial territory.`
+          : `${assigned} of ${total} lesion voxels are assigned to ${atlasSpaceName(atlasOption)} labels; ${outside} are unlabeled by this atlas.`
+      );
+    }
+    const fov = this.registrationFovCoverage?.atlasId === atlasOption?.id ? this.registrationFovCoverage : null;
+    const fovNote = this.formatFovCoverageNote(fov);
+    if (fovNote) parts.push(fovNote);
+    if (parts.length > 0) {
+      el.textContent = parts.join(' ');
       el.classList.remove('hidden');
     } else {
       el.textContent = '';
