@@ -1,0 +1,44 @@
+{
+  "name": "@neurodesk/vesselcharter",
+  "version": "0.1.20261126",
+  "description": "3D blood vessel morphometry, centerline graph extraction and branching characterisation for browsers and the command line",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "vesselcharter": "./bin/vesselcharter.js"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./parameters": "./src/parameters.json",
+    "./volume": "./src/volume.js",
+    "./edt": "./src/edt.js",
+    "./lee94": "./src/lee94.js",
+    "./graph": "./src/graph.js",
+    "./geometry": "./src/geometry.js",
+    "./outputs": "./src/outputs.js",
+    "./phantom": "./src/phantom.js",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/*.js && node --check bin/vesselcharter.js"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/vesselcharter"
+  }
+}

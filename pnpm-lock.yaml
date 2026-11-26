@@ -1983,6 +1983,25 @@ importers:
         specifier: 1.64.0
         version: 1.64.0
 
+  apps/vesselcharter:
+    dependencies:
+      '@neurodesk/vesselcharter':
+        specifier: workspace:*
+        version: link:../../packages/vesselcharter
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.26
+        version: 1.0.0-rc.26
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
+
   apps/white-matter-lesions:
     dependencies:
       '@neurodesk/runtime-support':
@@ -3012,6 +3031,12 @@ importers:
       '@playwright/test':
         specifier: 1.64.0
         version: 1.64.0
+
+  packages/vesselcharter:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
 
   packages/white-matter-lesions:
     dependencies:

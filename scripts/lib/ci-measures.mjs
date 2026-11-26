@@ -147,6 +147,7 @@ export const WORKFLOWS = Object.freeze({
   'tumour-report-native': TEST,
   'unused-code': TEST,
   'vesselboost-native': TEST,
+  'vesselcharter-native': TEST,
   'white-matter-lesions-native': TEST,
   'windows-signing-policy': TEST,
   'wound-planimetry-native': TEST,

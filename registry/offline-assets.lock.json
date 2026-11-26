@@ -5715,6 +5715,13 @@
       "kind": "model",
       "license": "MIT",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/30e002f01b4f3d74dcd6c1cbcbe339036fa21730/examples/vesselcharter/lausanne-tof/lausanne-tof-crop-192x192x64_vesselboost-manual_0429.nii.gz": {
+      "sha256": "6502ec4c92e57bc98fda8d2c33f6cbd305d147a6d12b9982cf0932a2e37a3a1d",
+      "bytes": 13930,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
     }
   },
   "apps": {
@@ -7164,6 +7171,9 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000013.jpg",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0001115.jpg",
       "https://huggingface.co/sazio/skin-mole-vit-onnx/resolve/25be9e61a71125de9502648c1f6adceb7a882637/onnx/model_quantized.onnx"
+    ],
+    "vesselcharter": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/30e002f01b4f3d74dcd6c1cbcbe339036fa21730/examples/vesselcharter/lausanne-tof/lausanne-tof-crop-192x192x64_vesselboost-manual_0429.nii.gz"
     ]
   }
 }

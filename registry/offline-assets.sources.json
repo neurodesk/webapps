@@ -8081,6 +8081,14 @@
         "kind": "model",
         "license": "MIT"
       }
+    ],
+    "vesselcharter": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/30e002f01b4f3d74dcd6c1cbcbe339036fa21730/examples/vesselcharter/lausanne-tof/lausanne-tof-crop-192x192x64_vesselboost-manual_0429.nii.gz",
+        "sha256": "6502ec4c92e57bc98fda8d2c33f6cbd305d147a6d12b9982cf0932a2e37a3a1d",
+        "bytes": 13930,
+        "kind": "example"
+      }
     ]
   },
   "exclusions": [],

@@ -1,0 +1,47 @@
+{
+  "maskThreshold": {
+    "type": "number",
+    "description": "Voxels strictly above this intensity are treated as vessel foreground",
+    "minimum": 0,
+    "maximum": 1000000,
+    "default": 0
+  },
+  "fillHoles": {
+    "type": "boolean",
+    "description": "Fill 6-connected interior cavities inside vessels before skeletonisation",
+    "default": true
+  },
+  "minComponentVoxels": {
+    "type": "integer",
+    "description": "Minimum 26-connected vessel component size in voxels (0 keeps all)",
+    "minimum": 0,
+    "maximum": 1000000,
+    "default": 10
+  },
+  "minSpurLengthMm": {
+    "type": "number",
+    "description": "Iteratively prune terminal spurs shorter than this length in mm (0 disables)",
+    "minimum": 0,
+    "maximum": 50,
+    "default": 1.0
+  },
+  "pruneContainedSpurs": {
+    "type": "boolean",
+    "description": "Also prune terminal spurs whose tip stays within the parent junction inscribed sphere",
+    "default": false
+  },
+  "minIsolatedLengthMm": {
+    "type": "number",
+    "description": "Minimum length in mm for standalone endpoint-to-endpoint segments (0 keeps all)",
+    "minimum": 0,
+    "maximum": 50,
+    "default": 0
+  },
+  "smoothIterations": {
+    "type": "integer",
+    "description": "Pinned Taubin centerline smoothing iterations (0 keeps raw voxel polylines)",
+    "minimum": 0,
+    "maximum": 20,
+    "default": 6
+  }
+}

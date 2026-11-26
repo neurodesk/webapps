@@ -30,6 +30,7 @@ Paths in this table are relative to the repository root. Existing implementation
 
 | App | Useful batch operation | Existing code and next work |
 | --- | --- | --- |
+| `vesselcharter` | 3D vascular morphometry (diameter, branching, tortuosity, ROI density) | Packaged portable Node CLI in `packages/vesselcharter` (`bin/vesselcharter.js`, `release.json`, `validation/cli-check.mjs`) built through `exes/node-cli` and `.github/workflows/vesselcharter-native.yml`. |
 | `brainchomp` | Rodent MRI brain extraction (`brainchomp-lib`) | Packaged portable Node CLI in `packages/brainchomp` (`bin/brainchomp.js`, `release.json`, `validation/cli-check.mjs`) bundling the `brainchomp-lib` CPU WebAssembly module with embedded weights via `exes/node-cli` and `.github/workflows/brainchomp-native.yml`. |
 | `cellpose` | 2D and 3D cell and nucleus segmentation (Cellpose 3 `cyto3` and `nuclei`) | Packaged portable Node CLI in `packages/cellpose` (`bin/cellpose.js`, `release.json`, `validation/cli-check.mjs`) with bundled ONNX models built through `exes/node-cli` and `.github/workflows/cellpose-native.yml`. |
 | `tumour-report` | Contrast-enhancing brain tumour segmentation (Raidionics v1.3), native morphometry and MNI RADS report | Packaged portable Node CLI in `packages/tumour-report` (`bin/tumour-report.js`, `release.json`, `validation/cli-check.mjs`) bundling both pinned Raidionics v1.3 ONNX models, all MNI ICBM152 2009a atlases, `onnxruntime-node`, and Greedy WASM via `exes/node-cli` and `.github/workflows/tumour-report-native.yml`. |

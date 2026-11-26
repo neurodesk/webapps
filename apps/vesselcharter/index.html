@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VesselCharter — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <!-- 1. Input: open, working example + VesselBoost/binary NIfTI mask picker. -->
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Vessel mask</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a 3D binary vessel mask NIfTI file" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop vessel mask NIfTI</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+          <p class="nd-hint">3D binary NIfTI vessel mask, such as VesselBoost output.</p>
+        </div>
+      </details>
+
+      <!-- 2. Characterisation task: collapsed advanced settings + single primary action. -->
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Characterisation</summary>
+        <div class="nd-section-content">
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="minSpurLengthMm">Min spur length <small>mm</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About minimum spur length">i<span class="nd-info-tooltip">Iteratively prunes terminal spurs shorter than this physical length and merges degree-2 junctions. FOV-truncated ends are protected. Set 0 to disable.</span></span>
+                </label>
+                <input id="minSpurLengthMm" type="number" min="0" max="50" step="0.25" value="1" />
+                <p class="nd-hint">0 disables terminal spur pruning.</p>
+              </div>
+              <div class="nd-field">
+                <label for="minComponentVoxels">Min component size <small>voxels</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About minimum component size">i<span class="nd-info-tooltip">Removes 26-connected foreground specks smaller than this voxel count before thinning (default 10 matches VesselBoost).</span></span>
+                </label>
+                <input id="minComponentVoxels" type="number" min="0" max="1000000" step="1" value="10" />
+              </div>
+              <div class="nd-field">
+                <label for="smoothIterations">Centerline smoothing <small>passes</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About centerline smoothing">i<span class="nd-info-tooltip">Endpoint- and junction-pinned Taubin smoothing passes clamped within half a voxel inside the mask to remove staircase length bias. Set 0 for raw voxel chains.</span></span>
+                </label>
+                <input id="smoothIterations" type="number" min="0" max="20" step="1" value="6" />
+              </div>
+              <div class="nd-field">
+                <label for="minIsolatedLengthMm">Min isolated length <small>mm</small>
+                  <span class="nd-info-icon" tabindex="0" aria-label="About minimum isolated length">i<span class="nd-info-tooltip">Drops standalone endpoint-to-endpoint fragments shorter than this length. Set 0 to keep all standalone fragments.</span></span>
+                </label>
+                <input id="minIsolatedLengthMm" type="number" min="0" max="50" step="0.25" value="0" />
+              </div>
+              <div class="nd-field">
+                <label for="maskThreshold">Mask threshold
+                  <span class="nd-info-icon" tabindex="0" aria-label="About mask threshold">i<span class="nd-info-tooltip">Voxels strictly above this value belong to the vessel mask. Keep 0 for binary VesselBoost masks or raise for probability maps.</span></span>
+                </label>
+                <input id="maskThreshold" type="number" min="0" max="1000000" step="0.05" value="0" />
+              </div>
+              <label class="nd-check">
+                <input id="fillHoles" type="checkbox" checked /> Fill interior vessel cavities
+              </label>
+              <label class="nd-check">
+                <input id="pruneContainedSpurs" type="checkbox" /> Prune spurs inside junction sphere
+              </label>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Characterise vessels</button>
+        </div>
+      </details>
+
+      <!-- 3. Optional context: collapsed brain/ROI mask (for density) & TOF/SWI backdrop. -->
+      <details class="nd-sidebar-section" id="contextSection">
+        <summary class="nd-section-title">Optional context</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="brainMaskInput">Brain / ROI mask <small>density</small>
+              <span class="nd-info-icon" tabindex="0" aria-label="About optional brain or ROI mask">i<span class="nd-info-tooltip">Same-grid 3D binary NIfTI mask (such as VesselBoost's brain mask) used to compute vessel volume fraction, length density (mm/cm³) and junction density.</span></span>
+            </label>
+            <label class="nd-file" id="brainMaskDrop">
+              <input id="brainMaskInput" type="file" data-neurodesk-input="mask" aria-label="Choose an optional brain or ROI mask NIfTI file" />
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span>Choose brain / ROI mask</span>
+            </label>
+            <p id="brainMaskInfo" class="nd-file-info" hidden></p>
+            <button id="clearBrainMaskBtn" class="nd-btn nd-btn-secondary nd-btn-sm" type="button" hidden>Clear brain mask</button>
+          </div>
+          <div class="nd-field">
+            <label for="referenceInput">Background scan <small>overlay</small>
+              <span class="nd-info-icon" tabindex="0" aria-label="About optional background scan">i<span class="nd-info-tooltip">Optional TOF-MRA or SWI volume shown underneath the vessel mask and diameter overlay in 2D slice views. Does not alter morphometry.</span></span>
+            </label>
+            <label class="nd-file" id="referenceDrop">
+              <input id="referenceInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose an optional TOF or SWI background scan" />
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span>Choose background scan</span>
+            </label>
+            <p id="referenceInfo" class="nd-file-info" hidden></p>
+            <button id="clearReferenceBtn" class="nd-btn nd-btn-secondary nd-btn-sm" type="button" hidden>Clear background scan</button>
+          </div>
+        </div>
+      </details>
+
+      <!-- 4. Output: collapsed until results exist; View / Download per result. -->
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="3D vessel viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a 3D vessel mask NIfTI, or choose an example.</p>
+        <p id="viewerError" class="nd-viewer-notice" hidden></p>
+        <section id="resultsReport" class="nd-viewer-report" aria-label="Vessel characterisation report" hidden></section>
+      </div>
+      <div class="nd-viewer-info">
+        <span id="imageLabel"></span>
+        <span id="location" class="nd-viewer-info-primary"></span>
+      </div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Characterisation progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel characterisation" aria-label="Cancel characterisation" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>VesselCharter extracts 3D vessel centerlines, branching topology, diameters, tortuosity and optional brain/ROI vascular density from binary vessel segmentations such as VesselBoost outputs. Everything runs locally in your browser or through the standalone command line.</p>
+      <p><strong>Method.</strong> Masks remain on their native voxel grid (no binary resampling that can break thin vessels). Optional 6-connected cavity filling and 26-connected component filtering precede sparse Lee–Kashyap–Chu (1994) 3D thinning with symmetric opposite-pair directions and a 2-voxel ribbon guard. Multi-voxel 26-connected junction blobs collapse into logical super-nodes while preserving vascular loops (such as the Circle of Willis). Centerlines are smoothed with endpoint- and junction-pinned Taubin passes clamped inside the foreground mask to remove voxel-staircase bias. Local diameters combine subvoxel-centred inscribed-ellipsoid clearance with Voronoi segment volume-equivalent diameter (D<sub>eq</sub>). Segments below twice the largest voxel spacing are flagged as resolution-limited.</p>
+      <p><strong>Validation.</strong> Kernels and graph metrics are cross-checked against analytical 3D phantoms (cylinders, Y-bifurcations, torus loops and helices), exact SciPy/scikit-image/Skan baselines, and VesselVio (external oracle on the pinned Lausanne TOF VesselBoost mask).</p>
+      <p>Research software only. Binary MRA masks reflect segmented voxel geometry rather than sub-voxel lumen calibre.</p>
+    </template>
+    <template id="privacyContent">
+      <p>Vessel masks and scans are processed locally in your browser and are never uploaded. The working example is fetched from Hugging Face at a pinned revision.</p>
+    </template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
