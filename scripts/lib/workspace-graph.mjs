@@ -135,6 +135,69 @@ function analyzeScriptFile(source, file) {
       specifiers.push({ value: null, kind, range: node.range, namedImports: null, localBindings: null });
     }
   };
+  // Collect authentic `readFile`/`readFileSync` and `join`/`resolve` bindings
+  // imported from Node built-in `fs` / `path` modules and reject any binding
+  // that is shadowed, reassigned, or mutated anywhere in the module.
+  const fsModules = new Set(['node:fs', 'fs', 'node:fs/promises', 'fs/promises']);
+  const pathModules = new Set(['node:path', 'path', 'node:path/posix', 'path/posix']);
+  const readFileIds = new Set();
+  const fsNamespaces = new Set();
+  const pathJoinIds = new Set();
+  const pathNamespaces = new Set();
+  for (const stmt of ast.body ?? []) {
+    if (stmt.type !== 'ImportDeclaration' || stmt.source?.type !== 'Literal') continue;
+    const mod = stmt.source.value;
+    if (fsModules.has(mod)) {
+      for (const spec of stmt.specifiers ?? []) {
+        if (spec.type === 'ImportSpecifier' && (moduleExportName(spec.imported) === 'readFile' || moduleExportName(spec.imported) === 'readFileSync') && spec.local?.name) {
+          readFileIds.add(spec.local.name);
+        } else if ((spec.type === 'ImportDefaultSpecifier' || spec.type === 'ImportNamespaceSpecifier') && spec.local?.name) {
+          fsNamespaces.add(spec.local.name);
+        }
+      }
+    } else if (pathModules.has(mod)) {
+      for (const spec of stmt.specifiers ?? []) {
+        if (spec.type === 'ImportSpecifier' && (moduleExportName(spec.imported) === 'join' || moduleExportName(spec.imported) === 'resolve') && spec.local?.name) {
+          pathJoinIds.add(spec.local.name);
+        } else if ((spec.type === 'ImportDefaultSpecifier' || spec.type === 'ImportNamespaceSpecifier') && spec.local?.name) {
+          pathNamespaces.add(spec.local.name);
+        }
+      }
+    }
+  }
+  const trackedBindings = new Set([...readFileIds, ...fsNamespaces, ...pathJoinIds, ...pathNamespaces]);
+  const taintedBindings = new Set();
+  if (trackedBindings.size > 0) {
+    const taint = (name) => {
+      if (trackedBindings.has(name)) taintedBindings.add(name);
+    };
+    const scanTaint = (node, anc = []) => {
+      if (!node || typeof node !== 'object') return;
+      if (Array.isArray(node)) {
+        for (const item of node) scanTaint(item, anc);
+        return;
+      }
+      if (node.type === 'ImportDeclaration') return;
+      if (node.type === 'VariableDeclarator' && node.id) collectPatternNames(node.id, taint);
+      if ((node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ClassDeclaration' || node.type === 'ClassExpression') && node.id?.name) taint(node.id.name);
+      if (isFunctionNode(node) && Array.isArray(node.params)) {
+        for (const param of node.params) collectPatternNames(param, taint);
+      }
+      if (node.type === 'CatchClause' && node.param) collectPatternNames(node.param, taint);
+      if (node.type === 'Identifier' && trackedBindings.has(node.name)) {
+        const parent = anc[anc.length - 1];
+        if (isWriteTarget(node, anc)) taint(node.name);
+        if (parent?.type === 'MemberExpression' && parent.object === node && isWriteTarget(parent, anc.slice(0, -1))) taint(node.name);
+      }
+      anc.push(node);
+      for (const key of Object.keys(node)) {
+        if (!AST_SKIP.has(key)) scanTaint(node[key], anc);
+      }
+      anc.pop();
+    };
+    scanTaint(ast);
+  }
+
   const ancestors = [];
   const isPathJoinCall = (call) => {
     if (call?.type !== 'CallExpression') return false;
@@ -143,24 +206,53 @@ function analyzeScriptFile(source, file) {
       : (callee?.type === 'MemberExpression' && !callee.computed && callee.property?.type === 'Identifier' ? callee.property.name : null);
     return name === 'join' || name === 'resolve' || name === 'concat';
   };
-  const isReadFileCall = (call) => {
+  const isAuthenticPathJoinCall = (call) => {
     if (call?.type !== 'CallExpression') return false;
     const callee = call.callee;
-    const name = callee?.type === 'Identifier' ? callee.name
-      : (callee?.type === 'MemberExpression' && !callee.computed && callee.property?.type === 'Identifier' ? callee.property.name : null);
-    return name === 'readFile' || name === 'readFileSync';
+    if (callee?.type === 'Identifier') {
+      return pathJoinIds.has(callee.name) && !taintedBindings.has(callee.name);
+    }
+    if (
+      callee?.type === 'MemberExpression'
+      && !callee.computed
+      && callee.object?.type === 'Identifier'
+      && pathNamespaces.has(callee.object.name)
+      && !taintedBindings.has(callee.object.name)
+      && callee.property?.type === 'Identifier'
+    ) {
+      return callee.property.name === 'join' || callee.property.name === 'resolve';
+    }
+    return false;
+  };
+  const isAuthenticReadFileCall = (call) => {
+    if (call?.type !== 'CallExpression') return false;
+    const callee = call.callee;
+    if (callee?.type === 'Identifier') {
+      return readFileIds.has(callee.name) && !taintedBindings.has(callee.name);
+    }
+    if (
+      callee?.type === 'MemberExpression'
+      && !callee.computed
+      && callee.object?.type === 'Identifier'
+      && fsNamespaces.has(callee.object.name)
+      && !taintedBindings.has(callee.object.name)
+      && callee.property?.type === 'Identifier'
+    ) {
+      return callee.property.name === 'readFile' || callee.property.name === 'readFileSync';
+    }
+    return false;
   };
   const isDirectJsonRead = (node) => {
     const parent = ancestors[ancestors.length - 1];
     if (!parent) return false;
     if (parent.type === 'ImportDeclaration' && parent.source === node) return true;
-    if (isReadFileCall(parent) && parent.arguments?.[0] === node) return true;
+    if (isAuthenticReadFileCall(parent) && parent.arguments?.[0] === node) return true;
     if (
-      isPathJoinCall(parent)
+      isAuthenticPathJoinCall(parent)
       && parent.arguments.indexOf(node) === parent.arguments.length - 1
     ) {
       const grand = ancestors[ancestors.length - 2];
-      if (isReadFileCall(grand) && grand.arguments?.[0] === parent) return true;
+      if (isAuthenticReadFileCall(grand) && grand.arguments?.[0] === parent) return true;
     }
     return false;
   };
@@ -781,16 +873,33 @@ function computeProvisionerOnlyRanges(ast) {
     : null;
   if (!dispatchNode || !dispatchParam) return { ok: false, entries: [] };
   let dispatchParamReassigned = false;
-  walkAstIdentifiers(dispatchNode, (idNode, ancestors) => {
-    if (idNode.name !== dispatchParam) return;
-    const parent = ancestors[ancestors.length - 1];
-    if (
-      (parent?.type === 'AssignmentExpression' && parent.left === idNode)
-      || (parent?.type === 'UpdateExpression' && parent.argument === idNode)
-    ) {
-      dispatchParamReassigned = true;
+  const checkDispatchParam = (node, anc = []) => {
+    if (dispatchParamReassigned || !node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const item of node) checkDispatchParam(item, anc);
+      return;
     }
-  });
+    const markIfMatch = (name) => {
+      if (name === dispatchParam) dispatchParamReassigned = true;
+    };
+    if (node.type === 'VariableDeclarator' && node.id) collectPatternNames(node.id, markIfMatch);
+    if ((node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ClassDeclaration' || node.type === 'ClassExpression') && node.id?.name) {
+      markIfMatch(node.id.name);
+    }
+    if (isFunctionNode(node) && Array.isArray(node.params)) {
+      for (const param of node.params) collectPatternNames(param, markIfMatch);
+    }
+    if (node.type === 'CatchClause' && node.param) collectPatternNames(node.param, markIfMatch);
+    if (node.type === 'Identifier' && (node.name === dispatchParam || node.name === 'arguments' || node.name === 'eval')) {
+      if (node.name !== dispatchParam || isWriteTarget(node, anc)) dispatchParamReassigned = true;
+    }
+    anc.push(node);
+    for (const key of Object.keys(node)) {
+      if (!AST_SKIP.has(key)) checkDispatchParam(node[key], anc);
+    }
+    anc.pop();
+  };
+  checkDispatchParam(dispatchNode.body);
   if (dispatchParamReassigned) return { ok: false, entries: [] };
   const provisionFns = new Set(provisionFnApps.keys());
   let provisionersUsedSafely = true;
@@ -1011,21 +1120,45 @@ const PINNED_LINT_FREE_ACTIONS = new Set([
   '.github/actions/setup-wasm-pack',
 ]);
 
-function isNonRootFilterGroup(filterChunk, rootPackageName, ownEnv = null) {
+const CANONICAL_APP_TEST_CMD = /^pnpm --filter "\$APP" run "\$TEST_SCRIPT"$/;
+
+function isNonRootFilterGroup(filterChunk, { rootPackageName, ownEnv = null, wholeCmd = '' }) {
   const matches = [...filterChunk.matchAll(/--filter\s+('[^']+'|"[^"]+"|\$\{\{\s*matrix\.app\s*\}\}|\S+)/g)];
   if (matches.length === 0) return false;
-  return matches.every(([, raw]) => {
+  const rootUnscoped = rootPackageName && rootPackageName.includes('/') ? rootPackageName.split('/').pop() : null;
+  let hasPositive = false;
+  const allSafe = matches.every(([, raw]) => {
     if (!ALLOWED_FILTER_TARGET.test(raw)) return false;
     if (raw === '"$APP"') {
-      return Boolean(ownEnv && Object.hasOwn(ownEnv, 'APP') && String(ownEnv.APP).trim() === '${{ matrix.app }}');
+      hasPositive = true;
+      return Boolean(
+        CANONICAL_APP_TEST_CMD.test(wholeCmd)
+        && ownEnv
+        && Object.hasOwn(ownEnv, 'APP')
+        && String(ownEnv.APP).trim() === '${{ matrix.app }}',
+      );
+    }
+    if (/^\$\{\{\s*matrix\.app\s*\}\}$/.test(raw)) {
+      hasPositive = true;
+      return true;
     }
     const unquoted = raw.replace(/^['"]|['"]$/g, '');
-    if (unquoted === '.' || unquoted === './' || unquoted === '..' || unquoted === rootPackageName) return false;
+    if (unquoted.includes('..')) return false;
+    if (unquoted.startsWith('!')) return true;
+    if (/^\.\/(?:packages|apps|exes)\/\*$/.test(unquoted)) {
+      hasPositive = true;
+      return true;
+    }
+    if (unquoted === '.' || unquoted === './' || unquoted === rootPackageName || (rootUnscoped && unquoted === rootUnscoped)) {
+      return false;
+    }
+    hasPositive = true;
     return true;
   });
+  return allSafe && hasPositive;
 }
 
-function analyzeCommandRootScripts(step, { root, rootPackageName, rootScripts, releaseTestScripts }) {
+function analyzeCommandRootScripts(step, { root, rootPackageName, nodeByPackageName, rootScripts, releaseTestScripts }) {
   const cmd = step.cmd ?? '';
   if (step.opaqueAction) return { scripts: [], failedClosed: true, mayInvokeLint: true };
   if (!(step.actionDir && PINNED_LINT_FREE_ACTIONS.has(step.actionDir)) && /\b(?:sh|bash|dash|zsh|eval|exec|source)\b/.test(cmd)) {
@@ -1037,14 +1170,17 @@ function analyzeCommandRootScripts(step, { root, rootPackageName, rootScripts, r
   if (/\b(?:npm|yarn)\b/.test(cmd)) {
     return { scripts: [], failedClosed: true, mayInvokeLint: true };
   }
+  const wholeCmd = cmd.trim();
   const stripped = cmd.replace(ALLOWED_FILTERED_PNPM, (full, filterChunk, _runKw, dynScript, litScript) => {
-    if (!isNonRootFilterGroup(filterChunk, rootPackageName, step.ownEnv)) return full;
+    if (!isNonRootFilterGroup(filterChunk, { rootPackageName, nodeByPackageName, ownEnv: step.ownEnv, wholeCmd })) return full;
     if (litScript && (PNPM_INSTALL_WORD.has(litScript) || PNPM_DISALLOWED_SUBCOMMAND.has(litScript))) return full;
     if (dynScript) {
-      // Allow only `pnpm --filter "$APP" run "$TEST_SCRIPT"` when ownEnv binds
-      // TEST_SCRIPT to `${{ matrix.release_test }}` and releaseTestScripts is lint-free.
+      // Allow only `pnpm --filter "$APP" run "$TEST_SCRIPT"` as the entire step
+      // command when ownEnv binds TEST_SCRIPT to `${{ matrix.release_test }}`
+      // and releaseTestScripts is lint-free.
       const boundReleaseTest = Boolean(
-        step.ownEnv
+        CANONICAL_APP_TEST_CMD.test(wholeCmd)
+        && step.ownEnv
         && Object.hasOwn(step.ownEnv, 'TEST_SCRIPT')
         && String(step.ownEnv.TEST_SCRIPT).trim() === '${{ matrix.release_test }}',
       );
@@ -1074,7 +1210,7 @@ function analyzeCommandRootScripts(step, { root, rootPackageName, rootScripts, r
   return { scripts, failedClosed, mayInvokeLint };
 }
 
-function namedByCommands(steps, rootScripts, { root = null, rootPackageName = null, releaseTestScripts = null } = {}) {
+function namedByCommands(steps, rootScripts, { root = null, rootPackageName = null, nodeByPackageName = null, releaseTestScripts = null } = {}) {
   const named = new Set();
   const expanded = new Set();
   const expandedCmds = [];
@@ -1087,7 +1223,7 @@ function namedByCommands(steps, rootScripts, { root = null, rootPackageName = nu
     expandedCmds.push(current);
     for (const match of current.cmd.matchAll(ROOT_NAMED)) if (match[1]) named.add(match[1]);
     for (const [, rootFile] of current.cmd.matchAll(ROOT_PATH)) named.add(rootFile);
-    const info = analyzeCommandRootScripts(current, { root, rootPackageName, rootScripts, releaseTestScripts });
+    const info = analyzeCommandRootScripts(current, { root, rootPackageName, nodeByPackageName, rootScripts, releaseTestScripts });
     if (info.mayInvokeLint) mayInvokeLint = true;
     if (info.failedClosed) {
       failedClosed = true;
@@ -1386,7 +1522,7 @@ export async function loadConservativeWorkspaceGraph(root) {
 
   const siteSteps = await rawRuns(siteJobNames(ci));
   const catalogSteps = await rawRuns(CATALOG_JOBS);
-  const cmdOpts = { root, rootPackageName, rootScripts, releaseTestScripts };
+  const cmdOpts = { root, rootPackageName, nodeByPackageName, rootScripts, releaseTestScripts };
   const siteInfo = namedByCommands(siteSteps, rootScripts, cmdOpts);
   const catalogInfo = namedByCommands(catalogSteps, rootScripts, cmdOpts);
 
@@ -1402,7 +1538,7 @@ export async function loadConservativeWorkspaceGraph(root) {
     Object.entries(manifests.get(node)?.scripts ?? {}).some(([k, v]) => {
       if (k === 'lint') return false;
       const str = String(v);
-      return /\blint\b/i.test(str) && /(?:--filter\b|-F\b|--dir\b|-C\b|-r\b|--recursive\b|\brecursive\b|-w\b|--workspace|\bcd\s+)/.test(str);
+      return /\blint\b/i.test(str) && /(?:--filter\b|-F\b|--dir\b|-C\b|--prefix\b|--cwd\b|-r\b|--recursive\b|\brecursive\b|-w\b|--workspace|\bcd\s+|\.\.)/.test(str);
     }),
   );
   const canStripStandaloneLint =
@@ -1427,8 +1563,8 @@ export async function loadConservativeWorkspaceGraph(root) {
       const cmd = String(rawCmd);
       if (scriptKey === 'lint' && canStripStandaloneLint && STANDALONE_LINT_SEGMENT.test(cmd)) continue;
       const stripped = cmd.replace(ALLOWED_FILTERED_PNPM, (full, filterChunk, _runKw, _dynScript, litScript) => {
-        if (!isNonRootFilterGroup(filterChunk, rootPackageName)) return full;
-        if (litScript && PNPM_INSTALL_WORD.has(litScript)) return full;
+        if (!isNonRootFilterGroup(filterChunk, { rootPackageName, nodeByPackageName })) return full;
+        if (litScript && (PNPM_INSTALL_WORD.has(litScript) || PNPM_DISALLOWED_SUBCOMMAND.has(litScript))) return full;
         return '';
       });
       const targetsRoot =

@@ -2967,6 +2967,8 @@ test('per-app CI scripts resolve exact .json data paths without dragging in whol
       },
     }),
     'scripts/cli.mjs': [
+      "import { readFileSync } from 'node:fs';",
+      "import { join } from 'node:path';",
       "const { require: load } = module;",
       "load.call(module, '../packages/rel-req');",
       "execFileSync(process.execPath, ['packages/subproc']);",
@@ -4664,7 +4666,7 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
           },
         }),
         'scripts/e2e-test-data.mjs': "import { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
-        'scripts/lib/e2e-test-data.mjs': "import '../../packages/demo/src/shared.mjs';\nexport const provisioners = { n4: { provision: () => readFileSync('packages/lazy/manifest.json') } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
+        'scripts/lib/e2e-test-data.mjs': "import { readFileSync } from 'node:fs';\nimport '../../packages/demo/src/shared.mjs';\nexport const provisioners = { n4: { provision: () => readFileSync('packages/lazy/manifest.json') } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\n",
         'packages/demo/package.json': JSON.stringify({ name: '@nd/demo' }),
         'packages/demo/src/shared.mjs': 'export const shared = 1;\n',
         'packages/lazy/package.json': JSON.stringify({ name: '@nd/lazy' }),
@@ -6565,6 +6567,94 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       'scripts/quality/root.mjs',
       new Map(),
       (plan) => assert.equal(plan.site, true),
+    ],
+    [
+      'unscoped root package name filter fails closed and reaches root script helper',
+      {
+        'package.json': JSON.stringify({ name: '@org/root', scripts: { check: 'node scripts/quality/helper.mjs' } }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'pnpm --filter root run check' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+      },
+      'scripts/quality/helper.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'shell reassignment of APP before pnpm --filter "$APP" fails closed and reaches root script helper',
+      {
+        'package.json': JSON.stringify({ name: 'neurodesk-webapps', scripts: { check: 'node scripts/quality/helper.mjs' } }),
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': {
+              steps: [{
+                env: { APP: '${{ matrix.app }}' },
+                run: 'APP=neurodesk-webapps\npnpm --filter "$APP" run check',
+              }],
+            },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+      },
+      'scripts/quality/helper.mjs',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'npm --prefix cross-workspace lint preserves standalone lint runner edge',
+      {
+        'scripts/lint.mjs': 'export const lint = 1;\n',
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { build: 'npm --prefix ../../packages/demo run lint' } }),
+        'packages/demo/package.json': JSON.stringify({ name: '@nd/demo', scripts: { lint: 'node ../../scripts/lint.mjs --workspace' } }),
+      },
+      'scripts/lint.mjs',
+      new Map(),
+      (plan) => assert.deepEqual(plan.selected.map((app) => app.id), ['n4']),
+    ],
+    [
+      'destructuring reassignment of provisionTestData app parameter fails closed',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ env: { APP: '${{ matrix.app }}' }, run: 'node scripts/e2e-test-data.mjs "$APP"' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
+        'scripts/lib/e2e-test-data.mjs': "import { readFileSync } from 'node:fs';\nexport const provisioners = { noddi: { provision: () => readFileSync('exes/ref/sample.txt') } };\nexport async function provisionTestData(app, cache) { [app] = [app === 'sdc' ? 'noddi' : app]; return provisioners[app]?.provision(cache) ?? {}; }\n",
+        'exes/ref/sample.txt': 'data\n',
+      },
+      'exes/ref/sample.txt',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'local shadowed readFile helper does not narrow JSON path away from sibling files',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'node scripts/ci-helper.mjs' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/ci-helper.mjs': "import { readFileSync } from 'node:fs';\nimport { dirname, join } from 'node:path';\nfunction readFile(p) { return readFileSync(join(dirname(p), 'sample.txt'), 'utf8'); }\nreadFile('exes/demo/assets/manifest.json');\n",
+        'exes/demo/assets/manifest.json': '{}',
+        'exes/demo/assets/sample.txt': 'data\n',
+      },
+      'exes/demo/assets/sample.txt',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
     ],
   ]) {
     const caseRoot = await mkdtemp(join(tmpdir(), 'neurodesk-cross-lint-'));
