@@ -11,7 +11,7 @@
 </head>
 
 <body>
-  <aside id="qcPanel" aria-label="Image quality metrics">
+  <aside id="qcPanel" class="nd-imaging-controls" aria-label="Image quality metrics">
     <details class="nd-sidebar-section" id="inputSection" open>
       <summary class="nd-section-title">1. Input image</summary>
       <div class="nd-section-content">
@@ -80,7 +80,7 @@
     <button id="privacyBtn" type="button" hidden>Privacy</button>
   </aside>
 
-  <main id="canvas-container">
+  <main id="canvas-container" class="nd-imaging-viewer">
     <div class="nd-viewer-canvas-wrapper">
       <canvas id="gl1" aria-label="MRI viewer"></canvas>
       <p id="emptyState" class="nd-viewer-empty" hidden>Image viewer unavailable. See the status below.</p>
@@ -88,7 +88,7 @@
     <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary">Choose an image to begin.</span></div>
   </main>
 
-  <footer id="status">
+  <footer id="status" class="nd-imaging-status">
     <span class="nd-status-label">Status</span>
     <span id="statusMsg" class="nd-status-text" role="status" aria-live="polite">Ready</span>
     <span id="elapsed" class="nd-status-elapsed"></span>

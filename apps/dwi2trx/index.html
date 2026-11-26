@@ -9,7 +9,7 @@
 </head>
 
 <body>
-  <header id="controls">
+  <header id="controls" class="nd-imaging-controls">
     <details class="nd-sidebar-section" id="inputSection" open="">
       <summary class="nd-section-title">1 · Input DWI</summary>
       <div class="nd-section-content">
@@ -92,7 +92,7 @@
     <button type="button" id="privacyBtn" hidden>Privacy</button>
   </header>
 
-  <main id="canvas-container" data-drop-target>
+  <main id="canvas-container" class="nd-imaging-viewer" data-drop-target>
 <div class="nd-viewer-canvas-wrapper">
 <canvas id="gl1">
 </canvas>
@@ -105,7 +105,7 @@
 </div>
 </main>
 
-  <footer id="status">
+  <footer id="status" class="nd-imaging-status">
 <span class="nd-status-label">Status</span>
 <span id="statusText" class="nd-status-text" role="status">Drag and drop files</span>
 <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
