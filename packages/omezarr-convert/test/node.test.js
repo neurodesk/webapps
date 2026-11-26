@@ -3,7 +3,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { lstat, mkdir, mkdtemp, readdir, readFile, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
@@ -64,7 +64,7 @@ test("CLI rejects disallowed flags on self-check and download-models and empty f
 
   const scWithCache = runBin(["self-check", "--cache-dir", "/tmp/cache"]);
   assert.equal(scWithCache.status, 0, scWithCache.stderr);
-  assert.equal(JSON.parse(scWithCache.stdout).cacheDir, "/tmp/cache");
+  assert.equal(JSON.parse(scWithCache.stdout).cacheDir, resolve("/tmp/cache"));
 
   assert.notEqual(runBin(["self-check", "--cache-dir="]).status, 0);
   assert.notEqual(runBin(["self-check", "--method", "mean"]).status, 0);
@@ -325,37 +325,39 @@ test("strict Node API validation, failed-write .partial cleanup, and SIGTERM loc
   );
   assert.deepEqual(await readdir(dir), []);
 
-  // SIGTERM cleans up shared .neurodesk-cli.lock and newly created directory
-  const sigDir = join(work, "sigterm-out");
-  const nodeUrl = new URL("../src/node.js", import.meta.url).href;
-  const child = spawn(
-    process.execPath,
-    [
-      "--input-type=module",
-      "-e",
-      `import { claimOutputDir } from ${JSON.stringify(nodeUrl)};
-       await claimOutputDir(${JSON.stringify(sigDir)});
-       process.stdout.write("LOCKED\\n");
-       setInterval(() => {}, 1000);`,
-    ],
-    { stdio: ["ignore", "pipe", "pipe"] },
-  );
-  await new Promise((resolveReady, rejectReady) => {
-    let out = "";
-    child.stdout.on("data", (chunk) => {
-      out += chunk.toString();
-      if (out.includes("LOCKED")) resolveReady();
+  // SIGTERM cleans up shared .neurodesk-cli.lock and newly created directory (POSIX only: Windows terminates child.kill('SIGTERM') without JS handlers)
+  if (process.platform !== "win32") {
+    const sigDir = join(work, "sigterm-out");
+    const nodeUrl = new URL("../src/node.js", import.meta.url).href;
+    const child = spawn(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { claimOutputDir } from ${JSON.stringify(nodeUrl)};
+         await claimOutputDir(${JSON.stringify(sigDir)});
+         process.stdout.write("LOCKED\\n");
+         setInterval(() => {}, 1000);`,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    await new Promise((resolveReady, rejectReady) => {
+      let out = "";
+      child.stdout.on("data", (chunk) => {
+        out += chunk.toString();
+        if (out.includes("LOCKED")) resolveReady();
+      });
+      child.on("error", rejectReady);
+      child.on("exit", (code) => rejectReady(new Error(`child exited early: ${code}`)));
     });
-    child.on("error", rejectReady);
-    child.on("exit", (code) => rejectReady(new Error(`child exited early: ${code}`)));
-  });
-  // Verify shared lock file exists before SIGTERM
-  await lstat(join(sigDir, LOCK_NAME));
-  const exitPromise = new Promise((res) => child.on("exit", (code, signal) => res({ code, signal })));
-  child.kill("SIGTERM");
-  const exited = await exitPromise;
-  assert.equal(exited.signal, "SIGTERM");
-  await assert.rejects(() => lstat(sigDir), { code: "ENOENT" });
+    // Verify shared lock file exists before SIGTERM
+    await lstat(join(sigDir, LOCK_NAME));
+    const exitPromise = new Promise((res) => child.on("exit", (code, signal) => res({ code, signal })));
+    child.kill("SIGTERM");
+    const exited = await exitPromise;
+    assert.equal(exited.signal, "SIGTERM");
+    await assert.rejects(() => lstat(sigDir), { code: "ENOENT" });
+  }
 });
 
 test("Sol r2: signal-safe lock/overwrite rollback, atomic non-overwrite, empty-dir refusal, NIfTI-1/2 strictness, and plain options", async (t) => {
@@ -443,91 +445,94 @@ test("Sol r2: signal-safe lock/overwrite rollback, atomic non-overwrite, empty-d
   assert.deepEqual(await readdir(join(emptyRaceDir, "sample.ome.zarr")), []);
   assert.deepEqual(await readdir(emptyRaceDir), ["sample.ome.zarr"]);
 
-  // 5. Subprocess SIGTERM mid-overwrite restores original file from .backup and removes .neurodesk-cli.lock
-  const midDir = join(work, "mid-overwrite");
-  await mkdir(midDir);
-  await writeFile(join(midDir, "a.bin"), "original-a");
-  await writeFile(join(midDir, "b.bin"), "original-b");
-  const nodeUrl = new URL("../src/node.js", import.meta.url).href;
-  const child = spawn(
-    process.execPath,
-    [
-      "--input-type=module",
-      "-e",
-      `import { rename } from "node:fs/promises";
-       import { claimOutputDir, commitOutputs } from ${JSON.stringify(nodeUrl)};
-       setInterval(() => {}, 1000);
-       const claim = await claimOutputDir(${JSON.stringify(midDir)}, { overwrite: true });
-       let calls = 0;
-       await commitOutputs(${JSON.stringify(midDir)}, [
-         { kind: "file", name: "a.bin", data: Buffer.from("new-a") },
-         { kind: "file", name: "b.bin", data: Buffer.from("new-b") },
-       ], {
-         overwrite: true,
-         claim,
-         renameFn: async (src, dst) => {
-           calls += 1;
-           await rename(src, dst);
-           if (calls === 2) {
-             process.stdout.write("MID_BACKUP\\n");
-             await new Promise(() => {});
-           }
-         },
-       });`,
-    ],
-    { stdio: ["ignore", "pipe", "pipe"] },
-  );
-  await new Promise((resolveReady, rejectReady) => {
-    let out = "";
-    child.stdout.on("data", (chunk) => {
-      out += chunk.toString();
-      if (out.includes("MID_BACKUP")) resolveReady();
+  // 5 & 5b. POSIX SIGTERM subprocess cleanup checks (Windows terminates child.kill('SIGTERM') without JS signal handlers)
+  if (process.platform !== "win32") {
+    // 5. Subprocess SIGTERM mid-overwrite restores original file from .backup and removes .neurodesk-cli.lock
+    const midDir = join(work, "mid-overwrite");
+    await mkdir(midDir);
+    await writeFile(join(midDir, "a.bin"), "original-a");
+    await writeFile(join(midDir, "b.bin"), "original-b");
+    const nodeUrl = new URL("../src/node.js", import.meta.url).href;
+    const child = spawn(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { rename } from "node:fs/promises";
+         import { claimOutputDir, commitOutputs } from ${JSON.stringify(nodeUrl)};
+         setInterval(() => {}, 1000);
+         const claim = await claimOutputDir(${JSON.stringify(midDir)}, { overwrite: true });
+         let calls = 0;
+         await commitOutputs(${JSON.stringify(midDir)}, [
+           { kind: "file", name: "a.bin", data: Buffer.from("new-a") },
+           { kind: "file", name: "b.bin", data: Buffer.from("new-b") },
+         ], {
+           overwrite: true,
+           claim,
+           renameFn: async (src, dst) => {
+             calls += 1;
+             await rename(src, dst);
+             if (calls === 2) {
+               process.stdout.write("MID_BACKUP\\n");
+               await new Promise(() => {});
+             }
+           },
+         });`,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    await new Promise((resolveReady, rejectReady) => {
+      let out = "";
+      child.stdout.on("data", (chunk) => {
+        out += chunk.toString();
+        if (out.includes("MID_BACKUP")) resolveReady();
+      });
+      child.on("error", rejectReady);
+      child.on("exit", (code) => rejectReady(new Error(`child exited early: ${code}`)));
     });
-    child.on("error", rejectReady);
-    child.on("exit", (code) => rejectReady(new Error(`child exited early: ${code}`)));
-  });
-  const exitPromise = new Promise((res) => child.on("exit", (code, signal) => res({ code, signal })));
-  child.kill("SIGTERM");
-  const exited = await exitPromise;
-  assert.equal(exited.signal, "SIGTERM");
-  assert.equal(await readFile(join(midDir, "a.bin"), "utf8"), "original-a");
-  assert.equal(await readFile(join(midDir, "b.bin"), "utf8"), "original-b");
-  assert.deepEqual((await readdir(midDir)).sort(), ["a.bin", "b.bin"]);
+    const exitPromise = new Promise((res) => child.on("exit", (code, signal) => res({ code, signal })));
+    child.kill("SIGTERM");
+    const exited = await exitPromise;
+    assert.equal(exited.signal, "SIGTERM");
+    assert.equal(await readFile(join(midDir, "a.bin"), "utf8"), "original-a");
+    assert.equal(await readFile(join(midDir, "b.bin"), "utf8"), "original-b");
+    assert.deepEqual((await readdir(midDir)).sort(), ["a.bin", "b.bin"]);
 
-  // 5b. Subprocess SIGTERM during async lock acquisition defers until open settles and leaves NO stale lock
-  const lockSigDir = join(work, "sig-during-open");
-  const child2 = spawn(
-    process.execPath,
-    [
-      "--input-type=module",
-      "-e",
-      `import { open } from "node:fs/promises";
-       import { claimOutputDir } from ${JSON.stringify(nodeUrl)};
-       await claimOutputDir(${JSON.stringify(lockSigDir)}, {
-         openFn: async (p, flags, mode) => {
-           const h = await open(p, flags, mode);
-           process.stdout.write("CREATED_LOCK\\n");
-           await new Promise((r) => setTimeout(r, 150));
-           return h;
-         },
-       });`,
-    ],
-    { stdio: ["ignore", "pipe", "pipe"] },
-  );
-  await new Promise((resolveReady, rejectReady) => {
-    let out = "";
-    child2.stdout.on("data", (chunk) => {
-      out += chunk.toString();
-      if (out.includes("CREATED_LOCK")) resolveReady();
+    // 5b. Subprocess SIGTERM during async lock acquisition defers until open settles and leaves NO stale lock
+    const lockSigDir = join(work, "sig-during-open");
+    const child2 = spawn(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { open } from "node:fs/promises";
+         import { claimOutputDir } from ${JSON.stringify(nodeUrl)};
+         await claimOutputDir(${JSON.stringify(lockSigDir)}, {
+           openFn: async (p, flags, mode) => {
+             const h = await open(p, flags, mode);
+             process.stdout.write("CREATED_LOCK\\n");
+             await new Promise((r) => setTimeout(r, 150));
+             return h;
+           },
+         });`,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    await new Promise((resolveReady, rejectReady) => {
+      let out = "";
+      child2.stdout.on("data", (chunk) => {
+        out += chunk.toString();
+        if (out.includes("CREATED_LOCK")) resolveReady();
+      });
+      child2.on("error", rejectReady);
+      child2.on("exit", (code) => rejectReady(new Error(`child2 exited early: ${code}`)));
     });
-    child2.on("error", rejectReady);
-    child2.on("exit", (code) => rejectReady(new Error(`child2 exited early: ${code}`)));
-  });
-  const exit2 = new Promise((res) => child2.on("exit", (code, signal) => res({ code, signal })));
-  child2.kill("SIGTERM");
-  const exited2 = await exit2;
-  assert.equal(exited2.signal, "SIGTERM");
-  await assert.rejects(() => lstat(lockSigDir), { code: "ENOENT" });
+    const exit2 = new Promise((res) => child2.on("exit", (code, signal) => res({ code, signal })));
+    child2.kill("SIGTERM");
+    const exited2 = await exit2;
+    assert.equal(exited2.signal, "SIGTERM");
+    await assert.rejects(() => lstat(lockSigDir), { code: "ENOENT" });
+  }
 
   // 6. Strict NIfTI-1/2 validation & NiBabel 5.3.3 quaternion parity
   const badMagic2 = new ArrayBuffer(544);

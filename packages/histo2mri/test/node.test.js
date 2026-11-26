@@ -355,31 +355,33 @@ test("claimOutputDirectory uses shared .neurodesk-cli.lock, rejects symlinks, an
     await assert.rejects(claimOutputDirectory(linkPath), /symbolic link/);
 
     // SIGTERM cleans up lock and newly created dir synchronously
-    const sigDir = join(work, "sigterm-dir");
-    const child = spawn(
-      process.execPath,
-      [
-        "--input-type=module",
-        "-e",
-        `import { claimOutputDirectory } from ${JSON.stringify(NODE_MODULE_URL)};
-         await claimOutputDirectory(${JSON.stringify(sigDir)});
-         process.stdout.write("LOCKED\\n");
-         setInterval(() => {}, 1000);`,
-      ],
-      { stdio: ["ignore", "pipe", "pipe"] },
-    );
-    await new Promise((resolveReady, rejectReady) => {
-      let out = "";
-      child.stdout.on("data", (chunk) => {
-        out += chunk.toString();
-        if (out.includes("LOCKED")) resolveReady();
+    if (process.platform !== "win32") {
+      const sigDir = join(work, "sigterm-dir");
+      const child = spawn(
+        process.execPath,
+        [
+          "--input-type=module",
+          "-e",
+          `import { claimOutputDirectory } from ${JSON.stringify(NODE_MODULE_URL)};
+           await claimOutputDirectory(${JSON.stringify(sigDir)});
+           process.stdout.write("LOCKED\\n");
+           setInterval(() => {}, 1000);`,
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+      await new Promise((resolveReady, rejectReady) => {
+        let out = "";
+        child.stdout.on("data", (chunk) => {
+          out += chunk.toString();
+          if (out.includes("LOCKED")) resolveReady();
+        });
+        child.on("error", rejectReady);
+        child.on("exit", (code) => rejectReady(new Error(`child exited early: ${code}`)));
       });
-      child.on("error", rejectReady);
-      child.on("exit", (code) => rejectReady(new Error(`child exited early: ${code}`)));
-    });
-    child.kill("SIGTERM");
-    await new Promise((resolveExit) => child.on("exit", resolveExit));
-    await assert.rejects(stat(sigDir), { code: "ENOENT" });
+      child.kill("SIGTERM");
+      await new Promise((resolveExit) => child.on("exit", resolveExit));
+      await assert.rejects(stat(sigDir), { code: "ENOENT" });
+    }
   } finally {
     await rm(work, { recursive: true, force: true });
   }
@@ -455,39 +457,41 @@ test("writeStagedOutputs enforces atomic non-overwrite, cleans failed .partial, 
     assert.deepEqual(await readdir(work), ["a.nii.gz"]);
 
     // 4. Mid-publication SIGTERM rolls back first published file, removes remaining .partial and lock, and cleans newly created dir
-    const sigPubDir = join(work, "sigterm-mid-pub");
-    const child = spawn(
-      process.execPath,
-      [
-        "--input-type=module",
-        "-e",
-        `import { link } from "node:fs/promises";
-         import { claimOutputDirectory, writeStagedOutputs } from ${JSON.stringify(NODE_MODULE_URL)};
-         const claim = await claimOutputDirectory(${JSON.stringify(sigPubDir)});
-         let n = 0;
-         await writeStagedOutputs(
-           claim.directory,
-           [
-             { name: "first.mat", bytes: new Uint8Array([1, 2]) },
-             { name: "second.mat", bytes: new Uint8Array([3, 4]) },
-           ],
-           {
-             claim,
-             linkFn: async (src, dst) => {
-               n += 1;
-               if (n === 1) return link(src, dst);
-               setInterval(() => {}, 1000);
-               process.kill(process.pid, "SIGTERM");
-               await new Promise(() => {});
+    if (process.platform !== "win32") {
+      const sigPubDir = join(work, "sigterm-mid-pub");
+      const child = spawn(
+        process.execPath,
+        [
+          "--input-type=module",
+          "-e",
+          `import { link } from "node:fs/promises";
+           import { claimOutputDirectory, writeStagedOutputs } from ${JSON.stringify(NODE_MODULE_URL)};
+           const claim = await claimOutputDirectory(${JSON.stringify(sigPubDir)});
+           let n = 0;
+           await writeStagedOutputs(
+             claim.directory,
+             [
+               { name: "first.mat", bytes: new Uint8Array([1, 2]) },
+               { name: "second.mat", bytes: new Uint8Array([3, 4]) },
+             ],
+             {
+               claim,
+               linkFn: async (src, dst) => {
+                 n += 1;
+                 if (n === 1) return link(src, dst);
+                 setInterval(() => {}, 1000);
+                 process.kill(process.pid, "SIGTERM");
+                 await new Promise(() => {});
+               },
              },
-           },
-         );`,
-      ],
-      { stdio: ["ignore", "pipe", "pipe"] },
-    );
-    const exitSignal = await new Promise((resolveExit) => child.on("exit", (_code, signal) => resolveExit(signal)));
-    assert.equal(exitSignal, "SIGTERM");
-    await assert.rejects(stat(sigPubDir), { code: "ENOENT" });
+           );`,
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+      const exitSignal = await new Promise((resolveExit) => child.on("exit", (_code, signal) => resolveExit(signal)));
+      assert.equal(exitSignal, "SIGTERM");
+      await assert.rejects(stat(sigPubDir), { code: "ENOENT" });
+    }
   } finally {
     await rm(work, { recursive: true, force: true });
   }
