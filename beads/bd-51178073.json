@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "bd-51178073",
-  "revision": 2,
-  "stateRevision": 2,
+  "revision": 3,
+  "stateRevision": 3,
   "title": "Support gh-aw compiled lockfile activation/conclusion jobs in ci-policy test",
   "summary": "gh-aw v1.2.2 omits timeout-minutes on generated activation and conclusion boilerplate jobs while setting them on agent, detection, and safe_outputs.",
   "kind": "maintenance",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "scope": {
     "type": "repo",
@@ -19,32 +19,35 @@
     "discoveredFrom": null
   },
   "links": {
+    "pr": 957,
     "branch": "t3/phase-2-gh-aw-unused-code-triage",
     "evidence": [
       "docs/architecture/beads-memory.md",
       "test/ci-policy.test.mjs"
     ]
   },
-  "lease": {
-    "owner": "t3/phase-2-gh-aw-unused-code-triage",
-    "branch": "t3/phase-2-gh-aw-unused-code-triage",
-    "claimedAt": "2026-11-26T07:10:47.003Z",
-    "expiresAt": "2026-11-27T07:10:47.003Z"
-  },
-  "releasedLeases": [],
+  "lease": null,
+  "releasedLeases": [
+    "v2:2026-11-26T07:10:47.003Z|2026-11-27T07:10:47.003Z|c13d0bc6fd87"
+  ],
   "leaseFloorAt": null,
   "journal": [
     {
       "at": "2026-11-26T07:10:47.003Z",
       "actor": "t3/phase-2-gh-aw-unused-code-triage",
       "note": "Claimed until 2026-11-27T07:10:47.003Z"
+    },
+    {
+      "at": "2026-11-26T14:03:47.764Z",
+      "actor": "t3/phase-2-gh-aw-unused-code-triage",
+      "note": "Closed: Added strict gh-aw lockfile timeout/runtime/app-plan policy checks and registered unused-code-triage in ci-measures"
     }
   ],
   "createdAt": "2026-11-26T02:48:31.873Z",
-  "updatedAt": "2026-11-26T07:10:47.003Z",
-  "stateUpdatedAt": "2026-11-26T07:10:47.003Z",
+  "updatedAt": "2026-11-26T14:03:47.764Z",
+  "stateUpdatedAt": "2026-11-26T14:03:47.764Z",
   "lastSeenAt": "2026-11-26T02:48:31.873Z",
-  "closedAt": null,
+  "closedAt": "2026-11-26T14:03:47.764Z",
   "reopenedAt": null,
-  "closeReason": null
+  "closeReason": "Added strict gh-aw lockfile timeout/runtime/app-plan policy checks and registered unused-code-triage in ci-measures"
 }
