@@ -6,9 +6,9 @@ import { readFileSync } from "node:fs";
 import { example, exampleFile, pinned, routeExample, routeModels } from "./fixtures.mjs";
 import { extractLabelSlice, readNifti3D } from "../src/volume.js";
 import { maskIou } from "../src/segmentation.js";
+import { assertHardwareAdapter, hardwareGpu, readAdapterInfo } from "../../../test-utils/hardware-gpu.mjs";
 
 const reference = JSON.parse(readFileSync(new URL("../validation/reference.json", import.meta.url), "utf8"));
-const hardwareGpu = process.env.NEURODESK_HARDWARE_GPU === "1";
 
 function runsToMask(runs, size) {
   const mask = new Uint8Array(size);
@@ -32,6 +32,9 @@ test("automation matches PyTorch SAM2VideoPredictor for rolling box and single-p
   await routeModels(page);
   const bytes = await pinned(exampleFile);
   await page.goto("./");
+  if (hardwareGpu) {
+    assertHardwareAdapter(await readAdapterInfo(page));
+  }
   const parityBackend = hardwareGpu ? "webgpu" : "wasm";
   const [boxCase, pointCase] = reference.cases;
   const runPrompt = async (promptItem) => {
@@ -64,8 +67,8 @@ test("automation matches PyTorch SAM2VideoPredictor for rolling box and single-p
   const boxObj = boxSnap.report.provenance.objects[0];
   expect(boxObj.slices).toBe(10);
   if (hardwareGpu) {
-    expect(boxObj.backend).toBe("webgpu");
     const techLog = await page.locator("#technicalLog").textContent();
+    expect(boxObj.backend, techLog ?? "").toBe("webgpu");
     expect(techLog).toContain("MedSAM2 2D ready on WebGPU");
     expect(techLog).toContain("memory attention on WebGPU");
   }
