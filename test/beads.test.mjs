@@ -606,6 +606,21 @@ test('mergeBeadsMaps preserves closed status, bumps revision on merge, caps evid
   assert.equal(mergedMixedVersions.get(idA).leaseFloorAt, null);
   assert.equal(mergedMixedVersions.get(idA).lease?.owner, 'still-active');
 
+  // Deduplicating v2:<x> and <x> must NOT revive a released legacy claim whose owner equals "<expiresAt>|<hash>"
+  const collidingOwner = v2Key.slice(3 + claimedBranch.get(idA).lease.claimedAt.length + 1);
+  const legacyCollidingClaim = applyOperations(base, [
+    { op: 'claim', id: idA, owner: collidingOwner, ttlHours: 24 },
+  ], { actor: collidingOwner, now: t1 }).beads;
+  const bothTombstones = new Map([[idA, validateBead({
+    ...structuredClone(base.get(idA)),
+    revision: 4,
+    stateRevision: 4,
+    releasedLeases: [v2Key, `${t1.toISOString()}|${collidingOwner}`],
+  })]]);
+  const mergedCollidingLegacy = mergeBeadsMaps(bothTombstones, legacyCollidingClaim);
+  assert.equal(mergedCollidingLegacy.get(idA).status, 'open');
+  assert.equal(mergedCollidingLegacy.get(idA).lease, null);
+
   // Adding audit notes to a tied branch must NEVER flip which scheduling edit wins
   const tiedTitle = applyOperations(base, [{ op: 'update', id: idA, title: 'Tied title' }], { actor: 'host-1', now: t1 }).beads;
   const tiedDep = applyOperations(base, [{ op: 'dep_add', id: idA, blockedBy: idB }], { actor: 'host-2', now: t1 }).beads;

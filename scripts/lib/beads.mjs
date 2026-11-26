@@ -1236,9 +1236,11 @@ export function mergeBeadsMaps(localMap, remoteMap) {
     } else {
       const isSuperseded = (lease) => {
         const key = leaseKey(lease);
+        const legacyOwnerKey = `${lease.claimedAt}|${lease.owner}`;
         return releasedSet.has(key)
           || releasedSet.has(key.slice(3))
-          || releasedSet.has(`${lease.claimedAt}|${lease.owner}`)
+          || releasedSet.has(legacyOwnerKey)
+          || releasedSet.has(`v2:${legacyOwnerKey}`)
           || Boolean(effectiveLeaseFloorAt && lease.claimedAt <= effectiveLeaseFloorAt)
           || Boolean(maxReopenedAt && lease.claimedAt < maxReopenedAt);
       };
