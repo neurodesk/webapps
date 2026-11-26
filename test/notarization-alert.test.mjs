@@ -41,11 +41,47 @@ function fakeClient({ jobs = [macJob, linuxJob], logs = { 11: AGREEMENT, 12: AGR
 const alert = (client, overrides = {}, options = {}) => alertNotarization({ run: { ...run, ...overrides }, repository: 'owner/repo', client, ...options });
 const writes = client => client.calls.filter(call => call.method);
 
+const ELECTRON_OFFLINE = [
+  '2026-11-26T05:33:39.0387160Z Error: Failed to notarize via notarytool.  Failed with unexpected result: ',
+  '2026-11-26T05:33:39.0387500Z ',
+  '2026-11-26T05:33:39.0415990Z Error: HTTPError(statusCode: nil, error: Error Domain=NSURLErrorDomain Code=-1009 "The Internet connection appears to be offline." UserInfo={NSErrorFailingURLStringKey=https://appstoreconnect.apple.com/notary/v2/submissions/685b19e7-f973-4ce7-b231-70c875ab0fbd?})',
+].join('\n');
+const ELECTRON_INVALID = [
+  '2026-11-26T05:33:39.0387160Z Error: Failed to notarize via notarytool',
+  '2026-11-26T05:33:39.0387500Z ',
+  '2026-11-26T05:33:39.0415990Z {"status":"Invalid","id":"685b19e7-f973-4ce7-b231-70c875ab0fbd","message":"Processing complete"}',
+].join('\n');
+const ELECTRON_INVALID_MULTILINE = [
+  '2026-11-26T05:33:39.0387160Z Error: Failed to notarize via notarytool',
+  '2026-11-26T05:33:39.0387500Z ',
+  '2026-11-26T05:33:39.0415990Z {',
+  '2026-11-26T05:33:39.0416000Z   "status": "Rejected",',
+  '2026-11-26T05:33:39.0416010Z   "id": "685b19e7-f973-4ce7-b231-70c875ab0fbd",',
+  '2026-11-26T05:33:39.0416020Z   "message": "Processing complete"',
+  '2026-11-26T05:33:39.0416030Z }',
+].join('\n');
+const ELECTRON_HTTP_500 = [
+  '2026-11-26T05:33:39.0387160Z Error: Failed to notarize via notarytool.  Failed with unexpected result: ',
+  '2026-11-26T05:33:39.0387500Z ',
+  '2026-11-26T05:33:39.0415990Z Error: HTTP status code: 500. Internal error',
+].join('\n');
+
 test('notaryFailure finds what notarytool and @electron/notarize print when Apple refuses', () => {
   assert.match(notaryFailure(`setup\n${AGREEMENT}\n##[error]Process completed with exit code 1.`), /^Error: HTTP status code: 403\. A required agreement/);
   assert.match(notaryFailure(ELECTRON), /^Error: HTTP status code: 403/);
   assert.match(notaryFailure('2026-11-14T05:00:00.0Z Error: HTTP status code: 401. Invalid credentials. Username or password is incorrect.'), /401/);
   assert.equal(notaryFailure('Processing complete\n2026-11-14T05:00:00.0Z   status: Invalid\n'), 'status: Invalid');
+  assert.match(notaryFailure(ELECTRON_INVALID), /^\{"status":"Invalid","id":"685b19e7-f973-4ce7-b231-70c875ab0fbd"/);
+  assert.match(notaryFailure(ELECTRON_INVALID_MULTILINE), /^\{"status":"Rejected","id":"685b19e7-f973-4ce7-b231-70c875ab0fbd"/);
+  assert.match(notaryFailure('2026-11-26T05:33:39.0Z Error: Failed to notarize via notarytool {"status":"Invalid","id":"685b19e7-f973-4ce7-b231-70c875ab0fbd"}'), /^\{"status":"Invalid"/);
+  assert.match(notaryFailure(`${ELECTRON_OFFLINE}\n${ELECTRON_INVALID}`), /^\{"status":"Invalid"/);
+  assert.match(notaryFailure(`${ELECTRON_OFFLINE}\n${AGREEMENT}`), /^Error: HTTP status code: 403/);
+  // Transient failure followed by unrelated JSON must not attach that JSON to the retry error.
+  assert.equal(notaryFailure(`${ELECTRON_OFFLINE}\n2026-11-26T05:33:40.0Z {"status":"Invalid","id":"unrelated"}`), undefined);
+  assert.equal(notaryFailure('2026-11-26T05:33:39.0Z Error: Failed to notarize via notarytool\n2026-11-26T05:33:39.1Z {"status":"Invalid"}'), undefined);
+  assert.equal(notaryFailure(ELECTRON_OFFLINE), undefined);
+  assert.equal(notaryFailure(ELECTRON_HTTP_500), undefined);
+  assert.equal(notaryFailure('{"status":"Invalid","field":"unrelated"}'), undefined);
   assert.equal(notaryFailure('Processing complete\n  status: Accepted\n'), undefined);
   assert.equal(notaryFailure('curl: (22) The requested URL returned error: 403\nError: HTTP 403 from huggingface.co'), undefined);
   assert.equal(notaryFailure('Error: HTTP status code: 500. Internal error'), undefined);
@@ -111,9 +147,12 @@ test('a timed-out notarization is a failure too, and a log longer than the alert
   assert.deepEqual(writes(long), []);
 });
 
-test('other failures, pull requests and forks raise nothing', async () => {
+test('other failures, transient notarytool outages, pull requests and forks raise nothing', async () => {
   const unrelated = fakeClient({ logs: { 11: 'error: parity failed', 12: AGREEMENT } });
   assert.deepEqual(await alert(unrelated), { skipped: 'No notarization failure in the failed macOS jobs' });
+  const offline = fakeClient({ logs: { 11: ELECTRON_OFFLINE, 12: AGREEMENT } });
+  assert.deepEqual(await alert(offline), { skipped: 'No notarization failure in the failed macOS jobs' });
+  assert.deepEqual(writes(offline), []);
   for (const overrides of [{ conclusion: 'success' }, { conclusion: 'cancelled' }, { event: 'pull_request' }, { head_repository: { full_name: 'fork/repo' } }]) {
     const client = fakeClient();
     assert.ok((await alert(client, overrides)).skipped);
