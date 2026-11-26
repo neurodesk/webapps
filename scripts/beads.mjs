@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util';
 import {
   DEFAULT_BEADS_REF,
   applyOperations,
+  assertMemoryRef,
   formatJsonl,
   initBeadsRef,
   listBeads,
@@ -36,8 +37,8 @@ Commands:
   sync [--remote origin] [--push]
 
 Global options:
-  --ref <git-ref>   Target ref (default: ${DEFAULT_BEADS_REF})
-  --actor <name>    Actor name (default: $USER or "local-agent")
+  --ref <git-ref>   Target ref under refs/heads/memory/ (default: ${DEFAULT_BEADS_REF})
+  --actor <name>    Actor name (default: $BEADS_ACTOR, $USER, or "local-agent")
   --json            Machine-readable JSON output
 `;
 
@@ -48,14 +49,35 @@ function splitCsv(value) {
 
 function parseScope(scopeSpec) {
   if (!scopeSpec) throw new Error('--scope is required (e.g. app:topofit, package:runtime-support, exe:synthseg, shared:components, repo)');
-  const [type, rawTargets] = scopeSpec.split(':');
+  const parts = scopeSpec.split(':');
+  if (parts.length > 2) {
+    throw new Error(`Invalid --scope "${scopeSpec}": expected "<type>" or "<type>:<target1,target2>"`);
+  }
+  const [type, rawTargets] = parts;
   return { type, targets: splitCsv(rawTargets) };
 }
 
-function parseOptionalInt(value, flag) {
+function parseStrictInt(value, flag) {
   if (value === undefined) return undefined;
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed)) throw new Error(`${flag} must be an integer`);
+  if (typeof value !== 'string' || !/^-?\d+$/.test(value.trim())) {
+    throw new Error(`${flag} must be a valid integer (got "${value}")`);
+  }
+  const parsed = Number(value.trim());
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error(`${flag} must be a safe integer (got "${value}")`);
+  }
+  return parsed;
+}
+
+function parseStrictNumber(value, flag) {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !/^\d+(?:\.\d+)?$/.test(value.trim())) {
+    throw new Error(`${flag} must be a positive number (got "${value}")`);
+  }
+  const parsed = Number(value.trim());
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${flag} must be a positive finite number (got "${value}")`);
+  }
   return parsed;
 }
 
@@ -122,7 +144,7 @@ function main() {
   }
 
   const cwd = process.cwd();
-  const ref = values.ref;
+  const ref = assertMemoryRef(values.ref);
   const actor = values.actor;
 
   if (command === 'init') {
@@ -132,28 +154,32 @@ function main() {
   }
 
   if (command === 'create' || command === 'upsert') {
-    const op = {
-      op: command,
-      title: values.title,
-      summary: values.summary,
-      kind: values.kind,
-      status: values.status,
-      priority: parseOptionalInt(values.priority, '--priority'),
-      scope: values.scope ? parseScope(values.scope) : undefined,
-      dedupeKey: values['dedupe-key'],
-      deps: {
+    const op = { op: command };
+    if (values.title !== undefined) op.title = values.title;
+    if (values.summary !== undefined) op.summary = values.summary;
+    if (values.kind !== undefined) op.kind = values.kind;
+    if (values.status !== undefined) op.status = values.status;
+    if (values.priority !== undefined) op.priority = parseStrictInt(values.priority, '--priority');
+    if (values.scope !== undefined) op.scope = parseScope(values.scope);
+    if (values['dedupe-key'] !== undefined) op.dedupeKey = values['dedupe-key'];
+    if (values['blocked-by'] !== undefined || values.parent !== undefined || values['discovered-from'] !== undefined) {
+      op.deps = {
         blockedBy: splitCsv(values['blocked-by']),
         parent: values.parent ?? null,
         discoveredFrom: values['discovered-from'] ?? null,
-      },
-      links: {
-        githubIssue: parseOptionalInt(values['github-issue'], '--github-issue'),
-        pr: parseOptionalInt(values.pr, '--pr'),
-        branch: values.branch,
-        evidence: splitCsv(values.evidence),
-      },
-      note: values.message,
-    };
+      };
+    }
+    if (values['github-issue'] !== undefined || values.pr !== undefined || values.branch !== undefined || values.evidence !== undefined) {
+      op.links = {};
+      if (values['github-issue'] !== undefined) op.links.githubIssue = parseStrictInt(values['github-issue'], '--github-issue');
+      if (values.pr !== undefined) op.links.pr = parseStrictInt(values.pr, '--pr');
+      if (values.branch !== undefined) op.links.branch = values.branch;
+      if (values.evidence !== undefined) op.links.evidence = splitCsv(values.evidence);
+    }
+    if (values.message !== undefined) op.note = values.message;
+    if (command === 'upsert' && values['expected-revision'] !== undefined) {
+      op.expectedRevision = parseStrictInt(values['expected-revision'], '--expected-revision');
+    }
     const res = mutateBeadsRef(cwd, [op], { ref, actor, message: `beads: ${command} ${op.dedupeKey || op.title || ''}`.trim() });
     const id = res.createdIds[0] ?? res.updatedIds[0] ?? res.untouchedIds[0];
     const bead = res.beads.get(id);
@@ -203,8 +229,10 @@ function main() {
       op: action === 'add' ? 'dep_add' : 'dep_remove',
       id,
       blockedBy: values['blocked-by'],
-      expectedRevision: parseOptionalInt(values['expected-revision'], '--expected-revision'),
     };
+    if (values['expected-revision'] !== undefined) {
+      op.expectedRevision = parseStrictInt(values['expected-revision'], '--expected-revision');
+    }
     const res = mutateBeadsRef(cwd, [op], { ref, actor, message: `beads: dep ${action} ${id}` });
     printOutput(res.beads.get(id), values.json, formatRow);
     return;
@@ -213,16 +241,18 @@ function main() {
   if (command === 'claim') {
     const id = rest[0];
     if (!id) throw new Error('Usage: claim <id> [--owner O] [--branch B] [--ttl-hours 24]');
-    const ttlHours = values['ttl-hours'] !== undefined ? Number(values['ttl-hours']) : 24;
+    const ttlHours = values['ttl-hours'] !== undefined ? parseStrictNumber(values['ttl-hours'], '--ttl-hours') : 24;
     const op = {
       op: 'claim',
       id,
       owner: values.owner ?? actor,
-      branch: values.branch,
       ttlHours,
-      note: values.message,
-      expectedRevision: parseOptionalInt(values['expected-revision'], '--expected-revision'),
     };
+    if (values.branch !== undefined) op.branch = values.branch;
+    if (values.message !== undefined) op.note = values.message;
+    if (values['expected-revision'] !== undefined) {
+      op.expectedRevision = parseStrictInt(values['expected-revision'], '--expected-revision');
+    }
     const res = mutateBeadsRef(cwd, [op], { ref, actor, message: `beads: claim ${id}` });
     printOutput(res.beads.get(id), values.json, formatRow);
     return;
@@ -236,9 +266,11 @@ function main() {
       id,
       owner: values.owner ?? actor,
       force: values.force,
-      note: values.message,
-      expectedRevision: parseOptionalInt(values['expected-revision'], '--expected-revision'),
     };
+    if (values.message !== undefined) op.note = values.message;
+    if (values['expected-revision'] !== undefined) {
+      op.expectedRevision = parseStrictInt(values['expected-revision'], '--expected-revision');
+    }
     const res = mutateBeadsRef(cwd, [op], { ref, actor, message: `beads: release ${id}` });
     printOutput(res.beads.get(id), values.json, formatRow);
     return;
@@ -251,8 +283,10 @@ function main() {
       op: 'note',
       id,
       note: values.message,
-      expectedRevision: parseOptionalInt(values['expected-revision'], '--expected-revision'),
     };
+    if (values['expected-revision'] !== undefined) {
+      op.expectedRevision = parseStrictInt(values['expected-revision'], '--expected-revision');
+    }
     const res = mutateBeadsRef(cwd, [op], { ref, actor, message: `beads: note ${id}` });
     printOutput(res.beads.get(id), values.json, formatRow);
     return;
@@ -265,9 +299,11 @@ function main() {
       op: 'close',
       id,
       reason: values.reason,
-      pr: parseOptionalInt(values.pr, '--pr'),
-      expectedRevision: parseOptionalInt(values['expected-revision'], '--expected-revision'),
     };
+    if (values.pr !== undefined) op.pr = parseStrictInt(values.pr, '--pr');
+    if (values['expected-revision'] !== undefined) {
+      op.expectedRevision = parseStrictInt(values['expected-revision'], '--expected-revision');
+    }
     const res = mutateBeadsRef(cwd, [op], { ref, actor, message: `beads: close ${id}` });
     printOutput(res.beads.get(id), values.json, formatRow);
     return;
@@ -276,12 +312,11 @@ function main() {
   if (command === 'reopen') {
     const id = rest[0];
     if (!id) throw new Error('Usage: reopen <id> [--message "..."]');
-    const op = {
-      op: 'reopen',
-      id,
-      note: values.message,
-      expectedRevision: parseOptionalInt(values['expected-revision'], '--expected-revision'),
-    };
+    const op = { op: 'reopen', id };
+    if (values.message !== undefined) op.note = values.message;
+    if (values['expected-revision'] !== undefined) {
+      op.expectedRevision = parseStrictInt(values['expected-revision'], '--expected-revision');
+    }
     const res = mutateBeadsRef(cwd, [op], { ref, actor, message: `beads: reopen ${id}` });
     printOutput(res.beads.get(id), values.json, formatRow);
     return;
@@ -291,13 +326,23 @@ function main() {
     const file = rest[0];
     if (!file) throw new Error('Usage: apply <ops.json> [--safe] [--dry-run]');
     const raw = JSON.parse(readFileSync(file, 'utf8'));
-    const operations = Array.isArray(raw) ? raw : raw.operations;
+    let operations;
+    if (Array.isArray(raw)) {
+      operations = raw;
+    } else if (raw && typeof raw === 'object' && Array.isArray(raw.operations)) {
+      operations = raw.operations;
+    } else {
+      throw new Error('Operations file must be a JSON array or an object with an "operations" array');
+    }
+    const maxCreates = parseStrictInt(values['max-creates'], '--max-creates') ?? (values.safe ? 5 : Infinity);
+    const maxUpdates = parseStrictInt(values['max-updates'], '--max-updates') ?? (values.safe ? 10 : Infinity);
     const applyOptions = {
       actor,
-      maxCreates: parseOptionalInt(values['max-creates'], '--max-creates') ?? (values.safe ? 5 : Infinity),
-      maxUpdates: parseOptionalInt(values['max-updates'], '--max-updates') ?? (values.safe ? 10 : Infinity),
+      maxCreates,
+      maxUpdates,
       requireExpectedRevision: values.safe,
       singleAppOnly: values['single-app'],
+      lockActor: values.safe,
     };
     if (values['dry-run']) {
       const { beads } = readBeadsFromRef(cwd, ref);
@@ -316,7 +361,10 @@ function main() {
       process.stdout.write(formatJsonl(beads));
       return;
     }
-    const maxItems = parseOptionalInt(values['max-items'], '--max-items') ?? 100;
+    if (values.format !== 'snapshot') {
+      throw new Error(`Unsupported --format "${values.format}": expected "snapshot" or "jsonl"`);
+    }
+    const maxItems = parseStrictInt(values['max-items'], '--max-items') ?? 100;
     const snapshot = summarizeBeads(beads, { maxItems });
     process.stdout.write(`${JSON.stringify(snapshot, null, 2)}\n`);
     return;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -14,6 +14,7 @@ import {
   SCHEMA_VERSION,
   SCOPE_TYPES,
   applyOperations,
+  assertMemoryRef,
   commitBeadsToRef,
   deriveBeadId,
   detectDependencyCycle,
@@ -32,10 +33,13 @@ import {
   summarizeBeads,
   syncBeadsRef,
   validateBead,
+  validateBeadsGraph,
 } from '../scripts/lib/beads.mjs';
 import { createAppPlan } from '../scripts/lib/app-plan.mjs';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { loadConservativeWorkspaceGraph } from '../scripts/lib/workspace-graph.mjs';
+
+const CLI = join(repoRoot, 'scripts', 'beads.mjs');
 
 function makeTempDir(prefix) {
   const base = process.env.TMPDIR || tmpdir();
@@ -51,11 +55,21 @@ function initGitRepo(dir) {
   execFileSync('git', ['commit', '-m', 'init'], { cwd: dir, stdio: 'ignore' });
 }
 
-test('schema validation, deterministic dedupe IDs, bounds, and JSONL round-trip', () => {
+function runCli(cwd, args) {
+  return spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: 'utf8' });
+}
+
+test('schema validation, deterministic dedupe IDs, bounds, ref validation, and JSONL round-trip', () => {
   assert.equal(SCHEMA_VERSION, 1);
   assert.ok(BEAD_KINDS.includes('maintenance'));
   assert.ok(BEAD_STATUSES.includes('open'));
   assert.ok(SCOPE_TYPES.includes('app'));
+
+  assert.equal(assertMemoryRef(DEFAULT_BEADS_REF), DEFAULT_BEADS_REF);
+  assert.equal(assertMemoryRef('refs/heads/memory/pilot-1'), 'refs/heads/memory/pilot-1');
+  for (const bad of ['refs/heads/main', 'main', 'refs/heads/memory/../main', 'refs/heads/memory/bad.lock', '--all']) {
+    assert.throws(() => assertMemoryRef(bad), BeadsValidationError, bad);
+  }
 
   const id1 = deriveBeadId('knip:apps/zarro/src/foo.js:unusedExport');
   const id2 = deriveBeadId('knip:apps/zarro/src/foo.js:unusedExport');
@@ -86,8 +100,10 @@ test('schema validation, deterministic dedupe IDs, bounds, and JSONL round-trip'
   const jsonl = formatJsonl(applied.beads);
   const parsed = parseJsonl(jsonl);
   assert.deepEqual(parsed.get(bead.id), bead);
+  // Duplicate IDs in JSONL are rejected
+  assert.throws(() => parseJsonl(`${jsonl}${jsonl}`), BeadsConflictError);
 
-  // Reject overlong title and invalid scope
+  // Reject overlong title, invalid scope, and unknown fields
   assert.throws(() => applyOperations(new Map(), [{
     op: 'create',
     title: 'x'.repeat(LIMITS.title + 1),
@@ -99,12 +115,35 @@ test('schema validation, deterministic dedupe IDs, bounds, and JSONL round-trip'
     title: 'Missing app target',
     scope: { type: 'app', targets: [] },
   }]), BeadsValidationError);
+
+  assert.throws(() => applyOperations(new Map(), [{
+    op: 'create',
+    title: 'Unknown field',
+    scope: { type: 'repo', targets: [] },
+    evilField: 123,
+  }]), BeadsValidationError);
+
+  // Reject non-array evidence (string must not spread char-by-char)
+  assert.throws(() => applyOperations(new Map(), [{
+    op: 'create',
+    title: 'Bad evidence',
+    scope: { type: 'repo', targets: [] },
+    links: { evidence: 'apps/topofit/AGENTS.md' },
+  }]), BeadsValidationError);
 });
 
-test('dependency graph prevents cycles and readyBeads filters blocked and leased items', () => {
+test('dependency graph validates parent/discoveredFrom, prevents cycles, and readyBeads filters blocked and leased items', () => {
   const t0 = new Date('2026-11-26T00:00:00.000Z');
   const t1 = new Date('2026-11-26T01:00:00.000Z');
   const tExpired = new Date('2026-11-28T00:00:00.000Z');
+
+  // Dangling parent or discoveredFrom is rejected
+  assert.throws(() => applyOperations(new Map(), [{
+    op: 'create',
+    title: 'Dangling parent',
+    scope: { type: 'repo', targets: [] },
+    deps: { parent: 'bd-00000001' },
+  }], { now: t0 }), BeadsValidationError);
 
   let state = applyOperations(new Map(), [
     {
@@ -131,6 +170,7 @@ test('dependency graph prevents cycles and readyBeads filters blocked and leased
   state = applyOperations(state, [{ op: 'dep_add', id: idB, blockedBy: idA }], { actor: 'pilot', now: t0 }).beads;
   assert.equal(isBlockedByDeps(state.get(idB), state), true);
   assert.equal(detectDependencyCycle(state, idA, idB), true);
+  validateBeadsGraph(state);
 
   // Cycle must be rejected
   assert.throws(() => applyOperations(state, [{ op: 'dep_add', id: idA, blockedBy: idB }], { now: t0 }), BeadsValidationError);
@@ -159,69 +199,168 @@ test('dependency graph prevents cycles and readyBeads filters blocked and leased
   assert.equal(snapshot.items[0].blocked, false);
 });
 
-test('safe-outputs applier enforces batch caps, expectedRevision, single-app scope, and idempotent replay', () => {
+test('safe-outputs applier enforces revision checks on upserts, resulting single-app scope, caps, actor lock, and later-time replay', () => {
   const t0 = new Date('2026-11-26T00:00:00.000Z');
+  const tLater = new Date('2026-11-26T02:00:00.000Z');
+  const safeOpts = {
+    actor: 'gh-aw/unused-code',
+    maxCreates: 5,
+    maxUpdates: 2,
+    requireExpectedRevision: true,
+    singleAppOnly: true,
+    lockActor: true,
+  };
   const op = {
     op: 'upsert',
     dedupeKey: 'knip:apps/syncro/src/dead.js:unusedExport',
     title: 'Remove unused export in syncro',
+    summary: 'Confirmed dead export.',
     kind: 'maintenance',
     scope: { type: 'app', targets: ['syncro'] },
     links: { evidence: ['quality-artifacts/unused-code/knip.json'] },
+    note: 'Detected in weekly Knip scan',
   };
 
   // First run creates the bead
-  const first = applyOperations(new Map(), [op], { actor: 'gh-aw/unused-code', now: t0, maxCreates: 5, maxUpdates: 10, requireExpectedRevision: true, singleAppOnly: true });
+  const first = applyOperations(new Map(), [op], { ...safeOpts, now: t0 });
   assert.equal(first.createdIds.length, 1);
   const id = first.createdIds[0];
 
-  // Replaying exact same op at same timestamp is a no-op (zero duplicates, zero revision churn)
-  const replay = applyOperations(first.beads, [op], { actor: 'gh-aw/unused-code', now: t0, maxCreates: 5, maxUpdates: 10, requireExpectedRevision: true, singleAppOnly: true });
+  // Replaying exact same op at a LATER timestamp is still a zero-churn no-op
+  const replay = applyOperations(first.beads, [op], { ...safeOpts, now: tLater });
   assert.equal(replay.createdIds.length, 0);
   assert.equal(replay.updatedIds.length, 0);
   assert.equal(replay.untouchedIds.length, 1);
   assert.equal(replay.beads.get(id).revision, 1);
+  assert.equal(replay.beads.get(id).journal.length, 1);
 
-  // Safe mode rejects missing or stale expectedRevision on updates
-  assert.throws(() => applyOperations(first.beads, [{ op: 'note', id, note: 'Missing rev' }], { requireExpectedRevision: true }), BeadsValidationError);
-  assert.throws(() => applyOperations(first.beads, [{ op: 'note', id, note: 'Stale rev', expectedRevision: 99 }], { requireExpectedRevision: true }), BeadsConflictError);
+  // Modifying an existing bead via upsert in safe mode MUST provide fresh expectedRevision
+  const changedUpsert = { ...op, summary: 'Updated summary after second scan' };
+  assert.throws(() => applyOperations(first.beads, [changedUpsert], { ...safeOpts, now: tLater }), BeadsValidationError);
+  assert.throws(() => applyOperations(first.beads, [{ ...changedUpsert, expectedRevision: 99 }], { ...safeOpts, now: tLater }), BeadsConflictError);
+  const updated = applyOperations(first.beads, [{ ...changedUpsert, expectedRevision: 1 }], { ...safeOpts, now: tLater });
+  assert.equal(updated.beads.get(id).revision, 2);
 
-  // Safe mode rejects shared-scope beads when singleAppOnly is set
-  assert.throws(() => applyOperations(first.beads, [{
-    op: 'upsert',
-    dedupeKey: 'knip:packages/components/src/x.js',
-    title: 'Shared change',
+  // Conflicting id + dedupeKey is rejected
+  assert.throws(() => applyOperations(updated.beads, [{ ...op, id: 'bd-00000001', expectedRevision: 2 }], { ...safeOpts, now: tLater }), BeadsConflictError);
+
+  // Single-app update cannot widen scope to shared/repo/multi-app
+  assert.throws(() => applyOperations(updated.beads, [{
+    op: 'update',
+    id,
+    expectedRevision: 2,
     scope: { type: 'shared', targets: ['components'] },
-  }], { singleAppOnly: true }), BeadsValidationError);
+  }], { ...safeOpts, now: tLater }), BeadsValidationError);
+  assert.throws(() => applyOperations(updated.beads, [{
+    op: 'update',
+    id,
+    expectedRevision: 2,
+    scope: { type: 'app', targets: ['syncro', 'topofit'] },
+  }], { ...safeOpts, now: tLater }), BeadsValidationError);
 
-  // Safe mode enforces maxCreates cap atomically (zero partial mutations)
+  // Generic update cannot bypass close/claim lifecycle
+  assert.throws(() => applyOperations(updated.beads, [{
+    op: 'update',
+    id,
+    expectedRevision: 2,
+    status: 'closed',
+  }], { ...safeOpts, now: tLater }), BeadsValidationError);
+
+  // Safe mode locks actor and forbids force release / non-boolean force
+  assert.throws(() => applyOperations(updated.beads, [{
+    op: 'note',
+    id,
+    expectedRevision: 2,
+    actor: 'spoofed-maintainer',
+    note: 'Forged actor',
+  }], { ...safeOpts, now: tLater }), BeadsValidationError);
+  assert.throws(() => applyOperations(updated.beads, [{
+    op: 'release',
+    id,
+    expectedRevision: 2,
+    force: true,
+  }], { ...safeOpts, now: tLater }), BeadsValidationError);
+  assert.throws(() => applyOperations(updated.beads, [{
+    op: 'release',
+    id,
+    expectedRevision: 2,
+    force: 'yes',
+  }], { ...safeOpts, lockActor: false, now: tLater }), BeadsValidationError);
+
+  // Safe mode enforces maxUpdates cap atomically
+  assert.throws(() => applyOperations(updated.beads, [
+    { op: 'note', id, expectedRevision: 2, note: 'n1' },
+    { op: 'note', id, expectedRevision: 3, note: 'n2' },
+    { op: 'note', id, expectedRevision: 4, note: 'n3' },
+  ], { ...safeOpts, now: tLater }), BeadsValidationError);
+  assert.equal(updated.beads.get(id).revision, 2);
+
+  // Safe mode enforces maxCreates cap atomically
   const tooMany = Array.from({ length: 3 }, (_, i) => ({
     op: 'create',
     title: `Item ${i}`,
     scope: { type: 'app', targets: ['syncro'] },
   }));
-  assert.throws(() => applyOperations(first.beads, tooMany, { maxCreates: 2 }), BeadsValidationError);
-  assert.equal(first.beads.size, 1);
+  assert.throws(() => applyOperations(updated.beads, tooMany, { ...safeOpts, maxCreates: 2, now: tLater }), BeadsValidationError);
+  assert.equal(updated.beads.size, 1);
 });
 
-test('git orphan-branch store coordinates across parallel worktrees with zero main diff and merges remote sync', () => {
+test('mergeBeadsMaps preserves closed status, bumps revision on merge, caps evidence, and rejects merge cycles', () => {
+  const t0 = new Date('2026-11-26T00:00:00.000Z');
+  const t1 = new Date('2026-11-26T01:00:00.000Z');
+  const t2 = new Date('2026-11-26T02:00:00.000Z');
+
+  const base = applyOperations(new Map(), [
+    { op: 'create', dedupeKey: 'm:a', title: 'A', scope: { type: 'app', targets: ['topofit'] } },
+    { op: 'create', dedupeKey: 'm:b', title: 'B', scope: { type: 'app', targets: ['elastix'] } },
+  ], { actor: 'init', now: t0 }).beads;
+  const idA = deriveBeadId('m:a');
+  const idB = deriveBeadId('m:b');
+
+  // Side 1 closes A at t1; Side 2 concurrently adds a note to A at t2 (higher timestamp, still open)
+  const closedSide = applyOperations(base, [{ op: 'close', id: idA, reason: 'Fixed in PR #10' }], { actor: 'host-1', now: t1 }).beads;
+  const noteSide = applyOperations(base, [{ op: 'note', id: idA, note: 'Late comment' }], { actor: 'host-2', now: t2 }).beads;
+  const merged = mergeBeadsMaps(noteSide, closedSide);
+  assert.equal(merged.get(idA).status, 'closed');
+  assert.equal(merged.get(idA).revision, 3);
+  assert.ok(merged.get(idA).journal.some((e) => e.note === 'Late comment'));
+
+  // Evidence lists exceeding LIMITS.evidence when combined are capped cleanly instead of aborting
+  const ev1 = Array.from({ length: 15 }, (_, i) => `docs/ev-a-${String(i).padStart(2, '0')}.md`);
+  const ev2 = Array.from({ length: 15 }, (_, i) => `docs/ev-b-${String(i).padStart(2, '0')}.md`);
+  const s1 = applyOperations(base, [{ op: 'update', id: idA, links: { evidence: ev1 } }], { now: t1 }).beads;
+  const s2 = applyOperations(base, [{ op: 'update', id: idA, links: { evidence: ev2 } }], { now: t2 }).beads;
+  const evMerged = mergeBeadsMaps(s1, s2);
+  assert.equal(evMerged.get(idA).links.evidence.length, LIMITS.evidence);
+
+  // Two individually acyclic histories that combine into a cycle must be rejected
+  const dep1 = applyOperations(base, [{ op: 'dep_add', id: idA, blockedBy: idB }], { now: t1 }).beads;
+  const dep2 = applyOperations(base, [{ op: 'dep_add', id: idB, blockedBy: idA }], { now: t2 }).beads;
+  assert.throws(() => mergeBeadsMaps(dep1, dep2), BeadsConflictError);
+});
+
+test('git orphan-branch store handles subdirectories, CAS bootstrap, fast-forward sync, error propagation, and CLI safe mode', () => {
   const root = makeTempDir('beads-git-');
   const mainRepo = join(root, 'main');
   const worktreeB = join(root, 'wt-b');
   const bareRemote = join(root, 'remote.git');
   try {
-    execFileSync('mkdir', ['-p', mainRepo, bareRemote]);
+    mkdirSync(mainRepo, { recursive: true });
+    mkdirSync(bareRemote, { recursive: true });
     execFileSync('git', ['init', '--bare'], { cwd: bareRemote, stdio: 'ignore' });
     initGitRepo(mainRepo);
     execFileSync('git', ['remote', 'add', 'origin', bareRemote], { cwd: mainRepo, stdio: 'ignore' });
     execFileSync('git', ['push', '-u', 'origin', 'main'], { cwd: mainRepo, stdio: 'ignore' });
     execFileSync('git', ['worktree', 'add', '-b', 'feat-b', worktreeB, 'main'], { cwd: mainRepo, stdio: 'ignore' });
 
+    const subDir = join(mainRepo, 'nested', 'deep');
+    mkdirSync(subDir, { recursive: true });
+
     const init = initBeadsRef(mainRepo);
     assert.equal(init.created, true);
     assert.equal(initBeadsRef(worktreeB).created, false);
 
-    // Create in main worktree, claim in parallel worktree B
+    // Create bead at repo root, then mutate from a nested subdirectory -> MUST preserve existing bead
     const created = mutateBeadsRef(mainRepo, [{
       op: 'upsert',
       dedupeKey: 'pilot:wt-handoff',
@@ -230,6 +369,17 @@ test('git orphan-branch store coordinates across parallel worktrees with zero ma
     }], { actor: 't3/wt-a' });
     const beadId = created.createdIds[0];
 
+    const fromSub = mutateBeadsRef(subDir, [{
+      op: 'upsert',
+      dedupeKey: 'pilot:from-subdir',
+      title: 'Added from nested directory',
+      scope: { type: 'app', targets: ['topofit'] },
+    }], { actor: 't3/sub' });
+    assert.equal(fromSub.beads.size, 2);
+    assert.ok(fromSub.beads.has(beadId));
+    assert.equal(readBeadsFromRef(subDir).beads.size, 2);
+
+    // Claim in parallel worktree B
     const claimed = mutateBeadsRef(worktreeB, [{
       op: 'claim',
       id: beadId,
@@ -251,16 +401,23 @@ test('git orphan-branch store coordinates across parallel worktrees with zero ma
       message: 'stale write',
     }), BeadsConflictError);
 
-    // Push memory/beads to bare remote, then simulate divergent clone sync
+    // Push memory/beads to bare remote
     const pushed = syncBeadsRef(mainRepo, { remote: 'origin', push: true });
     assert.equal(pushed.pushed, true);
-    assert.equal(pushed.count, 1);
+    assert.equal(pushed.count, 2);
 
+    // Clone C syncs (bootstrap), then fast-forwards when mainRepo advances (NO merge commit!)
     const cloneC = join(root, 'clone-c');
     execFileSync('git', ['clone', bareRemote, cloneC], { stdio: 'ignore' });
-    syncBeadsRef(cloneC, { remote: 'origin', push: false });
+    const boot = syncBeadsRef(cloneC, { remote: 'origin', push: false });
+    assert.equal(boot.count, 2);
 
-    // Diverge: mainRepo adds a note + new bead; cloneC adds another note + another bead
+    mutateBeadsRef(mainRepo, [{ op: 'note', id: beadId, note: 'Ahead on host A' }], { actor: 'host-a' });
+    const aheadSha = syncBeadsRef(mainRepo, { remote: 'origin', push: true }).sha;
+    const ff = syncBeadsRef(cloneC, { remote: 'origin', push: false });
+    assert.equal(ff.sha, aheadSha, 'fast-forward should not create a merge commit');
+
+    // Divergent sync merges both sides cleanly
     mutateBeadsRef(mainRepo, [
       { op: 'note', id: beadId, note: 'Note from host A' },
       { op: 'upsert', dedupeKey: 'pilot:from-a', title: 'From A', scope: { type: 'repo', targets: [] } },
@@ -272,13 +429,51 @@ test('git orphan-branch store coordinates across parallel worktrees with zero ma
       { op: 'upsert', dedupeKey: 'pilot:from-c', title: 'From C', scope: { type: 'repo', targets: [] } },
     ], { actor: 'host-c' });
     const synced = syncBeadsRef(cloneC, { remote: 'origin', push: true });
-    assert.equal(synced.count, 3);
+    assert.equal(synced.count, 4);
 
     const { beads } = readBeadsFromRef(cloneC);
     const notes = beads.get(beadId).journal.map((entry) => entry.note);
     assert.ok(notes.includes('Note from host A'));
     assert.ok(notes.includes('Note from host C'));
-    assert.equal(mergeBeadsMaps(beads, beads).size, 3);
+
+    // Broken remote transport must throw, not succeed silently
+    execFileSync('git', ['remote', 'add', 'broken', join(root, 'does-not-exist.git')], { cwd: cloneC, stdio: 'ignore' });
+    assert.throws(() => syncBeadsRef(cloneC, { remote: 'broken', push: false }), /Failed to query remote/);
+    // Unconfigured / flag-like remote rejected
+    assert.throws(() => syncBeadsRef(cloneC, { remote: '--upload-pack=evil', push: false }), BeadsValidationError);
+
+    // CLI-level validation & safe apply tests
+    assert.notEqual(runCli(cloneC, ['list', '--ref', 'refs/heads/main']).status, 0);
+    assert.notEqual(runCli(cloneC, ['export', '--format', 'xml']).status, 0);
+    assert.notEqual(runCli(cloneC, ['create', '--title', 'Bad int', '--scope', 'repo', '--priority', '1abc']).status, 0);
+    assert.notEqual(runCli(cloneC, ['create', '--title', 'Bad scope', '--scope', 'app:a:b']).status, 0);
+    assert.notEqual(runCli(cloneC, ['claim', beadId, '--ttl-hours', '24h']).status, 0);
+
+    const badEnvelope = join(root, 'bad.json');
+    writeFileSync(badEnvelope, 'null\n', 'utf8');
+    assert.notEqual(runCli(cloneC, ['apply', badEnvelope, '--safe']).status, 0);
+
+    const safeOpsFile = join(root, 'safe-ops.json');
+    writeFileSync(safeOpsFile, JSON.stringify({
+      operations: [{
+        op: 'upsert',
+        dedupeKey: 'cli:safe-test',
+        title: 'CLI safe upsert',
+        scope: { type: 'app', targets: ['zarro'] },
+      }],
+    }), 'utf8');
+    const safeRes = runCli(cloneC, ['apply', safeOpsFile, '--safe', '--single-app', '--actor', 'gh-aw/test', '--json']);
+    assert.equal(safeRes.status, 0, safeRes.stderr);
+    assert.equal(JSON.parse(safeRes.stdout).createdIds.length, 1);
+
+    // Upsert CLI forwards --expected-revision and rejects stale revision
+    const staleUpsert = runCli(cloneC, [
+      'upsert',
+      '--dedupe-key', 'cli:safe-test',
+      '--summary', 'Changed summary',
+      '--expected-revision', '99',
+    ]);
+    assert.notEqual(staleUpsert.status, 0);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

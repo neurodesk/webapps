@@ -9,6 +9,10 @@ export const BEAD_KINDS = Object.freeze(['maintenance', 'rollout', 'followup', '
 export const BEAD_STATUSES = Object.freeze(['open', 'in_progress', 'blocked', 'closed']);
 export const SCOPE_TYPES = Object.freeze(['app', 'package', 'exe', 'shared', 'repo']);
 
+const MEMORY_REF_PATTERN = /^refs\/heads\/memory\/[a-z0-9][a-z0-9._/-]*$/;
+const REMOTE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const ZERO_OID = '0000000000000000000000000000000000000000';
+
 export const LIMITS = Object.freeze({
   title: 140,
   summary: 1000,
@@ -25,6 +29,23 @@ export const LIMITS = Object.freeze({
   blockedBy: 20,
 });
 
+const ALLOWED_OP_KEYS = Object.freeze({
+  create: new Set(['op', 'id', 'title', 'summary', 'kind', 'status', 'priority', 'scope', 'dedupeKey', 'deps', 'links', 'note', 'actor', 'closeReason']),
+  upsert: new Set(['op', 'id', 'title', 'summary', 'kind', 'status', 'priority', 'scope', 'dedupeKey', 'deps', 'links', 'note', 'actor', 'closeReason', 'expectedRevision']),
+  update: new Set(['op', 'id', 'expectedRevision', 'title', 'summary', 'kind', 'status', 'priority', 'scope', 'links', 'note', 'actor']),
+  dep_add: new Set(['op', 'id', 'expectedRevision', 'blockedBy']),
+  dep_remove: new Set(['op', 'id', 'expectedRevision', 'blockedBy']),
+  claim: new Set(['op', 'id', 'expectedRevision', 'owner', 'branch', 'ttlHours', 'note']),
+  release: new Set(['op', 'id', 'expectedRevision', 'owner', 'force', 'note']),
+  note: new Set(['op', 'id', 'expectedRevision', 'note', 'actor']),
+  close: new Set(['op', 'id', 'expectedRevision', 'reason', 'closeReason', 'pr', 'actor']),
+  reopen: new Set(['op', 'id', 'expectedRevision', 'note', 'actor']),
+});
+
+const ALLOWED_LINK_KEYS = new Set(['githubIssue', 'pr', 'branch', 'evidence']);
+const ALLOWED_DEP_KEYS = new Set(['blockedBy', 'parent', 'discoveredFrom']);
+const ALLOWED_SCOPE_KEYS = new Set(['type', 'targets']);
+
 export class BeadsValidationError extends Error {
   constructor(message) {
     super(message);
@@ -36,6 +57,14 @@ export class BeadsConflictError extends Error {
   constructor(message) {
     super(message);
     this.name = 'BeadsConflictError';
+  }
+}
+
+function assertAllowedKeys(obj, allowed, label) {
+  for (const key of Object.keys(obj)) {
+    if (!allowed.has(key)) {
+      throw new BeadsValidationError(`Unexpected field "${key}" in ${label}`);
+    }
   }
 }
 
@@ -66,6 +95,16 @@ function uniqueSorted(values) {
   return [...new Set(values)].sort();
 }
 
+export function assertMemoryRef(ref) {
+  if (typeof ref !== 'string' || !MEMORY_REF_PATTERN.test(ref)) {
+    throw new BeadsValidationError(`Ref must live under refs/heads/memory/: ${ref}`);
+  }
+  if (ref.includes('..') || ref.includes('//') || ref.includes('@{') || ref.endsWith('/') || ref.endsWith('.') || ref.endsWith('.lock')) {
+    throw new BeadsValidationError(`Invalid memory ref name: ${ref}`);
+  }
+  return ref;
+}
+
 export function deriveBeadId(dedupeKey) {
   const hash = createHash('sha256').update(dedupeKey, 'utf8').digest('hex').slice(0, 8);
   return `bd-${hash}`;
@@ -83,6 +122,7 @@ function normalizeScope(scope) {
   if (!scope || typeof scope !== 'object' || Array.isArray(scope)) {
     throw new BeadsValidationError('scope must be an object with { type, targets }');
   }
+  assertAllowedKeys(scope, ALLOWED_SCOPE_KEYS, 'scope');
   if (!SCOPE_TYPES.includes(scope.type)) {
     throw new BeadsValidationError(`scope.type must be one of: ${SCOPE_TYPES.join(', ')}`);
   }
@@ -101,6 +141,7 @@ function normalizeDeps(deps = {}) {
   if (!deps || typeof deps !== 'object' || Array.isArray(deps)) {
     throw new BeadsValidationError('deps must be an object');
   }
+  assertAllowedKeys(deps, ALLOWED_DEP_KEYS, 'deps');
   const rawBlocked = deps.blockedBy ?? [];
   if (!Array.isArray(rawBlocked) || rawBlocked.length > LIMITS.blockedBy) {
     throw new BeadsValidationError(`deps.blockedBy must be an array of at most ${LIMITS.blockedBy} ids`);
@@ -126,6 +167,7 @@ function normalizeLinks(links = {}) {
   if (!links || typeof links !== 'object' || Array.isArray(links)) {
     throw new BeadsValidationError('links must be an object');
   }
+  assertAllowedKeys(links, ALLOWED_LINK_KEYS, 'links');
   const out = {};
   if (links.githubIssue !== undefined && links.githubIssue !== null) {
     if (!Number.isInteger(links.githubIssue) || links.githubIssue <= 0) {
@@ -213,6 +255,12 @@ export function validateBead(raw) {
   if (deps.blockedBy.includes(raw.id)) {
     throw new BeadsValidationError(`Bead ${raw.id} cannot block itself`);
   }
+  if (deps.parent === raw.id) {
+    throw new BeadsValidationError(`Bead ${raw.id} cannot be its own parent`);
+  }
+  if (deps.discoveredFrom === raw.id) {
+    throw new BeadsValidationError(`Bead ${raw.id} cannot be discoveredFrom itself`);
+  }
   const links = normalizeLinks(raw.links);
   const lease = normalizeLease(raw.lease);
   const journal = normalizeJournal(raw.journal);
@@ -221,6 +269,17 @@ export function validateBead(raw) {
   const lastSeenAt = assertIsoTimestamp(raw.lastSeenAt ?? updatedAt, 'lastSeenAt');
   const closedAt = raw.closedAt === undefined || raw.closedAt === null ? null : assertIsoTimestamp(raw.closedAt, 'closedAt');
   const closeReason = assertOptionalString(raw.closeReason, 'closeReason', LIMITS.closeReason);
+
+  if (raw.status === 'closed') {
+    if (!closedAt || !closeReason) {
+      throw new BeadsValidationError(`Closed bead ${raw.id} must have closedAt and closeReason`);
+    }
+    if (lease !== null) {
+      throw new BeadsValidationError(`Closed bead ${raw.id} cannot hold a lease`);
+    }
+  } else if (closedAt !== null || closeReason !== null) {
+    throw new BeadsValidationError(`Non-closed bead ${raw.id} must not set closedAt or closeReason`);
+  }
 
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -280,6 +339,44 @@ export function detectDependencyCycle(beadsMap, startId, newBlockerId) {
   return false;
 }
 
+export function validateBeadsGraph(beadsMap) {
+  const color = new Map();
+  for (const [id, bead] of beadsMap.entries()) {
+    validateBead(bead);
+    if (bead.id !== id) {
+      throw new BeadsValidationError(`Map key ${id} does not match bead.id ${bead.id}`);
+    }
+    for (const depId of bead.deps.blockedBy) {
+      if (!beadsMap.has(depId)) {
+        throw new BeadsValidationError(`Bead ${id} references unknown blocker ${depId}`);
+      }
+    }
+    if (bead.deps.parent && !beadsMap.has(bead.deps.parent)) {
+      throw new BeadsValidationError(`Bead ${id} references unknown parent ${bead.deps.parent}`);
+    }
+    if (bead.deps.discoveredFrom && !beadsMap.has(bead.deps.discoveredFrom)) {
+      throw new BeadsValidationError(`Bead ${id} references unknown discoveredFrom ${bead.deps.discoveredFrom}`);
+    }
+  }
+
+  function visit(id) {
+    const state = color.get(id) ?? 0;
+    if (state === 1) {
+      throw new BeadsConflictError(`Dependency cycle detected involving ${id}`);
+    }
+    if (state === 2) return;
+    color.set(id, 1);
+    for (const depId of beadsMap.get(id).deps.blockedBy) {
+      visit(depId);
+    }
+    color.set(id, 2);
+  }
+
+  for (const id of [...beadsMap.keys()].sort()) {
+    visit(id);
+  }
+}
+
 function compareBeadOrder(a, b) {
   if (a.priority !== b.priority) return a.priority - b.priority;
   if (a.createdAt !== b.createdAt) return a.createdAt.localeCompare(b.createdAt);
@@ -291,7 +388,6 @@ export function readyBeads(beadsMap, { now = new Date(), target = null, kind = n
   const out = [];
   for (const bead of beadsMap.values()) {
     if (bead.status === 'closed' || bead.status === 'blocked') continue;
-    if (bead.status === 'in_progress' && hasActiveLease(bead, nowMs)) continue;
     if (hasActiveLease(bead, nowMs)) continue;
     if (isBlockedByDeps(bead, beadsMap)) continue;
     if (kind && bead.kind !== kind) continue;
@@ -356,8 +452,12 @@ export function parseJsonl(text) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     const bead = validateBead(JSON.parse(trimmed));
+    if (map.has(bead.id)) {
+      throw new BeadsConflictError(`Duplicate bead id in JSONL: ${bead.id}`);
+    }
     map.set(bead.id, bead);
   }
+  validateBeadsGraph(map);
   return map;
 }
 
@@ -384,6 +484,9 @@ function checkExpectedRevision(bead, expectedRevision, requireExpectedRevision) 
     }
     return;
   }
+  if (!Number.isInteger(expectedRevision) || expectedRevision < 1) {
+    throw new BeadsValidationError(`expectedRevision must be a positive integer for ${bead.id}`);
+  }
   if (bead.revision !== expectedRevision) {
     throw new BeadsConflictError(`Stale revision for ${bead.id}: expected ${expectedRevision}, actual ${bead.revision}`);
   }
@@ -392,21 +495,54 @@ function checkExpectedRevision(bead, expectedRevision, requireExpectedRevision) 
 function appendJournal(bead, actor, note, nowIso) {
   const cleanActor = assertNonEmptyString(actor, 'actor', LIMITS.actor);
   const cleanNote = assertNonEmptyString(note, 'note', LIMITS.note);
-  const exists = bead.journal.some((entry) => entry.at === nowIso && entry.actor === cleanActor && entry.note === cleanNote);
-  if (exists) return;
+  const exists = bead.journal.some((entry) => entry.actor === cleanActor && entry.note === cleanNote);
+  if (exists) return false;
   bead.journal = [...bead.journal, { at: nowIso, actor: cleanActor, note: cleanNote }].slice(-LIMITS.journal);
+  return true;
 }
 
-function mergeLinks(base, patch) {
+function mergeLinks(base, patch, { capEvidence = false } = {}) {
   if (!patch) return base;
+  if (typeof patch !== 'object' || Array.isArray(patch)) {
+    throw new BeadsValidationError('links must be an object');
+  }
+  assertAllowedKeys(patch, ALLOWED_LINK_KEYS, 'links');
   const merged = { ...base };
   if (patch.githubIssue !== undefined) merged.githubIssue = patch.githubIssue;
   if (patch.pr !== undefined) merged.pr = patch.pr;
   if (patch.branch !== undefined) merged.branch = patch.branch;
   if (patch.evidence !== undefined) {
-    merged.evidence = uniqueSorted([...(base.evidence ?? []), ...patch.evidence]);
+    if (!Array.isArray(patch.evidence)) {
+      throw new BeadsValidationError('links.evidence must be an array');
+    }
+    const combined = uniqueSorted([...(base.evidence ?? []), ...patch.evidence]);
+    merged.evidence = capEvidence ? combined.slice(0, LIMITS.evidence) : combined;
   }
   return normalizeLinks(merged);
+}
+
+function resolveOpActor(opActor, trustedActor, lockActor) {
+  if (lockActor) {
+    if (opActor !== undefined && opActor !== trustedActor) {
+      throw new BeadsValidationError(`Payload actor "${opActor}" cannot override trusted actor "${trustedActor}" in safe mode`);
+    }
+    return trustedActor;
+  }
+  return opActor ?? trustedActor;
+}
+
+function validateRefsExist(beadsMap, bead) {
+  for (const depId of bead.deps.blockedBy) {
+    if (!beadsMap.has(depId)) {
+      throw new BeadsValidationError(`Unknown dependency bead: ${depId}`);
+    }
+  }
+  if (bead.deps.parent && !beadsMap.has(bead.deps.parent)) {
+    throw new BeadsValidationError(`Unknown parent bead: ${bead.deps.parent}`);
+  }
+  if (bead.deps.discoveredFrom && !beadsMap.has(bead.deps.discoveredFrom)) {
+    throw new BeadsValidationError(`Unknown discoveredFrom bead: ${bead.deps.discoveredFrom}`);
+  }
 }
 
 export function applyOperations(beadsMap, operations, options = {}) {
@@ -420,6 +556,7 @@ export function applyOperations(beadsMap, operations, options = {}) {
     maxUpdates = Infinity,
     requireExpectedRevision = false,
     singleAppOnly = false,
+    lockActor = false,
   } = options;
   const nowDate = now instanceof Date ? now : new Date(now);
   const nowIso = nowDate.toISOString();
@@ -434,36 +571,69 @@ export function applyOperations(beadsMap, operations, options = {}) {
 
   for (let index = 0; index < operations.length; index++) {
     const op = operations[index];
-    if (!op || typeof op !== 'object' || typeof op.op !== 'string') {
+    if (!op || typeof op !== 'object' || Array.isArray(op) || typeof op.op !== 'string') {
       throw new BeadsValidationError(`operations[${index}] must be an object with an "op" field`);
     }
+    const allowedKeys = ALLOWED_OP_KEYS[op.op];
+    if (!allowedKeys) {
+      throw new BeadsValidationError(`Unsupported operation: ${op.op}`);
+    }
+    assertAllowedKeys(op, allowedKeys, `operations[${index}] (${op.op})`);
 
     if (op.op === 'create' || op.op === 'upsert') {
+      const opActor = resolveOpActor(op.actor, actor, lockActor);
       const dedupeKey = assertOptionalString(op.dedupeKey, 'dedupeKey', LIMITS.dedupeKey);
-      const existing = dedupeKey ? findByDedupeKey(next, dedupeKey) : (op.id ? next.get(op.id) : null);
+      const byKey = dedupeKey ? findByDedupeKey(next, dedupeKey) : null;
+      const byId = op.id ? next.get(op.id) : null;
+      if (op.id && dedupeKey) {
+        const expectedId = deriveBeadId(dedupeKey);
+        if (op.id !== expectedId && (!byKey || byKey.id !== op.id)) {
+          throw new BeadsConflictError(`Conflicting id (${op.id}) and dedupeKey (${dedupeKey})`);
+        }
+      }
+      if (byKey && byId && byKey.id !== byId.id) {
+        throw new BeadsConflictError(`id ${op.id} and dedupeKey ${dedupeKey} match different beads (${byId.id} vs ${byKey.id})`);
+      }
+      const existing = byKey ?? byId;
       if (existing && op.op === 'create') {
         throw new BeadsConflictError(`Bead already exists: ${existing.id}`);
       }
       if (existing) {
+        if (dedupeKey && existing.dedupeKey && existing.dedupeKey !== dedupeKey) {
+          throw new BeadsConflictError(`Bead ${existing.id} has dedupeKey "${existing.dedupeKey}", not "${dedupeKey}"`);
+        }
         if (singleAppOnly && !isSingleAppScope(existing)) {
           throw new BeadsValidationError(`Bead ${existing.id} is outside single-app scope`);
         }
+        if (op.scope !== undefined) {
+          const nextScope = normalizeScope(op.scope);
+          if (singleAppOnly && !(nextScope.type === 'app' && nextScope.targets.length === 1)) {
+            throw new BeadsValidationError(`Updated scope for ${existing.id} must target a single app`);
+          }
+        }
         const mergedLinks = mergeLinks(existing.links, op.links);
-        const evidenceChanged = JSON.stringify(mergedLinks) !== JSON.stringify(existing.links);
+        const linksChanged = JSON.stringify(mergedLinks) !== JSON.stringify(existing.links);
+        const nextSummary = op.summary !== undefined ? (assertOptionalString(op.summary, 'summary', LIMITS.summary) ?? '') : existing.summary;
+        const summaryChanged = nextSummary !== existing.summary;
         const noteText = assertOptionalString(op.note, 'note', LIMITS.note);
-        const summaryChanged = op.summary !== undefined && op.summary.trim() !== existing.summary;
-        const alreadySeenSameRun = existing.lastSeenAt === nowIso && !evidenceChanged && !noteText && !summaryChanged;
-        if (alreadySeenSameRun) {
+        const noteIsNew = Boolean(noteText) && !existing.journal.some((entry) => entry.actor === opActor && entry.note === noteText);
+
+        if (!linksChanged && !summaryChanged && !noteIsNew) {
+          if (op.expectedRevision !== undefined && op.expectedRevision !== null) {
+            checkExpectedRevision(existing, op.expectedRevision, false);
+          }
           untouchedIds.push(existing.id);
           continue;
         }
+
+        checkExpectedRevision(existing, op.expectedRevision, requireExpectedRevision);
         updates++;
         if (updates > maxUpdates) {
           throw new BeadsValidationError(`Operation batch exceeds maxUpdates (${maxUpdates})`);
         }
         existing.links = mergedLinks;
-        if (op.summary !== undefined) existing.summary = assertOptionalString(op.summary, 'summary', LIMITS.summary) ?? '';
-        if (noteText) appendJournal(existing, op.actor ?? actor, noteText, nowIso);
+        existing.summary = nextSummary;
+        if (noteText) appendJournal(existing, opActor, noteText, nowIso);
         existing.lastSeenAt = nowIso;
         existing.updatedAt = nowIso;
         existing.revision += 1;
@@ -495,21 +665,17 @@ export function applyOperations(beadsMap, operations, options = {}) {
         deps: op.deps ?? {},
         links: op.links ?? {},
         lease: null,
-        journal: op.note ? [{ at: nowIso, actor: op.actor ?? actor, note: op.note }] : [],
+        journal: op.note ? [{ at: nowIso, actor: opActor, note: op.note }] : [],
         createdAt: nowIso,
         updatedAt: nowIso,
         lastSeenAt: nowIso,
         closedAt: op.status === 'closed' ? nowIso : null,
-        closeReason: op.closeReason ?? null,
+        closeReason: op.status === 'closed' ? op.closeReason : null,
       });
       if (singleAppOnly && !isSingleAppScope(initial)) {
         throw new BeadsValidationError(`New bead ${initial.id} must target a single app`);
       }
-      for (const depId of initial.deps.blockedBy) {
-        if (!next.has(depId)) {
-          throw new BeadsValidationError(`Unknown dependency bead: ${depId}`);
-        }
-      }
+      validateRefsExist(next, initial);
       next.set(initial.id, initial);
       changedIds.add(initial.id);
       createdIds.push(initial.id);
@@ -530,14 +696,31 @@ export function applyOperations(beadsMap, operations, options = {}) {
     }
 
     if (op.op === 'update') {
+      const opActor = resolveOpActor(op.actor, actor, lockActor);
       if (op.title !== undefined) bead.title = assertNonEmptyString(op.title, 'title', LIMITS.title);
       if (op.summary !== undefined) bead.summary = assertOptionalString(op.summary, 'summary', LIMITS.summary) ?? '';
       if (op.kind !== undefined) bead.kind = op.kind;
-      if (op.status !== undefined) bead.status = op.status;
+      if (op.status !== undefined) {
+        if (op.status === 'closed' || op.status === 'in_progress') {
+          throw new BeadsValidationError(`Use explicit "${op.status === 'closed' ? 'close' : 'claim'}" operation instead of generic update status`);
+        }
+        if (bead.status === 'closed') {
+          throw new BeadsValidationError(`Use explicit "reopen" operation before updating closed bead ${bead.id}`);
+        }
+        bead.status = op.status;
+        if (op.status === 'blocked' || op.status === 'open') {
+          bead.lease = null;
+        }
+      }
       if (op.priority !== undefined) bead.priority = op.priority;
-      if (op.scope !== undefined) bead.scope = normalizeScope(op.scope);
+      if (op.scope !== undefined) {
+        bead.scope = normalizeScope(op.scope);
+        if (singleAppOnly && !isSingleAppScope(bead)) {
+          throw new BeadsValidationError(`Updated scope for ${bead.id} must target a single app`);
+        }
+      }
       if (op.links !== undefined) bead.links = mergeLinks(bead.links, op.links);
-      if (op.note) appendJournal(bead, op.actor ?? actor, op.note, nowIso);
+      if (op.note) appendJournal(bead, opActor, op.note, nowIso);
     } else if (op.op === 'dep_add') {
       const blockerId = op.blockedBy;
       if (!next.has(blockerId)) {
@@ -550,7 +733,7 @@ export function applyOperations(beadsMap, operations, options = {}) {
     } else if (op.op === 'dep_remove') {
       bead.deps.blockedBy = bead.deps.blockedBy.filter((id) => id !== op.blockedBy);
     } else if (op.op === 'claim') {
-      const owner = assertNonEmptyString(op.owner ?? actor, 'owner', LIMITS.actor);
+      const owner = resolveOpActor(op.owner, actor, lockActor);
       if (bead.status === 'closed') {
         throw new BeadsConflictError(`Cannot claim closed bead ${bead.id}`);
       }
@@ -567,30 +750,39 @@ export function applyOperations(beadsMap, operations, options = {}) {
       if (op.branch) bead.links = mergeLinks(bead.links, { branch: op.branch });
       appendJournal(bead, owner, op.note ?? `Claimed until ${expiresAt}`, nowIso);
     } else if (op.op === 'release') {
-      const owner = assertNonEmptyString(op.owner ?? actor, 'owner', LIMITS.actor);
-      if (hasActiveLease(bead, nowMs) && bead.lease.owner !== owner && !op.force) {
+      const owner = resolveOpActor(op.owner, actor, lockActor);
+      if (op.force !== undefined && typeof op.force !== 'boolean') {
+        throw new BeadsValidationError('release.force must be a boolean');
+      }
+      const force = op.force ?? false;
+      if (force && lockActor) {
+        throw new BeadsValidationError('Force release is not permitted in safe mode');
+      }
+      if (hasActiveLease(bead, nowMs) && bead.lease.owner !== owner && !force) {
         throw new BeadsConflictError(`Cannot release ${bead.id}: actively claimed by ${bead.lease.owner}`);
       }
       bead.lease = null;
       if (bead.status === 'in_progress') bead.status = 'open';
       appendJournal(bead, owner, op.note ?? 'Released claim', nowIso);
     } else if (op.op === 'note') {
-      appendJournal(bead, op.actor ?? actor, op.note, nowIso);
+      const opActor = resolveOpActor(op.actor, actor, lockActor);
+      appendJournal(bead, opActor, op.note, nowIso);
     } else if (op.op === 'close') {
+      const opActor = resolveOpActor(op.actor, actor, lockActor);
       const reason = assertNonEmptyString(op.reason ?? op.closeReason, 'reason', LIMITS.closeReason);
       bead.status = 'closed';
       bead.lease = null;
       bead.closedAt = nowIso;
       bead.closeReason = reason;
       if (op.pr !== undefined) bead.links = mergeLinks(bead.links, { pr: op.pr });
-      appendJournal(bead, op.actor ?? actor, `Closed: ${reason}`, nowIso);
+      appendJournal(bead, opActor, `Closed: ${reason}`, nowIso);
     } else if (op.op === 'reopen') {
+      const opActor = resolveOpActor(op.actor, actor, lockActor);
       bead.status = 'open';
+      bead.lease = null;
       bead.closedAt = null;
       bead.closeReason = null;
-      appendJournal(bead, op.actor ?? actor, op.note ?? 'Reopened', nowIso);
-    } else {
-      throw new BeadsValidationError(`Unsupported operation: ${op.op}`);
+      appendJournal(bead, opActor, op.note ?? 'Reopened', nowIso);
     }
 
     bead.updatedAt = nowIso;
@@ -600,6 +792,7 @@ export function applyOperations(beadsMap, operations, options = {}) {
     updatedIds.push(bead.id);
   }
 
+  validateBeadsGraph(next);
   return {
     beads: next,
     changedIds: [...changedIds].sort(),
@@ -622,6 +815,14 @@ function mergeJournalEntries(a, b) {
   return merged.slice(-LIMITS.journal);
 }
 
+function hasReopenAfter(bead, isoTimestamp) {
+  return bead.journal.some((entry) => entry.note === 'Reopened' && entry.at > isoTimestamp);
+}
+
+function deterministicHash(value) {
+  return createHash('sha256').update(JSON.stringify(value), 'utf8').digest('hex');
+}
+
 export function mergeBeadsMaps(localMap, remoteMap) {
   const merged = new Map();
   const allIds = uniqueSorted([...localMap.keys(), ...remoteMap.keys()]);
@@ -636,15 +837,46 @@ export function mergeBeadsMaps(localMap, remoteMap) {
       merged.set(id, structuredClone(local));
       continue;
     }
-    const localWins = local.revision > remote.revision
-      || (local.revision === remote.revision && local.updatedAt >= remote.updatedAt);
-    const winner = structuredClone(localWins ? local : remote);
-    const other = localWins ? remote : local;
+    if (local.dedupeKey && remote.dedupeKey && local.dedupeKey !== remote.dedupeKey) {
+      throw new BeadsConflictError(`Merge collision on ${id}: distinct dedupeKeys "${local.dedupeKey}" vs "${remote.dedupeKey}"`);
+    }
+    if (JSON.stringify(local) === JSON.stringify(remote)) {
+      merged.set(id, structuredClone(local));
+      continue;
+    }
+
+    // Closed status wins over concurrent non-reopen mutations (e.g. notes).
+    let winner;
+    let other;
+    if (local.status === 'closed' && remote.status !== 'closed' && !hasReopenAfter(remote, local.closedAt)) {
+      winner = structuredClone(local);
+      other = remote;
+    } else if (remote.status === 'closed' && local.status !== 'closed' && !hasReopenAfter(local, remote.closedAt)) {
+      winner = structuredClone(remote);
+      other = local;
+    } else if (local.revision !== remote.revision) {
+      winner = structuredClone(local.revision > remote.revision ? local : remote);
+      other = local.revision > remote.revision ? remote : local;
+    } else if (local.updatedAt !== remote.updatedAt) {
+      winner = structuredClone(local.updatedAt > remote.updatedAt ? local : remote);
+      other = local.updatedAt > remote.updatedAt ? remote : local;
+    } else {
+      const localFirst = deterministicHash(local) >= deterministicHash(remote);
+      winner = structuredClone(localFirst ? local : remote);
+      other = localFirst ? remote : local;
+    }
+
+    const beforeMerge = JSON.stringify(winner);
     winner.journal = mergeJournalEntries(winner.journal, other.journal);
-    winner.links = mergeLinks(winner.links, { evidence: other.links.evidence ?? [] });
+    winner.links = mergeLinks(winner.links, { evidence: other.links.evidence ?? [] }, { capEvidence: true });
     if (other.lastSeenAt > winner.lastSeenAt) winner.lastSeenAt = other.lastSeenAt;
+    if (other.updatedAt > winner.updatedAt) winner.updatedAt = other.updatedAt;
+    if (JSON.stringify(winner) !== beforeMerge) {
+      winner.revision = Math.max(local.revision, remote.revision) + 1;
+    }
     merged.set(id, validateBead(winner));
   }
+  validateBeadsGraph(merged);
   return merged;
 }
 
@@ -657,65 +889,114 @@ function git(args, { cwd, input } = {}) {
   });
 }
 
-function gitRefSha(cwd, ref) {
+function resolveGitRoot(cwd) {
+  return git(['rev-parse', '--show-toplevel'], { cwd }).trim();
+}
+
+function gitRefSha(repoTop, ref) {
   try {
-    return git(['rev-parse', '--verify', '--quiet', ref], { cwd }).trim() || null;
+    return git(['rev-parse', '--verify', '--quiet', ref], { cwd: repoTop }).trim() || null;
   } catch {
     return null;
   }
 }
 
-function hashBlob(cwd, content) {
-  return git(['hash-object', '-w', '--stdin'], { cwd, input: content }).trim();
+function isAncestor(repoTop, ancestorSha, descendantSha) {
+  try {
+    git(['merge-base', '--is-ancestor', ancestorSha, descendantSha], { cwd: repoTop });
+    return true;
+  } catch (error) {
+    if (error.status === 1) return false;
+    throw error;
+  }
 }
 
-function buildTreeFromMap(cwd, beadsMap) {
+function assertConfiguredRemote(repoTop, remote) {
+  if (typeof remote !== 'string' || !REMOTE_NAME_PATTERN.test(remote)) {
+    throw new BeadsValidationError(`Invalid git remote name: ${remote}`);
+  }
+  const remotes = git(['remote'], { cwd: repoTop }).split('\n').map((r) => r.trim()).filter(Boolean);
+  if (!remotes.includes(remote)) {
+    throw new BeadsValidationError(`Unconfigured git remote: ${remote}`);
+  }
+  return remote;
+}
+
+function hashBlob(repoTop, content) {
+  return git(['hash-object', '-w', '--stdin'], { cwd: repoTop, input: content }).trim();
+}
+
+function buildTreeFromMap(repoTop, beadsMap) {
+  validateBeadsGraph(beadsMap);
   const schemaContent = `${JSON.stringify({ schemaVersion: SCHEMA_VERSION, format: 'neurodesk-beads' }, null, 2)}\n`;
-  const schemaBlob = hashBlob(cwd, schemaContent);
+  const schemaBlob = hashBlob(repoTop, schemaContent);
   const beadEntries = [];
   for (const id of [...beadsMap.keys()].sort()) {
     const json = `${JSON.stringify(beadsMap.get(id), null, 2)}\n`;
-    const blob = hashBlob(cwd, json);
+    const blob = hashBlob(repoTop, json);
     beadEntries.push(`100644 blob ${blob}\t${id}.json`);
   }
   const rootEntries = [`100644 blob ${schemaBlob}\tschema.json`];
   if (beadEntries.length > 0) {
-    const beadsTree = git(['mktree'], { cwd, input: `${beadEntries.join('\n')}\n` }).trim();
+    const beadsTree = git(['mktree'], { cwd: repoTop, input: `${beadEntries.join('\n')}\n` }).trim();
     rootEntries.push(`040000 tree ${beadsTree}\tbeads`);
   }
-  return git(['mktree'], { cwd, input: `${rootEntries.join('\n')}\n` }).trim();
+  return git(['mktree'], { cwd: repoTop, input: `${rootEntries.join('\n')}\n` }).trim();
 }
 
 export function readBeadsFromRef(cwd, ref = DEFAULT_BEADS_REF) {
-  const sha = gitRefSha(cwd, ref);
+  const repoTop = resolveGitRoot(cwd);
+  const sha = gitRefSha(repoTop, ref);
   if (!sha) return { sha: null, beads: new Map() };
-  let listing = '';
-  try {
-    listing = git(['ls-tree', '-r', '-z', sha, '--', 'beads'], { cwd });
-  } catch {
-    return { sha, beads: new Map() };
+
+  const rootEntries = git(['ls-tree', '-z', sha], { cwd: repoTop }).split('\0').filter(Boolean);
+  let schemaBlob = null;
+  let hasBeadsDir = false;
+  for (const record of rootEntries) {
+    const [meta, name] = record.split('\t');
+    const [, type, blobSha] = meta.split(' ');
+    if (name === 'schema.json' && type === 'blob') schemaBlob = blobSha;
+    if (name === 'beads' && type === 'tree') hasBeadsDir = true;
   }
+  if (!schemaBlob) {
+    throw new BeadsValidationError(`Ref ${ref} is missing schema.json`);
+  }
+  const schema = JSON.parse(git(['cat-file', '-p', schemaBlob], { cwd: repoTop }));
+  if (schema.schemaVersion !== SCHEMA_VERSION || schema.format !== 'neurodesk-beads') {
+    throw new BeadsValidationError(`Ref ${ref} has unsupported schema metadata`);
+  }
+
   const beads = new Map();
+  if (!hasBeadsDir) return { sha, beads };
+
+  const listing = git(['ls-tree', '-r', '-z', sha, '--', 'beads'], { cwd: repoTop });
   for (const record of listing.split('\0')) {
     if (!record) continue;
     const [meta, filePath] = record.split('\t');
     if (!filePath || !filePath.endsWith('.json')) continue;
     const blobSha = meta.split(' ')[2];
-    const raw = git(['cat-file', '-p', blobSha], { cwd });
+    const raw = git(['cat-file', '-p', blobSha], { cwd: repoTop });
     const bead = validateBead(JSON.parse(raw));
+    const expectedPath = `beads/${bead.id}.json`;
+    if (filePath !== expectedPath) {
+      throw new BeadsValidationError(`Bead file path mismatch: ${filePath} contains id ${bead.id}`);
+    }
+    if (beads.has(bead.id)) {
+      throw new BeadsConflictError(`Duplicate bead id in store: ${bead.id}`);
+    }
     beads.set(bead.id, bead);
   }
+  validateBeadsGraph(beads);
   return { sha, beads };
 }
 
-export function commitBeadsToRef(cwd, beadsMap, { ref = DEFAULT_BEADS_REF, expectedParentSha = null, message = 'beads: update work graph', authorName = 'neurodesk-beads', authorEmail = 'beads@neurodesk.local' } = {}) {
-  const treeSha = buildTreeFromMap(cwd, beadsMap);
+function commitTree(repoTop, treeSha, parents, message, authorName, authorEmail) {
   const args = ['commit-tree', treeSha, '-m', message];
-  if (expectedParentSha) {
-    args.push('-p', expectedParentSha);
+  for (const parent of parents) {
+    args.push('-p', parent);
   }
-  const commitSha = execFileSync('git', args, {
-    cwd,
+  return execFileSync('git', args, {
+    cwd: repoTop,
     encoding: 'utf8',
     env: {
       ...process.env,
@@ -726,10 +1007,17 @@ export function commitBeadsToRef(cwd, beadsMap, { ref = DEFAULT_BEADS_REF, expec
     },
     stdio: ['pipe', 'pipe', 'pipe'],
   }).trim();
+}
 
-  const oldArg = expectedParentSha ?? '0000000000000000000000000000000000000000';
+export function commitBeadsToRef(cwd, beadsMap, { ref = DEFAULT_BEADS_REF, expectedParentSha = null, message = 'beads: update work graph', authorName = 'neurodesk-beads', authorEmail = 'beads@neurodesk.local' } = {}) {
+  assertMemoryRef(ref);
+  const repoTop = resolveGitRoot(cwd);
+  const treeSha = buildTreeFromMap(repoTop, beadsMap);
+  const parents = expectedParentSha ? [expectedParentSha] : [];
+  const commitSha = commitTree(repoTop, treeSha, parents, message, authorName, authorEmail);
+  const oldArg = expectedParentSha ?? ZERO_OID;
   try {
-    git(['update-ref', ref, commitSha, oldArg], { cwd });
+    git(['update-ref', ref, commitSha, oldArg], { cwd: repoTop });
   } catch (error) {
     throw new BeadsConflictError(`Concurrent update detected on ${ref}: ${error.message}`);
   }
@@ -737,14 +1025,16 @@ export function commitBeadsToRef(cwd, beadsMap, { ref = DEFAULT_BEADS_REF, expec
 }
 
 export function mutateBeadsRef(cwd, operations, { ref = DEFAULT_BEADS_REF, message = 'beads: apply operations', maxRetries = 5, ...applyOptions } = {}) {
+  assertMemoryRef(ref);
+  const repoTop = resolveGitRoot(cwd);
   for (let attempt = 0; attempt < maxRetries; attempt++) {
-    const { sha, beads } = readBeadsFromRef(cwd, ref);
+    const { sha, beads } = readBeadsFromRef(repoTop, ref);
     const result = applyOperations(beads, operations, applyOptions);
     if (result.changedIds.length === 0 && sha !== null) {
       return { ...result, commitSha: sha, changed: false };
     }
     try {
-      const commitSha = commitBeadsToRef(cwd, result.beads, { ref, expectedParentSha: sha, message });
+      const commitSha = commitBeadsToRef(repoTop, result.beads, { ref, expectedParentSha: sha, message });
       return { ...result, commitSha, changed: true };
     } catch (error) {
       if (error instanceof BeadsConflictError && attempt + 1 < maxRetries) continue;
@@ -755,65 +1045,124 @@ export function mutateBeadsRef(cwd, operations, { ref = DEFAULT_BEADS_REF, messa
 }
 
 export function initBeadsRef(cwd, { ref = DEFAULT_BEADS_REF } = {}) {
-  const existing = gitRefSha(cwd, ref);
+  assertMemoryRef(ref);
+  const repoTop = resolveGitRoot(cwd);
+  const existing = gitRefSha(repoTop, ref);
   if (existing) return { sha: existing, created: false };
-  const sha = commitBeadsToRef(cwd, new Map(), {
-    ref,
-    expectedParentSha: null,
-    message: 'beads: initialize orphan memory branch',
-  });
-  return { sha, created: true };
+  try {
+    const sha = commitBeadsToRef(repoTop, new Map(), {
+      ref,
+      expectedParentSha: null,
+      message: 'beads: initialize orphan memory branch',
+    });
+    return { sha, created: true };
+  } catch (error) {
+    if (error instanceof BeadsConflictError) {
+      const raced = gitRefSha(repoTop, ref);
+      if (raced) return { sha: raced, created: false };
+    }
+    throw error;
+  }
 }
 
-export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', push = false } = {}) {
+function remoteBranchExists(repoTop, remote, ref) {
+  try {
+    const out = git(['ls-remote', '--exit-code', '--', remote, ref], { cwd: repoTop }).trim();
+    return Boolean(out);
+  } catch (error) {
+    if (error.status === 2) return false;
+    throw new Error(`Failed to query remote "${remote}" for ${ref}: ${error.stderr || error.message}`);
+  }
+}
+
+export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', push = false, maxRetries = 5 } = {}) {
+  assertMemoryRef(ref);
+  const repoTop = resolveGitRoot(cwd);
+  assertConfiguredRemote(repoTop, remote);
+
   const shortBranch = ref.replace(/^refs\/heads\//, '');
   const trackingRef = `refs/remotes/${remote}/${shortBranch}`;
-  let remoteFetched = false;
-  try {
-    git(['fetch', remote, `${ref}:${trackingRef}`], { cwd });
-    remoteFetched = true;
-  } catch {
-    remoteFetched = false;
+  const remoteExists = remoteBranchExists(repoTop, remote, ref);
+  if (remoteExists) {
+    git(['fetch', '--', remote, `${ref}:${trackingRef}`], { cwd: repoTop });
   }
+  const remoteState = remoteExists ? readBeadsFromRef(repoTop, trackingRef) : { sha: null, beads: new Map() };
 
-  const localState = readBeadsFromRef(cwd, ref);
-  const remoteState = remoteFetched ? readBeadsFromRef(cwd, trackingRef) : { sha: null, beads: new Map() };
-  let finalSha = localState.sha;
-  let mergedCount = localState.beads.size;
+  let finalSha = null;
+  let mergedCount = 0;
 
-  if (remoteState.sha && !localState.sha) {
-    git(['update-ref', ref, remoteState.sha], { cwd });
-    finalSha = remoteState.sha;
-    mergedCount = remoteState.beads.size;
-  } else if (remoteState.sha && localState.sha && remoteState.sha !== localState.sha) {
-    const merged = mergeBeadsMaps(localState.beads, remoteState.beads);
-    mergedCount = merged.size;
-    const treeSha = buildTreeFromMap(cwd, merged);
-    const commitSha = execFileSync('git', ['commit-tree', treeSha, '-p', localState.sha, '-p', remoteState.sha, '-m', `beads: sync with ${remote}/${shortBranch}`], {
-      cwd,
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME || 'neurodesk-beads',
-        GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL || 'beads@neurodesk.local',
-        GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME || 'neurodesk-beads',
-        GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL || 'beads@neurodesk.local',
-      },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-    git(['update-ref', ref, commitSha, localState.sha], { cwd });
-    finalSha = commitSha;
-  } else if (!localState.sha && !remoteState.sha) {
-    finalSha = initBeadsRef(cwd, { ref }).sha;
-    mergedCount = 0;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const localState = readBeadsFromRef(repoTop, ref);
+
+    if (remoteState.sha && !localState.sha) {
+      try {
+        git(['update-ref', ref, remoteState.sha, ZERO_OID], { cwd: repoTop });
+        finalSha = remoteState.sha;
+        mergedCount = remoteState.beads.size;
+        break;
+      } catch {
+        if (attempt + 1 < maxRetries) continue;
+        throw new BeadsConflictError(`Concurrent initialization conflict on ${ref}`);
+      }
+    } else if (remoteState.sha && localState.sha) {
+      if (localState.sha === remoteState.sha) {
+        finalSha = localState.sha;
+        mergedCount = localState.beads.size;
+        break;
+      }
+      if (isAncestor(repoTop, localState.sha, remoteState.sha)) {
+        try {
+          git(['update-ref', ref, remoteState.sha, localState.sha], { cwd: repoTop });
+          finalSha = remoteState.sha;
+          mergedCount = remoteState.beads.size;
+          break;
+        } catch {
+          if (attempt + 1 < maxRetries) continue;
+          throw new BeadsConflictError(`Concurrent fast-forward conflict on ${ref}`);
+        }
+      }
+      if (isAncestor(repoTop, remoteState.sha, localState.sha)) {
+        finalSha = localState.sha;
+        mergedCount = localState.beads.size;
+        break;
+      }
+      const merged = mergeBeadsMaps(localState.beads, remoteState.beads);
+      const treeSha = buildTreeFromMap(repoTop, merged);
+      const commitSha = commitTree(
+        repoTop,
+        treeSha,
+        [localState.sha, remoteState.sha],
+        `beads: sync with ${remote}/${shortBranch}`,
+        'neurodesk-beads',
+        'beads@neurodesk.local',
+      );
+      try {
+        git(['update-ref', ref, commitSha, localState.sha], { cwd: repoTop });
+        finalSha = commitSha;
+        mergedCount = merged.size;
+        break;
+      } catch {
+        if (attempt + 1 < maxRetries) continue;
+        throw new BeadsConflictError(`Concurrent merge conflict on ${ref}`);
+      }
+    } else if (!localState.sha && !remoteState.sha) {
+      const initialized = initBeadsRef(repoTop, { ref });
+      finalSha = initialized.sha;
+      mergedCount = readBeadsFromRef(repoTop, ref).beads.size;
+      break;
+    } else {
+      finalSha = localState.sha;
+      mergedCount = localState.beads.size;
+      break;
+    }
   }
 
   let pushed = false;
   if (push && finalSha) {
     const leaseArg = remoteState.sha ? `--force-with-lease=${ref}:${remoteState.sha}` : `--force-with-lease=${ref}:`;
-    git(['push', leaseArg, remote, `${ref}:${ref}`], { cwd });
+    git(['push', leaseArg, '--', remote, `${finalSha}:${ref}`], { cwd: repoTop });
     pushed = true;
   }
 
-  return { ref, remote, remoteFetched, sha: finalSha, count: mergedCount, pushed };
+  return { ref, remote, remoteFetched: remoteExists, sha: finalSha, count: mergedCount, pushed };
 }
