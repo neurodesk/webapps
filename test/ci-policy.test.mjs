@@ -544,6 +544,7 @@ function parseVerifiedGhAwLock(file, text, sourceMarkdown) {
   return { meta, manifest, frontmatter: parsedMd.frontmatter };
 }
 
+const GH_AW_ALLOWED_WORKFLOW_KEYS = new Set(['name', 'on', 'permissions', 'concurrency', 'run-name', 'env', 'jobs']);
 const GH_AW_BOILERPLATE_ALLOWED_JOB_KEYS = new Set(['name', 'needs', 'if', 'runs-on', 'permissions', 'concurrency', 'env', 'outputs', 'steps']);
 const GH_AW_SAFE_OUTPUT_ALLOWED_JOB_KEYS = new Set(['name', 'needs', 'if', 'runs-on', 'permissions', 'env', 'outputs', 'steps']);
 const GH_AW_ALLOWED_BOILERPLATE_RUNNERS = new Set(['ubuntu-slim', 'ubuntu-latest']);
@@ -626,6 +627,7 @@ function isStepBoundedSafeOutputJob(id, job, frontmatter) {
   );
   if (!safeOutputsTimeoutOk || !safeOutputJobsById.has(id)) return false;
   if (!hasOnlyAllowedKeys(job, GH_AW_SAFE_OUTPUT_ALLOWED_JOB_KEYS)) return false;
+  if (!hasSafeBoilerplateEnv(job.env)) return false;
   const expectedRunner = safeOutputJobsById.get(id)?.['runs-on'] ?? 'ubuntu-latest';
   if (job['runs-on'] !== expectedRunner) return false;
   const steps = Array.isArray(job?.steps) ? job.steps : [];
@@ -642,12 +644,15 @@ function findJobsMissingTimeout(entries) {
   for (const { file, text, sourceMarkdown } of entries) {
     const flow = YAML.parse(text);
     const ghAw = parseVerifiedGhAwLock(file, text, sourceMarkdown);
+    const workflowInheritsSafe = Boolean(ghAw)
+      && hasOnlyAllowedKeys(flow, GH_AW_ALLOWED_WORKFLOW_KEYS)
+      && hasSafeBoilerplateEnv(flow?.env);
 
     for (const [id, job] of Object.entries(flow?.jobs ?? {})) {
       if (job?.uses) continue;
       if (hasValidTimeout(job?.['timeout-minutes'])) continue;
 
-      if (ghAw) {
+      if (workflowInheritsSafe) {
         if (isVerifiedBoilerplateJob(id, job, ghAw.frontmatter)) continue;
         if (isStepBoundedSafeOutputJob(id, job, ghAw.frontmatter)) continue;
       }
@@ -903,6 +908,32 @@ test('gh-aw timeout exemption requires verified frontmatter/body hashes, exact c
   );
   assert.deepEqual(
     findJobsMissingTimeout([{ file: 'demo.lock.yml', text: safeDownloadWithEnv, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: record_finding'],
+  );
+
+  // Inherited workflow-level defaults.run / env or safe-output job-level env also rejects the exemption.
+  const workflowWithDefaults = validLock.replace(
+    'jobs:\n',
+    'defaults:\n  run:\n    shell: python3 {0}\njobs:\n',
+  );
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: workflowWithDefaults, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: activation', 'demo.lock.yml: record_finding', 'demo.lock.yml: conclusion'],
+  );
+  const workflowWithEnv = validLock.replace(
+    'jobs:\n',
+    'env:\n  BASH_ENV: /tmp/evil.sh\njobs:\n',
+  );
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: workflowWithEnv, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: activation', 'demo.lock.yml: record_finding', 'demo.lock.yml: conclusion'],
+  );
+  const safeJobWithEnv = validLock.replace(
+    '  record_finding:\n    runs-on: ubuntu-latest\n',
+    '  record_finding:\n    runs-on: ubuntu-latest\n    env:\n      NODE_OPTIONS: --require=/tmp/evil.js\n',
+  );
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: safeJobWithEnv, sourceMarkdown: validMd }]),
     ['demo.lock.yml: record_finding'],
   );
 
