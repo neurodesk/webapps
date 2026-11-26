@@ -46,10 +46,14 @@ function makeTempDir(prefix) {
   return mkdtempSync(join(base, prefix));
 }
 
-function initGitRepo(dir) {
-  execFileSync('git', ['init', '-b', 'main'], { cwd: dir, stdio: 'ignore' });
+function configureGitIdentity(dir) {
   execFileSync('git', ['config', 'user.name', 'Test User'], { cwd: dir, stdio: 'ignore' });
   execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir, stdio: 'ignore' });
+}
+
+function initGitRepo(dir) {
+  execFileSync('git', ['init', '-b', 'main'], { cwd: dir, stdio: 'ignore' });
+  configureGitIdentity(dir);
   writeFileSync(join(dir, 'README.md'), '# test\n', 'utf8');
   execFileSync('git', ['add', 'README.md'], { cwd: dir, stdio: 'ignore' });
   execFileSync('git', ['commit', '-m', 'init'], { cwd: dir, stdio: 'ignore' });
@@ -805,6 +809,7 @@ test('git orphan-branch store handles subdirectories, CAS bootstrap, fast-forwar
     // Clone C syncs (bootstrap), then fast-forwards when mainRepo advances (NO merge commit!)
     const cloneC = join(root, 'clone-c');
     execFileSync('git', ['clone', bareRemote, cloneC], { stdio: 'ignore' });
+    configureGitIdentity(cloneC);
     const boot = syncBeadsRef(cloneC, { remote: 'origin', push: false });
     assert.equal(boot.count, 2);
 
@@ -1006,6 +1011,7 @@ test('git orphan-branch store handles subdirectories, CAS bootstrap, fast-forwar
 
     const detachedClone = join(root, 'detached-clone');
     execFileSync('git', ['clone', bareRemote, detachedClone], { stdio: 'ignore' });
+    configureGitIdentity(detachedClone);
     execFileSync('git', ['-c', 'protocol.file.allow=always', 'submodule', 'add', subUpstream, 'ext-sub'], { cwd: detachedClone, stdio: 'ignore' });
     const subOriginBefore = execFileSync('git', ['rev-parse', 'refs/remotes/origin/main'], { cwd: join(detachedClone, 'ext-sub'), encoding: 'utf8' }).trim();
     // Advance submodule upstream after adding it
