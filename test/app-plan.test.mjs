@@ -2717,15 +2717,40 @@ test('an app runs its @heavy browser tests only when the change edits it, a fail
   assert.ok(createAppPlan(registry, ['apps/sdc/src/main.js'], workspace).gpuApps.include.every((entry) => !('heavy_tests' in entry)));
 });
 
-test('no app build, package source or ci.yml job reads .github/aw/ or app-scoped AGENTS.md files', async () => {
-  const ciText = await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8');
-  assert.doesNotMatch(ciText, /\.github\/aw\//);
-  const workspace = await graph;
-  for (const [node, targets] of workspace.edges) {
-    if (!node.startsWith('apps/') && !node.startsWith('packages/')) continue;
-    for (const target of targets) {
-      assert.ok(!target.startsWith('.github/aw/'), `${node} reaches ${target}`);
-      assert.ok(!/^apps\/[^/]+\/(?:AGENTS|AGENT|CLAUDE)\.md$/.test(target), `${node} reaches ${target}`);
+function unexpectedExemptPathReads(entries) {
+  const exemptRef = /\.github\/aw\/|\b(?:AGENTS|AGENT|CLAUDE)\.md\b/;
+  const allowedMetadata = (file) => /^apps\/[^/]+\/upstream\.json$/.test(file)
+    || file === 'apps/spinalcordtoolbox/.specify/init-options.json'
+    || file === 'scripts/lib/app-plan.mjs'
+    || file === 'scripts/lib/app-plan-shadow.mjs'
+    || file.startsWith('test/');
+  const findings = [];
+  for (const [file, text] of entries) {
+    if (allowedMetadata(file)) continue;
+    for (const line of text.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('//') || trimmed.startsWith('#')) continue;
+      if (exemptRef.test(trimmed)) {
+        findings.push(file);
+        break;
+      }
     }
   }
+  return findings;
+}
+
+test('no app build, package source, root script or workflow reads .github/aw/ or scoped agent guides', async () => {
+  // Verify the guard itself rejects injected app-local, cross-app and .github/aw/ reads.
+  assert.deepEqual(
+    unexpectedExemptPathReads([
+      ['apps/bison/scripts/build.mjs', "readFileSync(new URL('../AGENTS.md', import.meta.url));"],
+      ['apps/elastix/scripts/build.mjs', "readFileSync('../../apps/bison/AGENTS.md', 'utf8');"],
+      ['apps/bison/scripts/build.mjs', "readFileSync('../../.github/aw/actions-lock.json', 'utf8');"],
+      ['apps/bison/scripts/comment-only.mjs', '// See AGENTS.md for build notes\nexport const ok = true;'],
+    ]),
+    ['apps/bison/scripts/build.mjs', 'apps/elastix/scripts/build.mjs', 'apps/bison/scripts/build.mjs'],
+  );
+  const candidates = filesNaming('\\.github/aw/|\\b(AGENTS|AGENT|CLAUDE)\\.md\\b');
+  const entries = await Promise.all(candidates.map(async (file) => [file, await readFile(join(repoRoot, file), 'utf8')]));
+  assert.deepEqual(unexpectedExemptPathReads(entries), []);
 });
