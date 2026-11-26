@@ -4,22 +4,61 @@ import { sanitize } from './nightly-failures.mjs';
 export const NOTARIZATION_OWNER = 'stebo85';
 export const ALERT_MARKER = '<!-- apple-notarization-alert -->';
 
-// What notarytool and @electron/notarize print when Apple refuses: an expired agreement or bad credentials
-// (HTTP 401/403 from the notary service) or a rejected submission. A Developer ID certificate or keychain
-// failure before notarization is not one of these.
+// What notarytool and @electron/notarize print when Apple refuses: an expired agreement, bad credentials
+// (HTTP 401/403 from the notary service), or an Invalid/Rejected submission. Other macOS failures (a
+// Developer ID certificate or keychain error before notarization, or a transient network or 5xx outage
+// while polling) are not Apple refusals and stay with the scheduled workflow failure reporter.
 const SIGNATURES = [
   /required agreement is missing or has expired/i,
-  /Failed to notarize via notarytool/,
   /\bError: HTTP status code: 40[13]\b/,
+  /\bHTTPError\(statusCode: Optional\(40[13]\)/,
   /^(?:\S+\s+)?\s*status: (?:Invalid|Rejected)\s*$/,
 ];
+const ELECTRON_REJECTION = /\bFailed to notarize via notarytool(?:\s*(\{.*))?$/;
+const REJECTED_STATUS = new Set(['Invalid', 'Rejected']);
+const stripTimestamp = line => line.replace(/^\d{4}-\d\d-\d\dT[\d:.]+Z\s*/, '').trim();
+
+function parseAttachedRejection(lines, index, inlineJson) {
+  let cursor = index + 1;
+  let first = inlineJson?.trim() ?? '';
+  if (!first) {
+    while (cursor < lines.length && stripTimestamp(lines[cursor]) === '') cursor += 1;
+    if (cursor >= lines.length) return undefined;
+    first = stripTimestamp(lines[cursor]);
+    cursor += 1;
+  }
+  if (!first.startsWith('{')) return undefined;
+  const chunks = [first];
+  const limit = Math.min(lines.length, cursor + 30);
+  for (let i = cursor; ; i += 1) {
+    try {
+      const parsed = JSON.parse(chunks.join('\n'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        && REJECTED_STATUS.has(parsed.status) && typeof parsed.id === 'string' && parsed.id.length > 0) {
+        return JSON.stringify(parsed);
+      }
+      return undefined;
+    } catch {
+      if (i >= limit) return undefined;
+      const next = stripTimestamp(lines[i]);
+      // A blank line or non-JSON log record terminates the attached JSON payload.
+      if (!next || /^##\[|^(?:Error|at\s|Diagnostics from notarytool log:)/.test(next)) return undefined;
+      chunks.push(next);
+    }
+  }
+}
 
 export function notaryFailure(text) {
   const lines = text.split('\n');
-  const index = lines.findIndex(line => SIGNATURES.some(signature => signature.test(line)));
-  if (index < 0) return undefined;
-  const detail = lines.slice(index).find(line => /HTTP status code|agreement|status: (?:Invalid|Rejected)/i.test(line)) ?? lines[index];
-  return detail.replace(/^\d{4}-\d\d-\d\dT[\d:.]+Z\s*/, '').trim();
+  const direct = lines.find(line => SIGNATURES.some(signature => signature.test(line)));
+  if (direct) return stripTimestamp(direct);
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = stripTimestamp(lines[index]).match(ELECTRON_REJECTION);
+    if (!match) continue;
+    const rejection = parseAttachedRejection(lines, index, match[1]);
+    if (rejection) return rejection;
+  }
+  return undefined;
 }
 
 function numeric(value) {
