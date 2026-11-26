@@ -172,7 +172,7 @@ const attemptKey = attempt => `${attempt.id}:${attempt.run_attempt ?? 1}`;
 // `cutover` that is newer (by both completion and creation time) than every
 // failed or incomplete attempt in the lookback and is not superseded by a
 // newer attempt (including in-progress/queued reruns), return that attempt.
-function recoveryCandidates(ordered, { repository, defaultBranch, cutover, failedAttempts, erroredWorkflows }) {
+function recoveryCandidates(ordered, { repository, defaultBranch, cutover, until = Infinity, failedAttempts, erroredWorkflows }) {
   const maxAttemptByRun = new Map();
   const byWorkflow = new Map();
   for (const attempt of ordered) {
@@ -192,6 +192,7 @@ function recoveryCandidates(ordered, { repository, defaultBranch, cutover, faile
     const unhealthy = list.filter(isUnhealthy);
     const qualifying = list.filter(attempt => (
       completedAt(attempt) >= cutoverAt
+      && completedAt(attempt) < until
       && !isUnhealthy(attempt)
       && (maxAttemptByRun.get(attempt.id) ?? 1) <= Number(attempt.run_attempt ?? 1)
       && !unhealthy.some(other => completedAt(other) >= completedAt(attempt) || time(other.created_at) > time(attempt.created_at))
@@ -207,12 +208,13 @@ function recoveryCandidates(ordered, { repository, defaultBranch, cutover, faile
 // open scheduled workflow issue whose latest completed scheduled attempt passed cleanly is closed.
 // A report that throws is recorded and the others still run; the caller fails the tick, and
 // the next tick checks the attempt again because it still has no marker.
-export async function reportWorkflowRuns({ attempts, repository, defaultBranch, notarizingRuns = new Set(), continuesOnError = [], cutover = CUTOVER, reported = new Set(), client, dryRun = false }) {
+export async function reportWorkflowRuns({ attempts, allAttempts = attempts, repository, defaultBranch, notarizingRuns = new Set(), continuesOnError = [], cutover = CUTOVER, until = Infinity, reported = new Set(), client, dryRun = false }) {
   const results = [];
   const marked = [];
   const failedAttempts = new Set();
   const erroredWorkflows = new Set();
-  const ordered = [...attempts].sort((a, b) => completedAt(a) - completedAt(b) || a.id - b.id || a.run_attempt - b.run_attempt);
+  const byCompleted = (a, b) => completedAt(a) - completedAt(b) || a.id - b.id || a.run_attempt - b.run_attempt;
+  const ordered = [...attempts].sort(byCompleted);
   for (const run of ordered) {
     if (reported.has(markerOf('scheduled', run))) failedAttempts.add(attemptKey(run));
     for (const kind of reportsFor(run, { repository, defaultBranch, notarizingRuns, continuesOnError, cutover })) {
@@ -233,7 +235,8 @@ export async function reportWorkflowRuns({ attempts, repository, defaultBranch, 
       }
     }
   }
-  const recoveries = recoveryCandidates(ordered, { repository, defaultBranch, cutover, failedAttempts, erroredWorkflows });
+  const allOrdered = allAttempts === attempts ? ordered : [...allAttempts].sort(byCompleted);
+  const recoveries = recoveryCandidates(allOrdered, { repository, defaultBranch, cutover, until, failedAttempts, erroredWorkflows });
   if (recoveries.length) {
     let openIssues = [];
     let listError = null;
@@ -285,9 +288,10 @@ export async function runTick({ client, repository, defaultBranch, workflows, un
       notarizingRuns.add(run.id);
     }
   }
-  const attempts = (await attemptsOf(candidates.values(), client)).filter(attempt => attempt.status !== 'completed' || completedAt(attempt) < until.getTime());
+  const allAttempts = await attemptsOf(candidates.values(), client);
+  const attempts = allAttempts.filter(attempt => completedAt(attempt) < until.getTime());
   const reported = await reportedMarkers(client, new Date(Math.max(earliest, time(cutover))));
-  const { results, marked } = await reportWorkflowRuns({ attempts, repository, defaultBranch, notarizingRuns, continuesOnError: facts.continuesOnError, cutover, reported, client, dryRun });
+  const { results, marked } = await reportWorkflowRuns({ attempts, allAttempts, repository, defaultBranch, notarizingRuns, continuesOnError: facts.continuesOnError, cutover, until: until.getTime(), reported, client, dryRun });
   const completed = attempts.filter(attempt => attempt.status === 'completed' && completedAt(attempt) >= time(cutover));
   return {
     listed: listed.size, candidates: candidates.size, attempts: attempts.length, earliest: new Date(earliest), results, marked,

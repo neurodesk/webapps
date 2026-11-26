@@ -660,4 +660,23 @@ test('auto-close retries an interrupted close, waits when a newer attempt is in 
   assert.equal(unmasked.issues[0].state, 'closed');
   assert.equal(unmaskedResult.results.length, 1);
   assert.equal(unmaskedResult.results[0].run, 902);
+
+  // 5. A failed rerun completing just after the tick's `until` cutoff vetoes recovery without being reported early.
+  const priorFail = attempt({ id: 950, workflow_id: 25, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', created_at: at(1), run_started_at: at(1), updated_at: at(2) });
+  const passBeforeUntil = attempt({ id: 951, workflow_id: 25, name: 'ci-usage', path: '.github/workflows/ci-usage.yml', conclusion: 'success', created_at: at(25), run_started_at: at(25), updated_at: at(26) });
+  const failAfterUntil = { ...passBeforeUntil, run_attempt: 2, conclusion: 'failure', run_started_at: at(27), updated_at: at(28.5) };
+  const afterCutoff = github({
+    runs: [priorFail, passBeforeUntil, failAfterUntil],
+    jobs: {
+      '950:1': [{ id: 9501, name: 'report', conclusion: 'failure', steps: [] }],
+      '951:1': [{ id: 9511, name: 'report', conclusion: 'success', steps: [] }],
+      '951:2': [{ id: 9512, name: 'report', conclusion: 'failure', steps: [] }],
+    },
+  });
+  await tick(afterCutoff, at(4));
+  assert.equal(afterCutoff.issues[0].state, 'open');
+  const vetoed = await tick(afterCutoff, at(28));
+  assert.equal(afterCutoff.issues[0].state, 'open');
+  assert.deepEqual(vetoed.results, []);
+  assert.deepEqual(reported(afterCutoff), ['nightly 950:1']);
 });
