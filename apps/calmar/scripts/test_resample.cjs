@@ -18,7 +18,7 @@ const { pathToFileURL } = require('node:url');
   const moduleUrl = pathToFileURL(
     path.resolve(__dirname, '..', 'web/js/modules/resample.js')
   );
-  const { affineFromHeader, invertAffine, resampleAffine } = await import(moduleUrl);
+  const { affineFromHeader, computeAtlasFovCoverage, invertAffine, resampleAffine } = await import(moduleUrl);
 
   // ---- affineFromHeader: sform takes precedence ----
   // nifti-reader-js exposes sform via affine[3][.]; the header object also
@@ -236,7 +236,28 @@ const { pathToFileURL } = require('node:url');
     );
   }
 
-  console.log('resample OK: affineFromHeader + invertAffine + resampleAffine (5 cases) + validation.');
+  // ---- computeAtlasFovCoverage: counts labeled atlas voxels outside source FOV ----
+  {
+    const atlasData = new Uint8Array([1, 1, 1, 2, 2, 0]); // 3x2x1 along X=[0,1,2], Y=[0,1]
+    const atlasDims = [3, 2, 1];
+    const atlasAff = [
+      [1, 0, 0, 0],
+      [0, 1, 0, 0],
+      [0, 0, 1, 0],
+      [0, 0, 0, 1]
+    ];
+    // Source FOV covers X=[0,1], Y=[0,1] -> X=2 is outside (1 of 3 voxels of label 1; 0 of 2 for label 2).
+    const srcDims = [2, 2, 1];
+    const cov = computeAtlasFovCoverage(atlasData, atlasDims, atlasAff, srcDims, atlasAff, { 1: 'Left ACA', 2: 'Right ACA' });
+    assert.equal(cov.totalLabeledVoxels, 5);
+    assert.equal(cov.unobservedVoxels, 1);
+    assert.equal(cov.clippedRegions.length, 1);
+    assert.equal(cov.clippedRegions[0].name, 'Left ACA');
+    assert.equal(cov.clippedRegions[0].unobservedVoxels, 1);
+    assert.equal(cov.clippedRegions[0].totalVoxels, 3);
+  }
+
+  console.log('resample OK: affineFromHeader + invertAffine + resampleAffine (5 cases) + computeAtlasFovCoverage + validation.');
 })().catch(err => {
   console.error(err.stack || err.message);
   process.exit(1);

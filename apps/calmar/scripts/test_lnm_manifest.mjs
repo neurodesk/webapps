@@ -33,10 +33,17 @@ for (const key of ['modelAssets', 'atlasAssets', 'connectomeAssets', 'annotation
 
 const atlasOptionsById = new Map(manifest.atlasOptions.map(option => [option.id, option]));
 const schaeferOption = atlasOptionsById.get('schaefer400');
+const arterialOption = atlasOptionsById.get('arterial');
 const yeoOption = atlasOptionsById.get('yeo7');
 assert.ok(schaeferOption, "atlasOptions must include 'schaefer400'");
+assert.ok(arterialOption, "atlasOptions must include 'arterial'");
 assert.ok(yeoOption, "atlasOptions must include 'yeo7'");
 assert.equal(schaeferOption.displayName, 'Schaefer 400 parcels');
+assert.equal(arterialOption.displayName, 'Arterial territories (Liu et al., 2023; 1 mm)');
+assert.equal(arterialOption.overlapAtlasAssetId, 'arterial-territories-mni152-1mm');
+assert.equal(arterialOption.weightSource, 'parcel');
+assert.equal(arterialOption.connectomeAssetId, undefined, 'do not invent arterial connectivity maps');
+assert.equal(arterialOption.functionProfileAssetId, undefined);
 assert.equal(yeoOption.displayName, 'Yeo 7 networks');
 assert.equal(schaeferOption.weightSource, 'parcel',
   'Schaefer option must weight FC maps by parcel');
@@ -334,6 +341,34 @@ assert.equal(schaeferFc.shardCount, 10);
 assert.equal(schaeferFc.totalShardBytes, 118000000);
 assert.match(schaeferFc.indexSourceUrl, /connectomes\/schaefer400\/schaefer400_fc_pack_dev155_4mm\.index\.json$/,
   'Schaefer400 FC pack indexSourceUrl must point at the uploaded sharded index');
+
+// Liu et al. (2023) arterial territories atlas (30 sided territories at FSL MNI152 1 mm).
+const arterialAtlas = manifest.atlasAssets.find(a => a.id === 'arterial-territories-mni152-1mm');
+assert.ok(arterialAtlas, "manifest must register 'arterial-territories-mni152-1mm'");
+assert.equal(arterialAtlas.supportStatus, 'supported');
+assert.equal(arterialAtlas.resolutionMm, 1);
+assert.deepEqual(arterialAtlas.dims, [182, 218, 182]);
+assert.deepEqual(arterialAtlas.originMm, [90, -126, -72]);
+assert.equal(arterialAtlas.parcelCount, 30);
+assert.equal(arterialAtlas.licence, 'CC-BY-SA-4.0');
+assert.match(arterialAtlas.checksum, /^sha256:[0-9a-f]{64}$/i);
+assert.match(arterialAtlas.sourceUrl, /^https:\/\/huggingface\.co\/datasets\/neurodeskorg\/webapps\/resolve\/[0-9a-f]{40}\/calmar\/atlases\/arterial-territories\/ArterialAtlas_MNI152_1mm_30territories\.nii\.gz$/);
+const arterialLabelKeys = Object.keys(arterialAtlas.parcelLabels || {});
+assert.deepEqual(
+  arterialLabelKeys,
+  Array.from({ length: 30 }, (_, index) => String(index + 1)),
+  'Arterial territories atlas must define labels 1..30 only (lateral ventricles 31-32 excluded)'
+);
+for (let id = 1; id <= 30; id++) {
+  const label = arterialAtlas.parcelLabels[String(id)];
+  assert.match(label, id % 2 === 1 ? /^Left / : /^Right /, `Arterial label ${id} hemisphere prefix must match parity`);
+}
+const packageManifest = JSON.parse(fs.readFileSync(path.join(ROOT, '../../packages/calmar/model.manifest.json'), 'utf8'));
+assert.deepEqual(
+  packageManifest.atlasAssets.find(a => a.id === 'arterial-territories-mni152-1mm'),
+  arterialAtlas,
+  'packages/calmar/model.manifest.json must match apps/calmar/web/models/manifest.json for the arterial atlas'
+);
 
 // Cross-check with lnm-tasks.js: every pipeline declared in code must exist
 // in the manifest so internal pipeline dispatch cannot select a pipeline whose
