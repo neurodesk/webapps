@@ -5,7 +5,6 @@ import NiiVue, { MULTIPLANAR_TYPE, SLICE_TYPE, SHOW_RENDER } from '@niivue/niivu
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
 import {
   createResultList,
-  bindFileDrop,
   createInfoDialog,
   createConsole,
   createViewerToolbar,
@@ -36,7 +35,6 @@ mountImagingWorkspace({
 let viewer = null;
 let viewerReady = null;
 let maskEditor = null;
-let editingKey = null;
 let viewQueue = Promise.resolve();
 let viewRevision = 0;
 let activeViewTab = 'multiplanar';
@@ -158,8 +156,7 @@ const results = createResultList({
     void show();
   },
   onEdit: (key, entry) => {
-    if (!viewer || !entry?.file || job?.kind === 'running') return;
-    editingKey = key;
+    if (!entry?.file || job?.kind === 'running') return;
     if (key === 'stroke_native' && outputs.input_dwi) view.baseKey = 'input_dwi';
     else if (key === 'hp_native' && outputs.input_pwi) view.baseKey = 'input_pwi';
     else if ((key === 'stroke_mni' || key === 'hp_mni') && (outputs.dwi_mni || outputs.adc_mni)) {
@@ -171,17 +168,18 @@ const results = createResultList({
       toolbar.setActive('multiplanar');
       setReportVisible(false);
     }
-    void show().then(() => {
+    results.setEditingEnabled(false);
+    void show().then(async () => {
+      if (!viewer) throw new Error('Viewer is not ready for mask editing.');
       if (!maskEditor) {
         maskEditor = createMaskEditor({
           nv: viewer,
           labelNames: { 1: 'Lesion' },
-          onApply: (editedFile) => {
-            const targetKey = editingKey;
-            editingKey = null;
-            if (!targetKey || !outputs[targetKey]) return;
-            outputs[targetKey].file = editedFile;
-            outputs[targetKey].edited = true;
+          onApply: (stage, editedFile) => {
+            results.setEditingEnabled(true);
+            if (!stage || !outputs[stage]) return;
+            outputs[stage].file = editedFile;
+            outputs[stage].edited = true;
             const note = $('reportView').querySelector('.openads-edit-note');
             if (!note && lastResult) {
               $('reportView').prepend(
@@ -191,19 +189,28 @@ const results = createResultList({
                 }),
               );
             }
-            status(`Updated ${outputs[targetKey].label} mask.`);
+            status(`Updated ${outputs[stage].label} mask.`);
             void show();
           },
           onCancel: () => {
-            editingKey = null;
+            results.setEditingEnabled(true);
             status('Mask editing cancelled.');
+          },
+          onError: (_stage, err) => {
+            results.setEditingEnabled(true);
+            status(err?.message || 'Mask editing failed.', true);
           },
         });
         toolbar.after(maskEditor);
       }
-      maskEditor.open(outputs[key].file);
+      await maskEditor.start({
+        stage: key,
+        file: outputs[key].file,
+        label: outputs[key].label,
+        overlayIndex: viewer.volumes.length > 1 ? 1 : null,
+      });
     }).catch((err) => {
-      editingKey = null;
+      results.setEditingEnabled(true);
       status(err?.message || 'Could not open mask editor.', true);
     });
   },
@@ -232,6 +239,12 @@ function refreshControls() {
 }
 
 function begin(kind, message) {
+  if (job) {
+    const previous = job;
+    previous.controller.abort(new DOMException('Superseded by a new operation.', 'AbortError'));
+    end(previous, 'Superseded by a new operation.', { success: false });
+  }
+  void maskEditor?.cancel();
   const controller = new AbortController();
   job = { kind, controller, worker: null };
   progress.begin(message);
@@ -388,7 +401,7 @@ toolbar.control('overlayOpacity').addEventListener('input', (event) => {
   }
 });
 
-async function loadInputFiles(incoming, explicitRoles = {}) {
+async function loadInputFiles(incoming, explicitRoleByFile = null) {
   const list = Array.from((await incoming) || []);
   if (!list.length) return;
   const current = begin('loading', 'Reading input files…');
@@ -409,6 +422,13 @@ async function loadInputFiles(incoming, explicitRoles = {}) {
     if (job !== current || current.controller.signal.aborted) return;
     const all = [...converted, ...jsonFiles];
     if (!all.length) throw new Error('No supported NIfTI, DICOM or JSON files found.');
+    const explicitRoles = {};
+    if (explicitRoleByFile instanceof Map) {
+      all.forEach((file, idx) => {
+        const role = explicitRoleByFile.get(file);
+        if (role) explicitRoles[role] = idx;
+      });
+    }
     files = all;
     assigned = assignRoles(files, explicitRoles);
     renderInputs();
@@ -433,24 +453,17 @@ const exampleControl = createExampleSelector({
     const fetched = await fetchFiles();
     assertCurrent();
     const roleByName = new Map(example.files.map(({ name, role }) => [name, role]));
-    const explicitRoles = {};
-    fetched.forEach((file, idx) => {
+    const explicitRoleByFile = new Map();
+    for (const file of fetched) {
       const role = roleByName.get(file.name);
-      if (role) explicitRoles[role] = idx;
-    });
-    await loadInputFiles(fetched, explicitRoles);
+      if (role) explicitRoleByFile.set(file, role);
+    }
+    await loadInputFiles(fetched, explicitRoleByFile);
     assertCurrent();
   },
 });
 $('exampleControl').append(exampleControl);
 
-bindFileDrop($('dropZone'), (droppedPromise) => {
-  void Promise.resolve(droppedPromise)
-    .then((dropped) => {
-      if (dropped?.length) return loadInputFiles(dropped);
-    })
-    .catch((err) => status(err?.message || 'Could not read dropped files.', true));
-});
 $('imageInput').addEventListener('change', (event) => {
   const picked = event.target.files;
   if (picked?.length) void loadInputFiles(picked);
@@ -644,16 +657,16 @@ registerAppAutomation({
   operations: {
     analyze: async ({ inputs, parameters, signal }) => {
       const incoming = [];
-      const explicitRoles = {};
+      const explicitRoleByFile = new Map();
       for (const { role } of ROLES) {
         const list = inputs?.[role];
         if (list?.length) {
-          explicitRoles[role] = incoming.length;
+          explicitRoleByFile.set(list[0], role);
           incoming.push(list[0]);
         }
       }
       if (!incoming.length) throw new Error('Supply DWI+b0/ADC or an MNI152 stroke mask.');
-      await loadInputFiles(incoming, explicitRoles);
+      await loadInputFiles(incoming, explicitRoleByFile);
       if (parameters?.runSyn !== undefined) $('runSyn').checked = Boolean(parameters.runSyn);
       if (parameters?.runShap !== undefined) $('runShap').checked = Boolean(parameters.runShap);
       if (parameters?.threshold !== undefined) $('threshold').value = String(parameters.threshold);
@@ -667,6 +680,7 @@ registerAppAutomation({
     },
   },
   reset: () => {
+    void maskEditor?.cancel();
     if (job) {
       job.controller.abort(new DOMException('Reset.', 'AbortError'));
       end(job, 'Ready', { success: false });

@@ -57,8 +57,20 @@ export function defaultSliceTiming(nz, tr, code = 3) {
   return timing;
 }
 
-export function sliceTimeCorrection(pwi, dims, tr, sliceTiming, epsilon = 1e-6) {
+const SLICE_DIRECTION_AXIS = { i: 0, 'i-': 0, j: 1, 'j-': 1, k: 2, 'k-': 2 };
+
+export function sliceTimeCorrection(pwi, dims, tr, sliceTiming, options = {}) {
+  const epsilon = typeof options === 'number' ? options : (options.epsilon ?? 1e-6);
+  const sliceEncodingDirection = typeof options === 'object' && options?.sliceEncodingDirection
+    ? String(options.sliceEncodingDirection).trim()
+    : 'k';
+  if (!(sliceEncodingDirection in SLICE_DIRECTION_AXIS)) {
+    throw new Error(`Unsupported BIDS SliceEncodingDirection "${sliceEncodingDirection}".`);
+  }
+  const sliceAxis = SLICE_DIRECTION_AXIS[sliceEncodingDirection];
+  const reverseOrder = sliceEncodingDirection.endsWith('-');
   const [nx, ny, nz, nt] = dims;
+  const nSlices = dims[sliceAxis];
   if (!Number.isFinite(tr) || tr <= 0) {
     throw new Error(`Invalid PWI repetition time (${tr}).`);
   }
@@ -67,15 +79,17 @@ export function sliceTimeCorrection(pwi, dims, tr, sliceTiming, epsilon = 1e-6) 
   }
   let timing;
   if (sliceTiming != null) {
-    if (!Array.isArray(sliceTiming) || sliceTiming.length !== nz) {
-      throw new Error(`SliceTiming length (${sliceTiming?.length}) does not match PWI slice count (${nz}).`);
+    if (!Array.isArray(sliceTiming) || sliceTiming.length !== nSlices) {
+      throw new Error(
+        `SliceTiming length (${sliceTiming?.length}) does not match slice count (${nSlices}) along axis ${sliceEncodingDirection}.`,
+      );
     }
     if (!sliceTiming.every((v) => Number.isFinite(v) && v >= 0)) {
       throw new Error('SliceTiming contains non-finite or negative entries.');
     }
     timing = sliceTiming;
   } else {
-    timing = defaultSliceTiming(nz, tr, 3);
+    timing = defaultSliceTiming(nSlices, tr, 3);
   }
   const minTiming = Math.min(...timing);
   const timeRef = new Float64Array(nt);
@@ -84,11 +98,14 @@ export function sliceTimeCorrection(pwi, dims, tr, sliceTiming, epsilon = 1e-6) 
   const sliceStride = nx * ny;
   const volStride = nx * ny * nz;
   const yKnown = new Float64Array(nt);
+  const timeSlice = new Float64Array(nt);
   for (let z = 0; z < nz; z++) {
-    const timeSlice = new Float64Array(nt);
-    for (let t = 0; t < nt; t++) timeSlice[t] = minTiming + timing[z] + tr * t;
     for (let y = 0; y < ny; y++) {
       for (let x = 0; x < nx; x++) {
+        const sCoord = sliceAxis === 0 ? x : sliceAxis === 1 ? y : z;
+        const timingIdx = reverseOrder ? nSlices - 1 - sCoord : sCoord;
+        const offset = timing[timingIdx];
+        for (let t = 0; t < nt; t++) timeSlice[t] = minTiming + offset + tr * t;
         const base = x + y * nx + z * sliceStride;
         for (let t = 0; t < nt; t++) yKnown[t] = pwi[base + t * volStride];
         for (let t = 0; t < nt; t++) {

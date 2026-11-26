@@ -65,9 +65,17 @@ test('example selector loads StrokeFAIR MNI case, runs reporting + TreeSHAP + St
   const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
   expect(view.getInt32(0, true)).toBe(348);
   expect([view.getInt16(42, true), view.getInt16(44, true), view.getInt16(46, true)]).toEqual([182, 218, 182]);
+
+  // Verify mask editor opens via start() and applies edits cleanly
+  await page.locator('#resultList .nd-volume-toggle[data-stage="stroke_mni"] .nd-edit-btn').click();
+  const editor = page.locator('nd-mask-editor');
+  await expect(editor).toBeVisible({ timeout: 20_000 });
+  await editor.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(editor).toBeHidden({ timeout: 20_000 });
+  await expect(page.locator('#resultList .nd-volume-toggle[data-stage="stroke_mni"]')).toContainText('(edited)');
 });
 
-test('dropping a NIfTI file directly onto the upload zone loads and classifies it', async ({ page }) => {
+test('page drop via the shared shell loads and classifies a dropped NIfTI file', async ({ page }) => {
   await page.goto('./');
   await page.evaluate(() => {
     const buf = new ArrayBuffer(352 + 8 * 4);
@@ -92,7 +100,7 @@ test('dropping a NIfTI file directly onto the upload zone loads and classifies i
     const file = new File([buf], 'sub-drop_stroke_space-MNI152.nii', { type: 'application/octet-stream' });
     const dt = new DataTransfer();
     dt.items.add(file);
-    document.getElementById('dropZone').dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
   });
   await expect(page.locator('#maskSelect')).toHaveValue('0', { timeout: 10_000 });
   await expect(page.locator('#runButton')).toBeEnabled();

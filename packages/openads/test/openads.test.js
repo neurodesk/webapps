@@ -13,6 +13,7 @@ import {
   runDagmnetDwi,
   runDagmnetPwi,
   computeTtpVolume,
+  sliceTimeCorrection,
   computeIcvMl,
   computeLesionVolumes,
   computeMismatch,
@@ -483,4 +484,60 @@ test('ICV returns null without a brain mask and CSV cells neutralize spreadsheet
   assert.equal(csvCell('=SUM(A1:A2)'), "'=SUM(A1:A2)");
   assert.equal(csvCell('+cmd'), "'+cmd");
   assert.equal(csvCell("a\rb"), '"a\rb"');
+});
+
+test('readNifti derives voxel spacing from affine, rejects oversized buffers, and honors BIDS SliceEncodingDirection', () => {
+  // Header claims pixdim[1]=2 mm while sform has 1 mm spacing -> pixdim must match sform (1 mm)
+  const buf = new ArrayBuffer(352 + 8 * 4);
+  const view = new DataView(buf);
+  view.setInt32(0, 348, true);
+  view.setInt16(40, 3, true);
+  view.setInt16(42, 2, true);
+  view.setInt16(44, 2, true);
+  view.setInt16(46, 2, true);
+  view.setInt16(70, 16, true);
+  view.setInt16(72, 32, true);
+  view.setFloat32(80, 2, true);
+  view.setFloat32(84, 1, true);
+  view.setFloat32(88, 1, true);
+  view.setFloat32(108, 352, true);
+  view.setFloat32(112, 1, true);
+  view.setInt16(254, 1, true);
+  view.setFloat32(280, 1, true);
+  view.setFloat32(300, 1, true);
+  view.setFloat32(320, 1, true);
+  new Uint8Array(buf, 344, 4).set([0x6e, 0x2b, 0x31, 0x00]);
+  const vol = readNifti(new Uint8Array(buf));
+  assert.equal(vol.pixdim[0], 1);
+
+  // Oversized buffer rejected by computeAtlasOverlap
+  assert.throws(
+    () => computeAtlasOverlap(new Uint8Array(8), [2, 2, 2], new Float32Array(12), [2, 2, 2], { regions: ['R1'], volumeVoxels: [8] }),
+    /does not match its grid/,
+  );
+
+  // SliceEncodingDirection k- reverses slice timing order; j applies timing along axis 1
+  const dims = [2, 3, 2, 4];
+  const n3 = 12;
+  const pwi = new Float32Array(n3 * 4);
+  for (let t = 0; t < 4; t++) {
+    for (let z = 0; z < 2; z++) {
+      for (let y = 0; y < 3; y++) {
+        for (let x = 0; x < 2; x++) {
+          // Linear ramp in time: signal(t) = 10 + 2 * (t_sample)
+          pwi[x + y * 2 + z * 6 + t * n3] = 10 + 2 * t;
+        }
+      }
+    }
+  }
+  const kPos = sliceTimeCorrection(pwi, dims, 2.0, [0.0, 1.0], { sliceEncodingDirection: 'k' });
+  const kNeg = sliceTimeCorrection(pwi, dims, 2.0, [0.0, 1.0], { sliceEncodingDirection: 'k-' });
+  // Under k, z=0 has offset 0 (unchanged); under k-, z=1 has offset 0 and z=0 has offset 1.0
+  assert.ok(Math.abs(kPos.data[0 + n3] - 12) < 1e-4);
+  assert.ok(Math.abs(kNeg.data[6 + n3] - 12) < 1e-4);
+  assert.ok(Math.abs(kNeg.data[0 + n3] - 11) < 1e-4);
+
+  const jDir = sliceTimeCorrection(pwi, dims, 2.0, [0.0, 0.5, 1.0], { sliceEncodingDirection: 'j' });
+  assert.ok(Math.abs(jDir.data[0 + n3] - 12) < 1e-4);
+  assert.ok(Math.abs(jDir.data[4 + n3] - 11) < 1e-4);
 });

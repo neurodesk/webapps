@@ -640,23 +640,39 @@ async function runJob(job) {
         throw new Error(`Invalid PWI JSON sidecar: ${err.message}`);
       }
     }
-    const rawTr = Number.isFinite(pwiMeta?.RepetitionTime) && pwiMeta.RepetitionTime > 0
-      ? (pwiMeta.RepetitionTime > 20 ? pwiMeta.RepetitionTime / 1000 : pwiMeta.RepetitionTime)
-      : pwiRaw.pixdim[3] > 0
-        ? pwiRaw.pixdim[3]
-        : 1.7;
-    const echoTime = Number.isFinite(pwiMeta?.EchoTime) && pwiMeta.EchoTime > 0
-      ? (pwiMeta.EchoTime > 1 ? pwiMeta.EchoTime / 1000 : pwiMeta.EchoTime)
-      : TTP_DEFAULTS.echoTime;
-    const sliceTiming = Array.isArray(pwiMeta?.SliceTiming) ? pwiMeta.SliceTiming : null;
-    if (sliceTiming && sliceTiming.length !== pwiRaw.dims[2]) {
-      throw new Error(
-        `PWI SliceTiming length (${sliceTiming.length}) does not match acquisition slice count (${pwiRaw.dims[2]}).`,
-      );
+    let rawTr;
+    if (pwiMeta && 'RepetitionTime' in pwiMeta && pwiMeta.RepetitionTime != null) {
+      if (!Number.isFinite(pwiMeta.RepetitionTime) || pwiMeta.RepetitionTime <= 0) {
+        throw new Error(`Invalid BIDS RepetitionTime (${pwiMeta.RepetitionTime}) in PWI JSON sidecar.`);
+      }
+      rawTr = pwiMeta.RepetitionTime;
+    } else if (Number.isFinite(pwiRaw.pixdim[3]) && pwiRaw.pixdim[3] > 0) {
+      rawTr = pwiRaw.pixdim[3];
+    } else {
+      rawTr = 1.7;
+    }
+
+    let echoTime = TTP_DEFAULTS.echoTime;
+    if (pwiMeta && 'EchoTime' in pwiMeta && pwiMeta.EchoTime != null) {
+      if (!Number.isFinite(pwiMeta.EchoTime) || pwiMeta.EchoTime <= 0) {
+        throw new Error(`Invalid BIDS EchoTime (${pwiMeta.EchoTime}) in PWI JSON sidecar.`);
+      }
+      echoTime = pwiMeta.EchoTime;
+    }
+
+    const sliceEncodingDirection = pwiMeta?.SliceEncodingDirection ?? 'k';
+    let sliceTiming = null;
+    if (pwiMeta && 'SliceTiming' in pwiMeta && pwiMeta.SliceTiming != null) {
+      if (!Array.isArray(pwiMeta.SliceTiming)) {
+        throw new Error('Invalid BIDS SliceTiming in PWI JSON sidecar: expected an array of numbers.');
+      }
+      sliceTiming = pwiMeta.SliceTiming;
     }
 
     progress(0.57, 'Applying slice-time correction in acquisition order…');
-    const stcRaw = sliceTimeCorrection(pwiRaw.voxels, pwiRaw.dims, rawTr, sliceTiming);
+    const stcRaw = sliceTimeCorrection(pwiRaw.voxels, pwiRaw.dims, rawTr, sliceTiming, {
+      sliceEncodingDirection,
+    });
     const pwi4d = reorientVolume4DToRAS({ ...pwiRaw, voxels: stcRaw.data });
 
     const pwiFrame0 = extractFrame3D(pwi4d, 0);

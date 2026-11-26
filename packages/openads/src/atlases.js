@@ -184,7 +184,8 @@ export function computeAtlasOverlap(
   );
   const numRegions = lookup.regions.length;
   const counts = new Array(numRegions).fill(0);
-  for (let i = 0; i < atlasLabels.length; i++) {
+  const n = voxelCount(maskDims);
+  for (let i = 0; i < n; i++) {
     if (!binaryMask[i]) continue;
     const label = Math.round(atlasLabels[i]);
     if (label >= 1 && label <= numRegions) {

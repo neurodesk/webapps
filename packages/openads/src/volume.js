@@ -181,6 +181,14 @@ function parseXyztUnits(view) {
   };
 }
 
+function affineVoxelSpacing(affine) {
+  return [
+    Math.hypot(affine[0], affine[4], affine[8]),
+    Math.hypot(affine[1], affine[5], affine[9]),
+    Math.hypot(affine[2], affine[6], affine[10]),
+  ];
+}
+
 export function assertMatchingGeometry(volA, volB, labelA = 'volume A', labelB = 'volume B', { tol = 1e-2 } = {}) {
   if (!volA?.dims || !volB?.dims) {
     throw new Error(`Missing geometry for ${labelA} or ${labelB}.`);
@@ -193,14 +201,23 @@ export function assertMatchingGeometry(volA, volB, labelA = 'volume A', labelB =
     }
   }
   const expected = voxelCount(volA.dims);
-  if (volA.voxels && volA.voxels.length < expected) {
-    throw new Error(`${labelA} voxel buffer (${volA.voxels.length}) is shorter than its grid (${expected}).`);
+  if (volA.voxels && volA.voxels.length !== expected) {
+    throw new Error(`${labelA} voxel buffer (${volA.voxels.length}) does not match its grid (${expected}).`);
   }
-  if (volB.voxels && volB.voxels.length < expected) {
-    throw new Error(`${labelB} voxel buffer (${volB.voxels.length}) is shorter than its grid (${expected}).`);
+  if (volB.voxels && volB.voxels.length !== expected) {
+    throw new Error(`${labelB} voxel buffer (${volB.voxels.length}) does not match its grid (${expected}).`);
   }
   if (volA.spatialUnit && volB.spatialUnit && volA.spatialUnit !== volB.spatialUnit) {
     throw new Error(`Spatial unit mismatch between ${labelA} and ${labelB}.`);
+  }
+  if (volA.pixdim && volB.pixdim) {
+    for (let i = 0; i < 3; i++) {
+      const a = Math.abs(volA.pixdim[i]);
+      const b = Math.abs(volB.pixdim[i]);
+      if (!Number.isFinite(a) || !Number.isFinite(b) || Math.abs(a - b) > tol) {
+        throw new Error(`Voxel spacing mismatch between ${labelA} (${a}) and ${labelB} (${b}) on axis ${i}.`);
+      }
+    }
   }
   if (volA.affine && volB.affine) {
     for (let i = 0; i < 16; i++) {
@@ -224,11 +241,7 @@ export function readNifti(bytes) {
   }
   const dims = [view.getInt16(42, le), view.getInt16(44, le), view.getInt16(46, le)];
   const units = parseXyztUnits(view);
-  const pixdim = [
-    Math.abs(view.getFloat32(80, le)) * units.spatialScaleMm,
-    Math.abs(view.getFloat32(84, le)) * units.spatialScaleMm,
-    Math.abs(view.getFloat32(88, le)) * units.spatialScaleMm,
-  ];
+  const rawPixdim = [view.getFloat32(80, le), view.getFloat32(84, le), view.getFloat32(88, le)];
   const datatype = view.getInt16(70, le);
   const voxOffset = view.getFloat32(108, le) || VOX_OFFSET;
   const slope = view.getFloat32(112, le);
@@ -244,13 +257,14 @@ export function readNifti(bytes) {
     cursor += step;
     voxels[i] = applyScale ? val * slope + safeInter : val;
   }
-  const rawPixdim = [view.getFloat32(80, le), view.getFloat32(84, le), view.getFloat32(88, le)];
   const affine = readAffine(view, rawPixdim, le);
   if (units.spatialScaleMm !== 1) {
     for (let r = 0; r < 3; r++) {
       for (let c = 0; c < 4; c++) affine[r * 4 + c] *= units.spatialScaleMm;
     }
   }
+  const spacing = affineVoxelSpacing(affine);
+  const pixdim = spacing.map((s, i) => (s > 0 ? s : Math.abs(rawPixdim[i]) * units.spatialScaleMm));
   return { dims, pixdim, voxels, affine, datatype, spatialUnit: 'mm' };
 }
 
@@ -274,12 +288,6 @@ export function readNifti4D(bytes) {
     view.getFloat32(88, le),
     view.getFloat32(92, le),
   ];
-  const pixdim = [
-    Math.abs(rawPixdim[0]) * units.spatialScaleMm,
-    Math.abs(rawPixdim[1]) * units.spatialScaleMm,
-    Math.abs(rawPixdim[2]) * units.spatialScaleMm,
-    Math.abs(rawPixdim[3]) * units.timeScaleSec,
-  ];
   const datatype = view.getInt16(70, le);
   const voxOffset = view.getFloat32(108, le) || VOX_OFFSET;
   const slope = view.getFloat32(112, le);
@@ -301,6 +309,13 @@ export function readNifti4D(bytes) {
       for (let c = 0; c < 4; c++) affine[r * 4 + c] *= units.spatialScaleMm;
     }
   }
+  const spacing = affineVoxelSpacing(affine);
+  const pixdim = [
+    spacing[0] > 0 ? spacing[0] : Math.abs(rawPixdim[0]) * units.spatialScaleMm,
+    spacing[1] > 0 ? spacing[1] : Math.abs(rawPixdim[1]) * units.spatialScaleMm,
+    spacing[2] > 0 ? spacing[2] : Math.abs(rawPixdim[2]) * units.spatialScaleMm,
+    Math.abs(rawPixdim[3]) * units.timeScaleSec,
+  ];
   return { dims, pixdim, voxels, affine, datatype, spatialUnit: 'mm', timeUnitCode: units.timeCode };
 }
 
