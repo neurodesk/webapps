@@ -679,4 +679,29 @@ test('auto-close retries an interrupted close, waits when a newer attempt is in 
   assert.equal(afterCutoff.issues[0].state, 'open');
   assert.deepEqual(vetoed.results, []);
   assert.deepEqual(reported(afterCutoff), ['nightly 950:1']);
+
+  // 6. A newer post-cutoff run of a continue-on-error workflow vetoes recovery on an older clean pass
+  // until the next tick inspects its jobs and reports any soft failure.
+  const ciOldFail = attempt({ id: 960, workflow_id: 26, name: 'ci', path: '.github/workflows/ci.yml', created_at: at(1), run_started_at: at(1), updated_at: at(2) });
+  const ciCleanPass = attempt({ id: 961, workflow_id: 26, name: 'ci', path: '.github/workflows/ci.yml', conclusion: 'success', created_at: at(25), run_started_at: at(25), updated_at: at(26) });
+  const ciPostCutoffSoftFail = attempt({ id: 962, workflow_id: 26, name: 'ci', path: '.github/workflows/ci.yml', conclusion: 'success', created_at: at(27), run_started_at: at(27), updated_at: at(28.5) });
+  const postCutoffCoe = github({
+    runs: [ciOldFail, ciCleanPass, ciPostCutoffSoftFail],
+    jobs: {
+      '960:1': [{ id: 9601, name: 'app-tests', conclusion: 'failure', steps: [] }],
+      '961:1': [{ id: 9611, name: 'app-tests', conclusion: 'success', steps: [] }],
+      '962:1': [
+        { id: 9621, name: 'app-tests', conclusion: 'success', steps: [] },
+        { id: 9622, name: 'example-cache-retention', conclusion: 'failure', steps: [] },
+      ],
+    },
+  });
+  await tick(postCutoffCoe, at(4));
+  assert.equal(postCutoffCoe.issues[0].state, 'open');
+  await tick(postCutoffCoe, at(28));
+  assert.equal(postCutoffCoe.issues[0].state, 'open');
+  assert.deepEqual(reported(postCutoffCoe), ['nightly 960:1']);
+  await tick(postCutoffCoe, at(30));
+  assert.equal(postCutoffCoe.issues[0].state, 'open');
+  assert.deepEqual(reported(postCutoffCoe), ['nightly 960:1', 'nightly 962:1']);
 });

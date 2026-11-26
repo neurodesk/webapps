@@ -172,7 +172,7 @@ const attemptKey = attempt => `${attempt.id}:${attempt.run_attempt ?? 1}`;
 // `cutover` that is newer (by both completion and creation time) than every
 // failed or incomplete attempt in the lookback and is not superseded by a
 // newer attempt (including in-progress/queued reruns), return that attempt.
-function recoveryCandidates(ordered, { repository, defaultBranch, cutover, until = Infinity, failedAttempts, erroredWorkflows }) {
+function recoveryCandidates(ordered, { repository, defaultBranch, continuesOnError = [], cutover, until = Infinity, failedAttempts, erroredWorkflows }) {
   const maxAttemptByRun = new Map();
   const byWorkflow = new Map();
   for (const attempt of ordered) {
@@ -188,7 +188,12 @@ function recoveryCandidates(ordered, { repository, defaultBranch, cutover, until
   const candidates = [];
   for (const [workflowId, list] of byWorkflow) {
     if (erroredWorkflows.has(workflowId)) continue;
-    const isUnhealthy = attempt => attempt.conclusion !== 'success' || failedAttempts.has(attemptKey(attempt));
+    const uninspectedContinueOnError = attempt => (
+      continuesOnError.includes(attempt.path)
+      && attempt.conclusion === 'success'
+      && (completedAt(attempt) >= until || completedAt(attempt) < cutoverAt)
+    );
+    const isUnhealthy = attempt => attempt.conclusion !== 'success' || failedAttempts.has(attemptKey(attempt)) || uninspectedContinueOnError(attempt);
     const unhealthy = list.filter(isUnhealthy);
     const qualifying = list.filter(attempt => (
       completedAt(attempt) >= cutoverAt
@@ -236,7 +241,7 @@ export async function reportWorkflowRuns({ attempts, allAttempts = attempts, rep
     }
   }
   const allOrdered = allAttempts === attempts ? ordered : [...allAttempts].sort(byCompleted);
-  const recoveries = recoveryCandidates(allOrdered, { repository, defaultBranch, cutover, until, failedAttempts, erroredWorkflows });
+  const recoveries = recoveryCandidates(allOrdered, { repository, defaultBranch, continuesOnError, cutover, until, failedAttempts, erroredWorkflows });
   if (recoveries.length) {
     let openIssues = [];
     let listError = null;
