@@ -483,6 +483,7 @@ for (const [input, load] of [
   assert.deepEqual(ATLAS_OPTIONS.map(option => [option.id, option.displayName]), [
     ['schaefer400', 'Schaefer 400 parcels'],
     ['harvardoxford', 'Harvard–Oxford cortical + subcortical (25% maximum probability, 2 mm)'],
+    ['arterial', 'Arterial territories (Liu et al., 2023; 1 mm)'],
     ['yeo7', 'Yeo 7 networks']
   ]);
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'web/models/manifest.json'), 'utf8'));

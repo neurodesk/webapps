@@ -8,6 +8,7 @@ export const generatedSources = {
   'packages/nii2tvx/wasm/nii2tvx.mjs': 'Committed Emscripten glue.',
   'packages/n4/wasm/n4-bias.mjs': 'Committed Emscripten glue.',
   'packages/ants-denoise/wasm/ants-denoise.mjs': 'Committed Emscripten glue.',
+  'packages/laynii/wasm/laynii.mjs': 'Committed Emscripten glue.',
   'packages/hmc-registration/wasm/hmc-registration.mjs': 'Committed Emscripten glue.',
   'packages/registration/wasm/syncro-registration.mjs': 'Committed Emscripten glue.',
   'packages/runtime-support/src/niimath/niimath.js': 'Committed Emscripten glue.',

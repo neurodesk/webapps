@@ -134,7 +134,12 @@ assert.deepEqual(
   const options = Array.from($('#atlasSelect').options);
   assert.deepEqual(
     options.map(option => [option.value, option.textContent, option.selected]),
-    [['schaefer400', 'Schaefer 400 parcels', true], ['harvardoxford', 'Harvard–Oxford cortical + subcortical (direct overlap)', false], ['yeo7', 'Yeo 7 networks', false]]
+    [
+      ['schaefer400', 'Schaefer 400 parcels', true],
+      ['harvardoxford', 'Harvard–Oxford cortical + subcortical (direct overlap)', false],
+      ['arterial', 'Arterial territories (Liu et al., 2023; direct overlap)', false],
+      ['yeo7', 'Yeo 7 networks', false]
+    ]
   );
 }
 
@@ -531,7 +536,7 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
   const selector = $('#stepLoadSection .section-content').firstElementChild;
   assert.equal(selector.tagName.toLowerCase(), 'nd-example-selector', 'the example selector leads the input section');
   assert.equal($('#atlasSelect').value, 'schaefer400');
-  assert.equal($('#atlasSelect').options.length, 3, 'atlas options are not duplicated at boot');
+  assert.equal($('#atlasSelect').options.length, 4, 'atlas options are not duplicated at boot');
   assert.equal(app.registrationQcMode, 'mni', 'QC view starts from the selected option');
   assert.equal(text($('#registrationBlendLabel')), '50% patient');
   const slider = $('#networkThresholdValue');

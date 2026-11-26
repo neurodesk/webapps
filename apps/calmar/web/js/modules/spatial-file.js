@@ -47,7 +47,17 @@ function affineEqual(a, b, tolerance = 1e-3) {
   if (!a || !b) return true;
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 4; c++) {
-      if (Math.abs(Number(a[r]?.[c]) - Number(b[r]?.[c])) > tolerance) return false;
+      const av = a[r]?.[c];
+      const bv = b[r]?.[c];
+      if (
+        typeof av !== 'number' ||
+        typeof bv !== 'number' ||
+        !Number.isFinite(av) ||
+        !Number.isFinite(bv)
+      ) {
+        return false;
+      }
+      if (Math.abs(av - bv) > tolerance) return false;
     }
   }
   return true;

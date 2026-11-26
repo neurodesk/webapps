@@ -1,0 +1,38 @@
+name: laynii-wasm-source
+
+# The committed LayNii WebAssembly module (packages/laynii/wasm) must equal a rebuild from source.
+# The build runs in the pinned ITK-Wasm Emscripten Docker image with --network none so it runs
+# each week and by hand, not on each pull request.
+on:
+  schedule:
+    - cron: '41 5 * * 3'
+  workflow_dispatch:
+
+concurrency:
+  group: laynii-wasm-source-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  rebuild:
+    name: committed LayNii module equals a rebuild from source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Rebuild and compare laynii.wasm and laynii.mjs byte for byte
+        run: bash packages/laynii/scripts/build.sh --check "$RUNNER_TEMP/laynii-build"
+      - name: Keep the rebuilt module when it differs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: laynii-rebuilt
+          path: |
+            ${{ runner.temp }}/laynii-build/wasm/laynii.wasm
+            ${{ runner.temp }}/laynii-build/wasm/laynii.mjs
+          if-no-files-found: ignore
+          retention-days: 7

@@ -46,7 +46,7 @@ const REQUIRED_METHODS = {
   musclemap: ['10.3390/jimaging10110262', 'arxiv.org/abs/2211.02701', '10.1016/j.jneumeth.2016.03.001'],
   vesselboost: ['10.52294/001c.123217', '10.1109/TMI.2010.2046908', '10.1109/TMI.2007.906087', '10.1109/ICCV.1998.710815', '10.1002/hbm.10062', '10.1016/j.neuroimage.2022.119474'],
   spinalcordtoolbox: ['10.1016/j.neuroimage.2016.10.009', '10.1016/j.media.2025.103473', '10.1038/s41592-020-01008-z', 'arxiv.org/abs/2407.17265', '10.1177/13524585261427333', 'github.com/neuropoly/totalspineseg', '10.1002/ana.24932', '10.1038/s41393-020-00561-w'],
-  calmar: ['10.1016/j.neuroimage.2007.07.053', '10.1093/brain/awv228', '10.1016/j.neuroimage.2022.119474', 'SynthStroke', '10.1038/s41467-025-62373-x', '10.1038/s41597-024-03667-5', '10.1038/s41597-024-03819-7', '10.1038/s41592-020-01008-z', '10.1038/s41597-022-01875-5', '10.1109/TMI.2021.3116879', '10.1016/j.neuroimage.2010.07.033', '10.1152/jn.00338.2011', '10.1093/cercor/bhx179', '10.1038/s41467-018-03399-2', '10.1038/nmeth.1635'],
+  calmar: ['10.1016/j.neuroimage.2007.07.053', '10.1093/brain/awv228', '10.1016/j.neuroimage.2022.119474', 'SynthStroke', '10.1038/s41467-025-62373-x', '10.1038/s41597-024-03667-5', '10.1038/s41597-024-03819-7', '10.1038/s41592-020-01008-z', '10.1038/s41597-022-01875-5', '10.1109/TMI.2021.3116879', '10.1016/j.neuroimage.2010.07.033', '10.1152/jn.00338.2011', '10.1093/cercor/bhx179', '10.1038/s41467-018-03399-2', '10.1038/nmeth.1635', '10.1038/s41597-022-01923-0'],
   qsmbly: ['10.1002/mrm.29048', '10.1016/j.neuroimage.2021.118175', '10.1002/nbm.3570', '10.1002/nbm.4461', '10.1016/j.neuroimage.2018.06.030', '10.1016/j.neuroimage.2020.116579', '10.1016/j.neuroimage.2019.116389', '10.1002/mp.17747', '10.1007/978-3-030-59713-9_13', '10.1016/j.neuroimage.2021.118376', '10.1016/j.neuroimage.2019.116064', '10.1016/j.neuroimage.2022.119729', '10.1002/hbm.24750', '10.1002/mrm.29722', '10.1002/hbm.10062', '10.1016/j.neuroimage.2024.120769', '10.1002/mrm.28563', '10.1002/mrm.26963', '10.1002/mrm.23000', '10.1002/nbm.1670', '10.1002/mrm.22135', '10.1002/mrm.22816', '10.1016/j.neuroimage.2015.02.041', '10.1016/j.neuroimage.2020.117701', '10.1016/j.jneumeth.2016.03.001'],
   seedseg: ['10.1038/s41592-020-01008-z', '10.1007/978-3-031-72114-4_47', '10.1101/2023.10.26.564293', '10.1007/978-3-319-46723-8_49', '10.1016/j.jneumeth.2016.03.001'],
   dicompare: ['github.com/astewartau/dicompare', 'pyodide.org', '10.1016/j.jneumeth.2016.03.001'],
@@ -71,6 +71,7 @@ const REQUIRED_METHODS = {
   edgereg: ['afni.nimh.nih.gov', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   ants: ['10.1038/s41598-021-87564-6', '10.1016/j.neuroimage.2010.09.025', '10.1016/j.neuroimage.2026.122074', '10.1016/j.jneumeth.2016.03.001'],
   'carotid-flow': ['10.5281/zenodo.18712355', '10.1177/00359157740676P113', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  vesselcharter: ['10.1006/cgip.1994.1042', '10.4086/toc.2012.v008a019', '10.1145/218380.218473', '10.1109/TMI.2003.816964', '10.52294/001c.123217', '10.1016/j.crmeth.2022.100189', '10.7717/peerj.4312', 'github.com/niivue/niivue'],
   disconnectome: ['10.1038/s41467-022-32595-4', 'github.com/neurolabusc/nii2tvx', 'github.com/niivue/niivue'],
   lcmodel: ['10.1002/mrm.1910300604', '10.1002/mrm.26091', '10.1002/mrm.25094', '10.1002/mp.12375', '10.1002/(SICI)1099-1492(199810)11:6<266::AID-NBM530>3.0.CO;2-J', '10.1002/nbm.4618', '10.1002/mrm.24391', '10.1002/mrm.20901', '10.1002/jmri.24903', '10.1016/j.jneumeth.2020.108827', '10.1016/j.neuroimage.2026.122074', '10.1002/mrm.29418', '10.1038/jcbfm.2014.233', '10.1002/mrm.30001', '10.1016/j.jneumeth.2016.03.001'],
   greedy: ['sites.google.com/view/greedyreg/about', 'github.com/pyushkevich/greedy', 'arxiv.org/abs/2506.11860', '10.1016/j.jneumeth.2016.03.001'],
@@ -93,6 +94,7 @@ const REQUIRED_METHODS = {
   'wound-planimetry': ['pubmed.ncbi.nlm.nih.gov/2916597', '10.1109/TSMC.1979.4310076', '10.1155/2014/851582', 'File:Neuropathic_heel_ulcer_diabetic.jpg', 'File:Venous_ulcer_dorsal_leg.jpg'],
   'derm-compare': ['10.1001/archderm.142.9.1113', '10.1067/mjd.2000.107504', '10.1016/j.artmed.2012.08.002', '10.1002/col.20070', '10.1016/s0010-4825(97)00020-6', '10.2352/CIC.2004.12.1.art00008', '10.1109/TSMC.1979.4310076', 'isic-archive.com'],
   dermvit: ['10.48550/arXiv.2010.11929', '10.1038/sdata.2018.161', '10.2352/CIC.2004.12.1.art00008', '10.1007/978-3-319-10590-1_53', 'onnxruntime.ai', 'isic-archive.com'],
+  laynii: ['10.1016/j.neuroimage.2021.118091', '10.1016/j.neuroimage.2013.03.078', '10.1002/cne.24080', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
 };
 
 test('every registered app has app information with packages and cited methods', () => {

@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { existsSync, statSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
-import { posix as posixPath } from 'node:path';
+import { isBuiltin } from 'node:module';
+import { dirname, posix as posixPath, relative, resolve } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
+import sourceParser from '@neurodesk/code-quality';
 import YAML from 'yaml';
 
 const workflow = async (name) => YAML.parse(await readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8'));
@@ -961,4 +965,200 @@ test('gh-aw timeout exemption requires verified frontmatter/body hashes, exact c
     findJobsMissingTimeout([{ file: 'demo.lock.yml', text: missingCore, sourceMarkdown: validMd }]),
     ['demo.lock.yml: agent', 'demo.lock.yml: detection', 'demo.lock.yml: safe_outputs', 'demo.lock.yml: custom_extra'],
   );
+});
+
+function staticStringValue(node) {
+  if (!node) return null;
+  if (node.type === 'Literal' && typeof node.value === 'string') return node.value;
+  if (node.type === 'TemplateLiteral' && node.expressions.length === 0 && node.quasis.length === 1) {
+    return node.quasis[0].value.cooked ?? node.quasis[0].value.raw;
+  }
+  return null;
+}
+
+function moduleSpecifiers(source, filePath) {
+  const ast = sourceParser.parse(source, { filePath, sourceType: 'module' });
+  const specifiers = [];
+  const requireBindings = new Set(['require']);
+  const walk = (node) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+      return;
+    }
+    if (
+      node.type === 'VariableDeclarator'
+      && node.id?.type === 'Identifier'
+      && node.init?.type === 'CallExpression'
+      && (
+        (node.init.callee?.type === 'Identifier' && node.init.callee.name === 'createRequire')
+        || (node.init.callee?.type === 'MemberExpression' && node.init.callee.property?.type === 'Identifier' && node.init.callee.property.name === 'createRequire')
+      )
+    ) {
+      requireBindings.add(node.id.name);
+    }
+    if (
+      (node.type === 'ImportDeclaration' || node.type === 'ExportNamedDeclaration' || node.type === 'ExportAllDeclaration')
+      && typeof node.source?.value === 'string'
+    ) {
+      specifiers.push(node.source.value);
+    } else if (node.type === 'ImportExpression') {
+      const value = staticStringValue(node.source);
+      if (value !== null) specifiers.push(value);
+    } else if (
+      node.type === 'CallExpression'
+      && node.callee?.type === 'Identifier'
+      && requireBindings.has(node.callee.name)
+    ) {
+      const value = staticStringValue(node.arguments?.[0]);
+      if (value !== null) specifiers.push(value);
+    }
+    for (const [key, value] of Object.entries(node)) {
+      if (key === 'parent' || key === 'loc' || key === 'range' || key === 'tokens' || key === 'comments') continue;
+      if (value && typeof value === 'object') walk(value);
+    }
+  };
+  walk(ast);
+  return specifiers;
+}
+
+function isFile(filePath) {
+  return existsSync(filePath) && statSync(filePath).isFile();
+}
+
+function resolveLocalModule(fromFile, specifier, repoRoot) {
+  const cleaned = specifier.split(/[?#]/, 1)[0];
+  let base;
+  if (cleaned.startsWith('file:')) {
+    base = fileURLToPath(cleaned);
+    if (!base.startsWith(repoRoot)) return null;
+  } else {
+    base = resolve(dirname(fromFile), cleaned);
+  }
+  const candidates = [
+    base,
+    `${base}.js`,
+    `${base}.mjs`,
+    `${base}.cjs`,
+    resolve(base, 'index.js'),
+    resolve(base, 'index.mjs'),
+    resolve(base, 'index.cjs'),
+  ];
+  return candidates.find(isFile) ?? null;
+}
+
+const NODE_VALUE_FLAGS = new Set([
+  '-r', '-C', '--require', '--import', '--loader', '--experimental-loader', '--conditions',
+  '--env-file', '--env-file-if-exists', '--test-name-pattern', '--test-skip-pattern',
+  '--test-reporter', '--test-reporter-destination', '--test-shard', '--input-type',
+]);
+const REPO_ENTRY = /^(?:\.\/)?((?:scripts|packages|exes|test|test-utils)\/[\w./-]+\.[cm]?js)$/;
+
+function preInstallNodeEntries(runText) {
+  const entries = [];
+  let installed = false;
+  const normalized = runText.replace(/\\\r?\n/g, ' ');
+  for (const rawLine of normalized.split('\n')) {
+    const trimmed = rawLine.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    for (const segment of trimmed.split(/\s*(?:&&|\|\||;)\s*/)) {
+      if (!segment) continue;
+      if (/\b(?:pnpm\s+install|npm\s+(?:ci|install))\b/.test(segment) && !/--lockfile-only\b/.test(segment)) {
+        installed = true;
+        continue;
+      }
+      if (installed) continue;
+      const tokens = [...segment.matchAll(/'([^']*)'|"([^"]*)"|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]);
+      for (let i = 0; i < tokens.length; i += 1) {
+        if (tokens[i] !== 'node') continue;
+        let j = i + 1;
+        let evalMode = false;
+        while (j < tokens.length && tokens[j].startsWith('-')) {
+          const flag = tokens[j];
+          if (flag === '-e' || flag === '--eval' || flag === '-p' || flag === '--print') {
+            evalMode = true;
+            break;
+          }
+          j += NODE_VALUE_FLAGS.has(flag) ? 2 : 1;
+        }
+        if (evalMode) continue;
+        while (j < tokens.length && !tokens[j].startsWith('-')) {
+          const match = tokens[j].match(REPO_ENTRY);
+          if (match) entries.push(match[1]);
+          j += 1;
+        }
+      }
+    }
+  }
+  return { entries, installed };
+}
+
+test('workflow scripts executed before pnpm install import only Node built-ins', async () => {
+  const repoRoot = fileURLToPath(new URL('../', import.meta.url));
+  const dir = new URL('../.github/workflows/', import.meta.url);
+  const actionStepsCache = new Map();
+  const expandSteps = async (steps) => {
+    const expanded = [];
+    for (const step of steps ?? []) {
+      if (typeof step.uses === 'string' && step.uses.startsWith('./.github/actions/')) {
+        if (!actionStepsCache.has(step.uses)) {
+          const actionFile = resolve(repoRoot, step.uses, 'action.yml');
+          const action = isFile(actionFile) ? YAML.parse(await readFile(actionFile, 'utf8')) : null;
+          actionStepsCache.set(step.uses, action?.runs?.steps ?? []);
+        }
+        expanded.push(...actionStepsCache.get(step.uses));
+      } else {
+        expanded.push(step);
+      }
+    }
+    return expanded;
+  };
+
+  const preInstallScripts = new Map();
+  for (const file of (await readdir(dir)).filter((name) => /\.ya?ml$/.test(name)).sort()) {
+    const flow = YAML.parse(await readFile(new URL(file, dir), 'utf8'));
+    for (const [jobId, job] of Object.entries(flow.jobs ?? {})) {
+      let installed = false;
+      for (const step of await expandSteps(job.steps)) {
+        if (typeof step.run !== 'string' || installed) continue;
+        const result = preInstallNodeEntries(step.run);
+        for (const entry of result.entries) {
+          if (!isFile(resolve(repoRoot, entry))) continue;
+          const callers = preInstallScripts.get(entry) ?? [];
+          if (!callers.includes(`${file}:${jobId}`)) callers.push(`${file}:${jobId}`);
+          preInstallScripts.set(entry, callers);
+        }
+        if (result.installed) installed = true;
+      }
+    }
+  }
+  assert.ok(preInstallScripts.has('scripts/ci-usage-report.mjs'), 'ci-usage-report.mjs runs without pnpm install and must be checked');
+  assert.ok(preInstallScripts.has('packages/desktop/test/source-approval.test.js'), 'desktop source-approval test runs without pnpm install and must be checked');
+
+  const violations = [];
+  for (const [entry, callers] of [...preInstallScripts].sort()) {
+    const visited = new Set();
+    const pending = [resolve(repoRoot, entry)];
+    while (pending.length) {
+      const file = pending.pop();
+      if (visited.has(file)) continue;
+      visited.add(file);
+      const source = await readFile(file, 'utf8');
+      const from = relative(repoRoot, file).replaceAll('\\', '/');
+      for (const specifier of moduleSpecifiers(source, file)) {
+        if (isBuiltin(specifier)) continue;
+        if (specifier.startsWith('.') || specifier.startsWith('file:')) {
+          const target = resolveLocalModule(file, specifier, repoRoot);
+          if (!target) {
+            violations.push(`${entry} (${callers.join(', ')}): ${from} has unresolved local import "${specifier}"`);
+            continue;
+          }
+          if (/\.[cm]?js$/.test(target)) pending.push(target);
+          continue;
+        }
+        violations.push(`${entry} (${callers.join(', ')}): ${from} imports non-builtin "${specifier}"`);
+      }
+    }
+  }
+  assert.deepEqual(violations, [], `scripts run before pnpm install must not import packages:\n${violations.join('\n')}`);
 });

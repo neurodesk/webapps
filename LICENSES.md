@@ -39,6 +39,8 @@ for each app are recorded in `registry/apps.yml`.
   N4 WebAssembly module and the n4 command line
 - `packages/dwidenoise`: BSD-3-Clause (`packages/dwidenoise/LICENSE`), as the DIPY 1.12.1 Patch2Self source it ports;
   attribution in `packages/dwidenoise/NOTICE`. It holds the dwidenoise WebAssembly module and command line
+- `packages/laynii`: BSD-3-Clause (`packages/laynii/LICENSE`), compiled from pinned upstream LayNii v2.10.0 (`LN2_LAYERS` and `LN2_PROFILE`) in single-threaded WebAssembly; attribution in `packages/laynii/NOTICE`
+- `apps/laynii`: BSD-3-Clause (`packages/laynii/LICENSE`), browser interface for `@neurodesk/laynii`
 - `apps/stardist`: BSD-3-Clause (`apps/stardist/LICENSE`), as the StarDist 0.9.1 and CSBDeep 0.8.1 code it
   ports and the pretrained `2D_versatile_fluo`, `2D_versatile_he`, `2D_paper_dsb2018` and `3D_demo` models
   it runs; attribution, and the Boost Software License of the bundled `clipper-lib`, in `apps/stardist/NOTICE`.

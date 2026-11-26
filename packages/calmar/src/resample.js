@@ -157,3 +157,82 @@ export function resampleAffine(src, srcDims, srcAffine, dstDims, dstAffine, mode
   }
   return out;
 }
+
+// Count labeled atlas voxels whose nearest-neighbour sample falls outside a
+// source grid's field of view (e.g. anterior MNI152 territories beyond the
+// MNI160 registration box). Uses the exact same inv(srcAffine) * atlasAffine
+// mapping as resampleAffine(..., 'nearest').
+export function computeAtlasFovCoverage(
+  atlasData,
+  atlasDims,
+  atlasAffine,
+  srcDims,
+  srcAffine,
+  labelMap = null
+) {
+  const [DX, DY, DZ] = atlasDims;
+  const [SX, SY, SZ] = srcDims;
+  const inv = invertAffine(srcAffine);
+  const M = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 4; c++) {
+      M[r][c] =
+        inv[r][0] * atlasAffine[0][c] +
+        inv[r][1] * atlasAffine[1][c] +
+        inv[r][2] * atlasAffine[2][c] +
+        inv[r][3] * atlasAffine[3][c];
+    }
+  }
+  const byLabel = new Map();
+  let totalLabeledVoxels = 0;
+  let unobservedVoxels = 0;
+  for (let dz = 0; dz < DZ; dz++) {
+    const m0z = M[0][2] * dz + M[0][3];
+    const m1z = M[1][2] * dz + M[1][3];
+    const m2z = M[2][2] * dz + M[2][3];
+    const zOff = dz * DX * DY;
+    for (let dy = 0; dy < DY; dy++) {
+      const m0yz = M[0][1] * dy + m0z;
+      const m1yz = M[1][1] * dy + m1z;
+      const m2yz = M[2][1] * dy + m2z;
+      const yzOff = dy * DX + zOff;
+      for (let dx = 0; dx < DX; dx++) {
+        const label = atlasData[dx + yzOff];
+        if (!label) continue;
+        if (labelMap && !Object.prototype.hasOwnProperty.call(labelMap, label)) continue;
+        totalLabeledVoxels++;
+        let entry = byLabel.get(label);
+        if (!entry) {
+          entry = { total: 0, unobserved: 0 };
+          byLabel.set(label, entry);
+        }
+        entry.total++;
+        const ix = Math.round(M[0][0] * dx + m0yz);
+        const iy = Math.round(M[1][0] * dx + m1yz);
+        const iz = Math.round(M[2][0] * dx + m2yz);
+        if (ix < 0 || ix >= SX || iy < 0 || iy >= SY || iz < 0 || iz >= SZ) {
+          unobservedVoxels++;
+          entry.unobserved++;
+        }
+      }
+    }
+  }
+  const clippedRegions = [];
+  for (const [label, counts] of byLabel.entries()) {
+    if (counts.unobserved === 0) continue;
+    clippedRegions.push({
+      label,
+      name: labelMap?.[label] || `Parcel ${label}`,
+      unobservedVoxels: counts.unobserved,
+      totalVoxels: counts.total,
+      unobservedFraction: counts.total > 0 ? counts.unobserved / counts.total : 0
+    });
+  }
+  clippedRegions.sort((a, b) => (b.unobservedFraction - a.unobservedFraction) || (b.unobservedVoxels - a.unobservedVoxels) || a.name.localeCompare(b.name));
+  return {
+    totalLabeledVoxels,
+    unobservedVoxels,
+    unobservedFraction: totalLabeledVoxels > 0 ? unobservedVoxels / totalLabeledVoxels : 0,
+    clippedRegions
+  };
+}

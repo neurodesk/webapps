@@ -3366,6 +3366,29 @@
         }
       ],
       "containers": []
+    },
+    "vesselcharter": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "laynii": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": [
+        {
+          "id": "laynii",
+          "label": "laynii 2.10.0 (20261012)",
+          "url": "https://hub.docker.com/r/vnmd/laynii_2.10.0",
+          "dockerImage": "vnmd/laynii_2.10.0:20261012",
+          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/laynii_2.10.0_20261012.simg",
+          "apptainerName": "laynii_2.10.0_20261012"
+        }
+      ]
     }
   }
 }
