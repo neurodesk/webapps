@@ -1,0 +1,37 @@
+{
+  "name": "@neurodesk/openads",
+  "version": "0.1.20261125",
+  "description": "OpenADS acute stroke DWI/PWI segmentation, radiological reporting, TreeSHAP and StrokeView cohort analysis",
+  "type": "module",
+  "license": "SEE LICENSE IN LICENSE",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./assets": "./src/assets.js",
+    "./volume": "./src/volume.js",
+    "./ttp": "./src/ttp.js",
+    "./dagmnet": "./src/dagmnet.js",
+    "./atlases": "./src/atlases.js",
+    "./treeshap": "./src/treeshap.js",
+    "./cohort": "./src/cohort.js",
+    "./manifest": "./model.manifest.json"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/*.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/openads"
+  },
+  "files": [
+    "src",
+    "model.manifest.json",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ]
+}

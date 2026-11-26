@@ -2226,6 +2226,31 @@ apps:
       shared_runtime: false
       browser_test: true
       release: true
+  - id: openads
+    path: openads
+    catalog: neuro
+    title: OpenADS
+    description: Segment acute stroke on DWI/PWI with radiological reports.
+    categories: [segmentation, lesion-mapping]
+    keywords: [stroke, acute stroke, ischemic stroke, DWI, ADC, PWI, TTP, hypoperfusion, penumbra, ASPECTS, arterial territory, OpenADS, DAGMNet, StrokeView, StrokeFAIR]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
+    legacy_domain: null
+    runtime: vite-webgpu
+    model_manifest: models/openads.manifest.json
+    asset_manifest_schema: scientific-assets-v1
+    source: neurodesk/webapps@local
+    license: JHU-Non-Profit-Research
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: true
   - id: instanseg
     path: instanseg
     catalog: microscopy

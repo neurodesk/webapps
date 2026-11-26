@@ -3406,6 +3406,13 @@
         }
       ]
     },
+    "openads": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
     "instanseg": {
       "desktop": true,
       "profile": "interactive",
