@@ -1644,9 +1644,18 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
   const shortBranch = ref.replace(/^refs\/heads\//, '');
   const trackingRef = `refs/remotes/${remote}/${shortBranch}`;
   assertNotSymbolicRef(repoTop, trackingRef);
-  const remoteExists = remoteBranchExists(repoTop, remote, ref);
+  let remoteExists = remoteBranchExists(repoTop, remote, ref);
   if (remoteExists) {
-    git(['-c', `remote.${remote}.fetch=`, 'fetch', '--no-tags', '--no-prune', '--no-recurse-submodules', '--no-write-fetch-head', '--refmap=', '--', remote, `+${ref}:${trackingRef}`], { cwd: repoTop });
+    try {
+      git(['-c', `remote.${remote}.fetch=`, 'fetch', '--no-tags', '--no-prune', '--no-recurse-submodules', '--no-write-fetch-head', '--refmap=', '--', remote, `+${ref}:${trackingRef}`], { cwd: repoTop });
+    } catch (error) {
+      const detail = `${error?.stderr || ''}\n${error?.message || ''}`;
+      if (/couldn't find remote ref|no such ref/i.test(detail)) {
+        remoteExists = false;
+      } else {
+        throw error;
+      }
+    }
   }
   const remoteState = remoteExists ? readBeadsTree(repoTop, trackingRef) : { sha: null, beads: new Map() };
 

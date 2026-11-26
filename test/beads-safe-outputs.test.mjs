@@ -55,6 +55,7 @@ function createFixtureRepo(t) {
   writeFileSync(outsideFile, 'export const secret = 1;\n', 'utf8');
 
   runGit(scratchRoot, ['init', '--bare', remoteDir]);
+  configureGitIdentity(remoteDir);
   runGit(scratchRoot, ['clone', remoteDir, workDir]);
   configureGitIdentity(workDir);
 

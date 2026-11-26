@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
+import { posix as posixPath } from 'node:path';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import YAML from 'yaml';
@@ -381,42 +382,83 @@ const GH_AW_BOILERPLATE_ALLOWED_ACTIONS = Object.freeze({
   pre_activation: new Set(['github/gh-aw-actions/setup', 'actions/github-script']),
   unlock: new Set(['github/gh-aw-actions/setup', 'actions/github-script']),
 });
+const GH_AW_BOILERPLATE_CJS_MODULES = Object.freeze({
+  activation: new Set([
+    'generate_aw_info.cjs',
+    'restore_aic_scan_cache.cjs',
+    'check_daily_aic_workflow_guardrail.cjs',
+    'check_workflow_timestamp_api.cjs',
+    'check_version_updates.cjs',
+    'create_prompt.cjs',
+    'interpolate_prompt.cjs',
+    'skill_inventory.cjs',
+  ]),
+  conclusion: new Set([
+    'handle_noop_message.cjs',
+    'missing_tool.cjs',
+    'report_incomplete_handler.cjs',
+    'handle_agent_failure.cjs',
+    'generate_usage_artifacts.cjs',
+  ]),
+  pre_activation: new Set(),
+  unlock: new Set(),
+});
+const GH_AW_SETUP_ALLOWED_WITH_KEYS = new Set(['destination', 'job-name', 'trace-id', 'parent-span-id', 'safe-output-artifact-client']);
+const GH_AW_CHECKOUT_EXACT_WITH_KEYS = ['fetch-depth', 'persist-credentials', 'sparse-checkout', 'sparse-checkout-cone-mode'];
+const GH_AW_SCRIPT_ALLOWED_WITH_KEYS = new Set(['script', 'github-token']);
 const GH_AW_ACTIVATION_SPARSE_CHECKOUT = '.github\n.agents\n.claude\n.codex\n.gemini\n.pi';
-const GH_AW_GITHUB_SCRIPT_DISPATCH = /^const path = require\('path'\);\nconst actionsDir = path\.join\(process\.env\.RUNNER_TEMP, 'gh-aw', 'actions'\);\nconst \{ setupGlobals \} = require\(path\.join\(actionsDir, 'setup_globals\.cjs'\)\);\nsetupGlobals\(core, github, context, exec, io, getOctokit\);\nconst \{ main \} = require\(path\.join\(actionsDir, '[a-z0-9_]+\.cjs'\)\);\nawait main\((?:core, context|core|)\);$/;
-const GH_AW_GITHUB_SCRIPT_PROMPT = /^const promptEnvironment = new Set\(\[(?:"[A-Z0-9_]+",)*"[A-Z0-9_]+"\]\);\nfor \(const name of Object\.keys\(process\.env\)\) \{\n {2}if \(!promptEnvironment\.has\(name\)\) delete process\.env\[name\];\n\}\nglobal\.core = core;\nglobal\.context = context;\nconst \{ main \} = require\(process\.env\.GH_AW_ACTIONS_DIR \+ '\/(?:create_prompt|interpolate_prompt)\.cjs'\);\nawait main\((?:core|)\);$/;
+const GH_AW_GITHUB_SCRIPT_DISPATCH = /^const path = require\('path'\);\nconst actionsDir = path\.join\(process\.env\.RUNNER_TEMP, 'gh-aw', 'actions'\);\nconst \{ setupGlobals \} = require\(path\.join\(actionsDir, 'setup_globals\.cjs'\)\);\nsetupGlobals\(core, github, context, exec, io, getOctokit\);\nconst \{ main \} = require\(path\.join\(actionsDir, '([a-z0-9_]+\.cjs)'\)\);\nawait main\((?:core, context|core|)\);$/;
+const GH_AW_GITHUB_SCRIPT_PROMPT = /^const promptEnvironment = new Set\(\[(?:"[A-Z0-9_]+",)*"[A-Z0-9_]+"\]\);\nfor \(const name of Object\.keys\(process\.env\)\) \{\n {2}if \(!promptEnvironment\.has\(name\)\) delete process\.env\[name\];\n\}\nglobal\.core = core;\nglobal\.context = context;\nconst \{ main \} = require\(process\.env\.GH_AW_ACTIONS_DIR \+ '\/((?:create_prompt|interpolate_prompt)\.cjs)'\);\nawait main\((?:core|)\);$/;
+
+function isSafeTmpGhAwPath(rawPath) {
+  if (typeof rawPath !== 'string') return false;
+  const trimmed = rawPath.trim();
+  if (!trimmed || trimmed.includes('\\') || trimmed.split('/').includes('..')) return false;
+  const normalized = posixPath.normalize(trimmed);
+  return normalized === '/tmp/gh-aw' || normalized.startsWith('/tmp/gh-aw/');
+}
 
 function isVerifiedBoilerplateActionStep(id, step, allowedActions) {
   if (!PINNED_ACTION.test(step.uses)) return false;
   const actionRepo = step.uses.slice(0, step.uses.lastIndexOf('@'));
+  const withObj = step.with && typeof step.with === 'object' ? step.with : {};
+  const withKeys = Object.keys(withObj);
+
   if (actionRepo === 'github/gh-aw-actions/setup') {
     return step.name === 'Setup Scripts'
-      && step.with?.destination === '${{ runner.temp }}/gh-aw/actions';
+      && withObj.destination === '${{ runner.temp }}/gh-aw/actions'
+      && withKeys.every((key) => GH_AW_SETUP_ALLOWED_WITH_KEYS.has(key));
   }
   if (actionRepo === 'actions/checkout') {
-    const sparse = typeof step.with?.['sparse-checkout'] === 'string'
-      ? step.with['sparse-checkout'].replace(/\r\n/g, '\n').trim()
+    const sparse = typeof withObj['sparse-checkout'] === 'string'
+      ? withObj['sparse-checkout'].replace(/\r\n/g, '\n').trim()
       : '';
     return id === 'activation'
       && step.name === 'Checkout .github and .agents folders'
-      && step.with?.['persist-credentials'] === false
-      && step.with?.['sparse-checkout-cone-mode'] === true
-      && step.with?.['fetch-depth'] === 1
+      && withKeys.length === GH_AW_CHECKOUT_EXACT_WITH_KEYS.length
+      && withKeys.slice().sort().every((key, i) => key === GH_AW_CHECKOUT_EXACT_WITH_KEYS[i])
+      && withObj['persist-credentials'] === false
+      && withObj['sparse-checkout-cone-mode'] === true
+      && withObj['fetch-depth'] === 1
       && sparse === GH_AW_ACTIVATION_SPARSE_CHECKOUT;
   }
   if (!allowedActions.has(actionRepo)) return false;
   if (actionRepo === 'actions/github-script') {
-    const script = typeof step.with?.script === 'string'
-      ? step.with.script.replace(/\r\n/g, '\n').trim()
+    if (!withKeys.every((key) => GH_AW_SCRIPT_ALLOWED_WITH_KEYS.has(key))) return false;
+    const script = typeof withObj.script === 'string'
+      ? withObj.script.replace(/\r\n/g, '\n').trim()
       : '';
-    return GH_AW_GITHUB_SCRIPT_DISPATCH.test(script) || GH_AW_GITHUB_SCRIPT_PROMPT.test(script);
+    const match = script.match(GH_AW_GITHUB_SCRIPT_DISPATCH) || script.match(GH_AW_GITHUB_SCRIPT_PROMPT);
+    if (!match) return false;
+    return GH_AW_BOILERPLATE_CJS_MODULES[id]?.has(match[1]) === true;
   }
   if (actionRepo === 'actions/upload-artifact' || actionRepo === 'actions/download-artifact') {
-    const rawPath = typeof step.with?.path === 'string'
-      ? step.with.path.replace(/\r\n/g, '\n').trim()
+    const rawPath = typeof withObj.path === 'string'
+      ? withObj.path.replace(/\r\n/g, '\n').trim()
       : '';
     if (!rawPath) return false;
     const paths = rawPath.split('\n').map((line) => line.trim()).filter(Boolean);
-    return paths.length > 0 && paths.every((p) => p.startsWith('/tmp/gh-aw/'));
+    return paths.length > 0 && paths.every((p) => isSafeTmpGhAwPath(p));
   }
   return false;
 }
@@ -483,6 +525,21 @@ function isVerifiedBoilerplateJob(id, job, frontmatter) {
   });
 }
 
+function isCompilerSafeJobDownloadStep(step) {
+  if (step?.name !== 'Download agent output artifact' || !GH_AW_DOWNLOAD_ARTIFACT.test(step?.uses ?? '')) {
+    return false;
+  }
+  const withObj = step.with && typeof step.with === 'object' ? step.with : {};
+  const keys = Object.keys(withObj).sort();
+  return keys.length === 3
+    && keys[0] === 'merge-multiple'
+    && keys[1] === 'path'
+    && keys[2] === 'pattern'
+    && withObj['merge-multiple'] === true
+    && withObj.pattern === '{agent,agent-output-fallback}'
+    && withObj.path === '${{ runner.temp }}/gh-aw/safe-jobs/';
+}
+
 function isStepBoundedSafeOutputJob(id, job, frontmatter) {
   const safeOutputsTimeoutOk = hasValidTimeout(frontmatter?.['safe-outputs']?.['timeout-minutes']);
   const declaredSafeOutputJobs = new Set(
@@ -493,10 +550,8 @@ function isStepBoundedSafeOutputJob(id, job, frontmatter) {
   if (steps.length < 2) return false;
   const [firstStep, ...authoredSteps] = steps;
   // gh-aw v1.2.2 prepends the compiler-managed "Download agent output artifact" step without a
-  // timeout; every authored step (both `uses:` and `run:`) must declare an explicit timeout-minutes.
-  const firstIsCompilerDownload = firstStep?.name === 'Download agent output artifact'
-    && GH_AW_DOWNLOAD_ARTIFACT.test(firstStep?.uses ?? '');
-  const stepsToCheck = firstIsCompilerDownload ? authoredSteps : steps;
+  // timeout; verify its exact compiler inputs and require explicit timeout-minutes on every authored step.
+  const stepsToCheck = isCompilerSafeJobDownloadStep(firstStep) ? authoredSteps : steps;
   return stepsToCheck.length > 0 && stepsToCheck.every((step) => hasValidTimeout(step?.['timeout-minutes']));
 }
 
@@ -600,6 +655,10 @@ test('gh-aw timeout exemption requires verified frontmatter/body hashes, exact c
     '    steps:',
     '      - name: Download agent output artifact',
     `        uses: actions/download-artifact@${downloadSha}`,
+    '        with:',
+    '          pattern: "{agent,agent-output-fallback}"',
+    '          merge-multiple: true',
+    '          path: ${{ runner.temp }}/gh-aw/safe-jobs/',
     `      - uses: actions/checkout@${checkoutSha}`,
     '        timeout-minutes: 5',
     '      - run: echo ok',
@@ -611,6 +670,21 @@ test('gh-aw timeout exemption requires verified frontmatter/body hashes, exact c
     `        uses: github/gh-aw-actions/setup@${setupSha}`,
     '        with:',
     '          destination: ${{ runner.temp }}/gh-aw/actions',
+    '      - name: Download workflow metadata',
+    `        uses: actions/download-artifact@${downloadSha}`,
+    '        with:',
+    '          name: info',
+    '          path: /tmp/gh-aw/',
+    '      - name: Process no-op messages',
+    '        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3',
+    '        with:',
+    '          script: |',
+    "            const path = require('path');",
+    "            const actionsDir = path.join(process.env.RUNNER_TEMP, 'gh-aw', 'actions');",
+    "            const { setupGlobals } = require(path.join(actionsDir, 'setup_globals.cjs'));",
+    '            setupGlobals(core, github, context, exec, io, getOctokit);',
+    "            const { main } = require(path.join(actionsDir, 'handle_noop_message.cjs'));",
+    '            await main();',
   ].join('\n');
   assert.deepEqual(findJobsMissingTimeout([{ file: 'demo.lock.yml', text: validLock, sourceMarkdown: validMd }]), []);
 
@@ -660,11 +734,32 @@ test('gh-aw timeout exemption requires verified frontmatter/body hashes, exact c
     findJobsMissingTimeout([{ file: 'demo.lock.yml', text: injectedCustomScript, sourceMarkdown: validMd }]),
     ['demo.lock.yml: conclusion'],
   );
-  // Altering activation sparse-checkout pattern rejects the exemption.
+  // Altering activation sparse-checkout pattern or adding extra checkout inputs (e.g. lfs: true) rejects the exemption.
   const alteredSparseCheckout = validLock.replace('            .pi\n', '            apps\n');
   assert.deepEqual(
     findJobsMissingTimeout([{ file: 'demo.lock.yml', text: alteredSparseCheckout, sourceMarkdown: validMd }]),
     ['demo.lock.yml: activation'],
+  );
+  const extraCheckoutInput = validLock.replace('          fetch-depth: 1\n', '          fetch-depth: 1\n          lfs: true\n');
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: extraCheckoutInput, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: activation'],
+  );
+  // Changing conclusion dispatcher module or escaping /tmp/gh-aw/ via `..` or changing safe-output download path rejects the exemption.
+  const alteredModule = validLock.replace('handle_noop_message.cjs', 'different_module.cjs');
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: alteredModule, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: conclusion'],
+  );
+  const traversalDownload = validLock.replace('          path: /tmp/gh-aw/\n', '          path: /tmp/gh-aw/../review-demo/\n');
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: traversalDownload, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: conclusion'],
+  );
+  const alteredSafeDownload = validLock.replace('          path: ${{ runner.temp }}/gh-aw/safe-jobs/\n', '          path: /tmp/review-demo/\n');
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: alteredSafeDownload, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: record_finding'],
   );
 
   // Untimed `uses:` action step inside a safe-output job STILL fails.

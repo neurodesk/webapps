@@ -2727,6 +2727,60 @@ test('an app runs its @heavy browser tests only when the change edits it, a fail
   assert.ok(createAppPlan(registry, ['apps/sdc/src/main.js'], workspace).gpuApps.include.every((entry) => !('heavy_tests' in entry)));
 });
 
+function hasVerifiedGhAwLockMetadata(file, text) {
+  if (!/^\.github\/workflows\/[^/]+\.lock\.yml$/.test(file)) return false;
+  const firstLine = text.split('\n', 1)[0] ?? '';
+  const match = firstLine.match(/^# gh-aw-metadata:\s*(\{.*\})$/);
+  if (!match) return false;
+  try {
+    const meta = JSON.parse(match[1]);
+    return meta?.strict === true && typeof meta?.compiler_version === 'string' && /^v\d+\.\d+\.\d+/.test(meta.compiler_version);
+  } catch {
+    return false;
+  }
+}
+
+function yamlContainsUnexpectedExemptRef(text, exemptRef) {
+  let flow;
+  try {
+    flow = parse(text);
+  } catch {
+    return true;
+  }
+  const visit = (value, path = []) => {
+    if (typeof value === 'string') {
+      // Allow only the single compiler-generated env entry on activation's save_base_github_folders step.
+      if (
+        path.length === 6
+        && path[0] === 'jobs'
+        && path[1] === 'activation'
+        && path[2] === 'steps'
+        && path[4] === 'env'
+        && path[5] === 'GH_AW_AGENT_FILES'
+        && value === 'AGENTS.md'
+      ) {
+        const step = flow?.jobs?.activation?.steps?.[path[3]];
+        if (
+          step?.name === 'Save agent config folders for base branch restoration'
+          && typeof step?.run === 'string'
+          && step.run.trim() === 'bash "${RUNNER_TEMP}/gh-aw/actions/save_base_github_folders.sh"'
+        ) {
+          return false;
+        }
+      }
+      return exemptRef.test(value);
+    }
+    if (Array.isArray(value)) {
+      return value.some((item, index) => visit(item, [...path, index]));
+    }
+    if (value && typeof value === 'object') {
+      return Object.entries(value).some(([key, val]) => exemptRef.test(key) || visit(val, [...path, key]));
+    }
+    return false;
+  };
+  return visit(flow);
+}
+
 function unexpectedExemptPathReads(entries) {
   const exemptRef = /\.github\/aw\b|\.github['"],\s*['"]aw['"]|\b(?:AGENTS|AGENT|CLAUDE)\.md\b/;
   const allowedMetadata = (file) => /^apps\/[^/]+\/upstream\.json$/.test(file)
@@ -2734,16 +2788,16 @@ function unexpectedExemptPathReads(entries) {
     || file === 'scripts/lib/app-plan.mjs'
     || file === 'scripts/lib/app-plan-shadow.mjs'
     || file.startsWith('test/');
-  const ghAwAgentFilesEnv = /^GH_AW_AGENT_FILES:\s*"AGENTS\.md"$/;
   const findings = [];
   for (const [file, text] of entries) {
     if (allowedMetadata(file)) continue;
-    const isVerifiedGhAwLock = /^\.github\/workflows\/[^/]+\.lock\.yml$/.test(file)
-      && text.startsWith('# gh-aw-metadata:');
+    if (hasVerifiedGhAwLockMetadata(file, text)) {
+      if (yamlContainsUnexpectedExemptRef(text, exemptRef)) findings.push(file);
+      continue;
+    }
     for (const line of text.split('\n')) {
       const trimmed = line.trim();
       if (trimmed.startsWith('//') || trimmed.startsWith('#')) continue;
-      if (isVerifiedGhAwLock && ghAwAgentFilesEnv.test(trimmed)) continue;
       if (exemptRef.test(trimmed)) {
         findings.push(file);
         break;
@@ -2763,10 +2817,12 @@ test('no app build, package source, root script or workflow reads .github/aw/ or
       ['apps/bison/scripts/join-build.mjs', "readFileSync(join(repoRoot, '.github/aw', 'actions-lock.json'), 'utf8');"],
       ['apps/bison/scripts/split-build.mjs', "readFileSync(join(repoRoot, '.github', 'aw', 'actions-lock.json'), 'utf8');"],
       ['apps/bison/scripts/comment-only.mjs', '// See AGENTS.md for build notes\nexport const ok = true;'],
-      ['.github/workflows/fake.lock.yml', '# gh-aw-metadata: {"strict":true}\nsteps:\n  - run: cat apps/bison/AGENTS.md\n'],
-      ['.github/workflows/real.lock.yml', '# gh-aw-metadata: {"strict":true}\nenv:\n  GH_AW_AGENT_FILES: "AGENTS.md"\n'],
+      ['.github/workflows/fake.lock.yml', '# gh-aw-metadata: {"strict":true,"compiler_version":"v1.2.2"}\njobs:\n  a:\n    steps:\n      - run: cat apps/bison/AGENTS.md\n'],
+      ['.github/workflows/run-block.lock.yml', '# gh-aw-metadata: {"strict":true,"compiler_version":"v1.2.2"}\njobs:\n  activation:\n    steps:\n      - run: |\n          GH_AW_AGENT_FILES: "AGENTS.md"\n'],
+      ['.github/workflows/bad-header.lock.yml', '# gh-aw-metadata: not-json\njobs:\n  activation:\n    steps:\n      - name: Save agent config folders for base branch restoration\n        env:\n          GH_AW_AGENT_FILES: "AGENTS.md"\n        run: bash "${RUNNER_TEMP}/gh-aw/actions/save_base_github_folders.sh"\n'],
+      ['.github/workflows/real.lock.yml', '# gh-aw-metadata: {"strict":true,"compiler_version":"v1.2.2"}\njobs:\n  activation:\n    steps:\n      - name: Save agent config folders for base branch restoration\n        env:\n          GH_AW_AGENT_FILES: "AGENTS.md"\n        run: bash "${RUNNER_TEMP}/gh-aw/actions/save_base_github_folders.sh"\n'],
     ]),
-    ['apps/bison/scripts/build.mjs', 'apps/elastix/scripts/build.mjs', 'apps/bison/scripts/build.mjs', 'apps/bison/scripts/join-build.mjs', 'apps/bison/scripts/split-build.mjs', '.github/workflows/fake.lock.yml'],
+    ['apps/bison/scripts/build.mjs', 'apps/elastix/scripts/build.mjs', 'apps/bison/scripts/build.mjs', 'apps/bison/scripts/join-build.mjs', 'apps/bison/scripts/split-build.mjs', '.github/workflows/fake.lock.yml', '.github/workflows/run-block.lock.yml', '.github/workflows/bad-header.lock.yml'],
   );
   const candidates = filesNaming('\\.github/aw\\b|\\.github[\'"],[[:space:]]*[\'"]aw[\'"]|\\b(AGENTS|AGENT|CLAUDE)\\.md\\b');
   const entries = await Promise.all(candidates.map(async (file) => [file, await readFile(join(repoRoot, file), 'utf8')]));
