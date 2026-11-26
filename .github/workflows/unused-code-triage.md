@@ -17,6 +17,7 @@ permissions:
   copilot-requests: write
 engine: copilot
 strict: true
+checkout: false
 timeout-minutes: 15
 max-turns: 25
 network: defaults
@@ -27,18 +28,14 @@ jobs:
     timeout-minutes: 10
 tools:
   edit: false
-  bash:
-    - "rg *"
-    - "grep *"
-    - "git grep *"
-    - "ls *"
-    - "cat *"
-    - "head *"
-    - "tail *"
-    - "wc *"
-    - "git status*"
-    - "git log *"
+  bash: false
+  cli-proxy: false
+  github: false
 steps:
+  - uses: actions/checkout@v7
+    with:
+      ref: ${{ github.event.repository.default_branch }}
+      persist-credentials: false
   - uses: pnpm/action-setup@v6
   - uses: actions/setup-node@v7
     with:
@@ -58,13 +55,196 @@ steps:
       GIT_CONFIG_VALUE_0="${AUTH_HEADER}" \
       node scripts/beads.mjs sync --remote origin
       node scripts/beads.mjs export --format snapshot --max-items 100 > quality-artifacts/unused-code/beads-snapshot.json
+  - name: Strip git metadata and lock workspace read-only before agent starts
+    run: |
+      rm -rf .git
+      chmod -R a-w apps quality-artifacts/unused-code
+mcp-scripts:
+  read_triage_artifact:
+    description: "Read a slice of one of the generated triage artifacts (summary.md, knip.json, or beads-snapshot.json)"
+    inputs:
+      name:
+        type: string
+        description: "Artifact filename: summary.md, knip.json, or beads-snapshot.json"
+        required: true
+      start_line:
+        type: number
+        description: "1-based start line (default 1)"
+        required: false
+      max_lines:
+        type: number
+        description: "Maximum lines to return (default 200, max 400)"
+        required: false
+    script: |
+      const fs = require('node:fs');
+      const path = require('node:path');
+      const allowed = new Set(['summary.md', 'knip.json', 'beads-snapshot.json']);
+      if (!allowed.has(name)) {
+        throw new Error('Allowed artifacts: summary.md, knip.json, beads-snapshot.json');
+      }
+      const root = process.env.GITHUB_WORKSPACE || process.cwd();
+      const artifactDir = path.join(root, 'quality-artifacts', 'unused-code');
+      const fullPath = path.join(artifactDir, name);
+      if (!fs.existsSync(fullPath) || fs.lstatSync(fullPath).isSymbolicLink() || !fs.statSync(fullPath).isFile()) {
+        throw new Error(`Artifact ${name} not found`);
+      }
+      const lines = fs.readFileSync(fullPath, 'utf8').split('\n');
+      const start = Math.max(1, Number.isInteger(start_line) ? start_line : 1);
+      const count = Math.min(400, Math.max(1, Number.isInteger(max_lines) ? max_lines : 200));
+      const slice = lines.slice(start - 1, start - 1 + count);
+      return { total_lines: lines.length, start_line: start, end_line: start + slice.length - 1, content: slice.join('\n') };
+  list_app_files:
+    description: "List source files inside a first-party non-upstream app directory apps/<app>/"
+    inputs:
+      app:
+        type: string
+        description: "App id under apps/<app>/"
+        required: true
+    script: |
+      const fs = require('node:fs');
+      const path = require('node:path');
+      if (!/^[a-z][a-z0-9-]*$/.test(app || '')) throw new Error('Invalid app id');
+      const root = process.env.GITHUB_WORKSPACE || process.cwd();
+      const appsDir = path.join(root, 'apps');
+      const appDir = path.join(appsDir, app);
+      if (!fs.existsSync(appsDir) || fs.lstatSync(appsDir).isSymbolicLink() || !fs.lstatSync(appsDir).isDirectory()) throw new Error('apps directory invalid');
+      if (!fs.existsSync(appDir) || fs.lstatSync(appDir).isSymbolicLink() || !fs.lstatSync(appDir).isDirectory()) throw new Error('App directory not found');
+      if (fs.existsSync(path.join(appDir, 'upstream.json'))) throw new Error('Upstream-tracked app is out of scope');
+      const appReal = fs.realpathSync(appDir);
+      const results = [];
+      const walk = (dir) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === '.git') continue;
+          const full = path.join(dir, entry.name);
+          if (entry.isSymbolicLink()) continue;
+          if (entry.isDirectory()) {
+            walk(full);
+          } else if (entry.isFile()) {
+            results.push(`apps/${app}/${path.relative(appReal, full).replaceAll(path.sep, '/')}`);
+            if (results.length >= 500) return;
+          }
+        }
+      };
+      walk(appReal);
+      results.sort();
+      return { app, count: results.length, files: results };
+  read_app_file:
+    description: "Read a slice of a regular file strictly contained inside apps/<app>/"
+    inputs:
+      app:
+        type: string
+        description: "App id under apps/<app>/"
+        required: true
+      file:
+        type: string
+        description: "Repo-relative path starting with apps/<app>/"
+        required: true
+      start_line:
+        type: number
+        description: "1-based start line (default 1)"
+        required: false
+      max_lines:
+        type: number
+        description: "Maximum lines to return (default 200, max 400)"
+        required: false
+    script: |
+      const fs = require('node:fs');
+      const path = require('node:path');
+      if (!/^[a-z][a-z0-9-]*$/.test(app || '')) throw new Error('Invalid app id');
+      if (typeof file !== 'string' || !file.startsWith(`apps/${app}/`) || file.includes('..') || file.includes('\\')) {
+        throw new Error(`File must be inside apps/${app}/`);
+      }
+      const root = process.env.GITHUB_WORKSPACE || process.cwd();
+      const appsDir = path.join(root, 'apps');
+      const appDir = path.join(appsDir, app);
+      if (!fs.existsSync(appsDir) || fs.lstatSync(appsDir).isSymbolicLink() || !fs.lstatSync(appsDir).isDirectory()) throw new Error('apps directory invalid');
+      if (!fs.existsSync(appDir) || fs.lstatSync(appDir).isSymbolicLink() || !fs.lstatSync(appDir).isDirectory()) throw new Error('App directory not found');
+      if (fs.existsSync(path.join(appDir, 'upstream.json'))) throw new Error('Upstream-tracked app is out of scope');
+      const appReal = fs.realpathSync(appDir);
+      const target = path.resolve(root, file);
+      if (!fs.existsSync(target) || fs.lstatSync(target).isSymbolicLink()) throw new Error('File not found');
+      const targetReal = fs.realpathSync(target);
+      const rel = path.relative(appReal, targetReal);
+      if (!rel || rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel) || !fs.statSync(targetReal).isFile()) {
+        throw new Error('Path escapes app directory');
+      }
+      const lines = fs.readFileSync(targetReal, 'utf8').split('\n');
+      const start = Math.max(1, Number.isInteger(start_line) ? start_line : 1);
+      const count = Math.min(400, Math.max(1, Number.isInteger(max_lines) ? max_lines : 200));
+      const slice = lines.slice(start - 1, start - 1 + count);
+      return { file, total_lines: lines.length, start_line: start, end_line: start + slice.length - 1, content: slice.join('\n') };
+  search_app_files:
+    description: "Plain substring search across regular files strictly inside apps/<app>/ (no shell or regex execution)"
+    inputs:
+      app:
+        type: string
+        description: "App id under apps/<app>/"
+        required: true
+      query:
+        type: string
+        description: "Literal substring to search for (2-120 chars)"
+        required: true
+    script: |
+      const fs = require('node:fs');
+      const path = require('node:path');
+      if (!/^[a-z][a-z0-9-]*$/.test(app || '')) throw new Error('Invalid app id');
+      if (typeof query !== 'string' || query.length < 2 || query.length > 120) {
+        throw new Error('query must be 2-120 characters');
+      }
+      const root = process.env.GITHUB_WORKSPACE || process.cwd();
+      const appsDir = path.join(root, 'apps');
+      const appDir = path.join(appsDir, app);
+      if (!fs.existsSync(appsDir) || fs.lstatSync(appsDir).isSymbolicLink() || !fs.lstatSync(appsDir).isDirectory()) throw new Error('apps directory invalid');
+      if (!fs.existsSync(appDir) || fs.lstatSync(appDir).isSymbolicLink() || !fs.lstatSync(appDir).isDirectory()) throw new Error('App directory not found');
+      if (fs.existsSync(path.join(appDir, 'upstream.json'))) throw new Error('Upstream-tracked app is out of scope');
+      const appReal = fs.realpathSync(appDir);
+      const matches = [];
+      const walk = (dir) => {
+        if (matches.length >= 100) return;
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (matches.length >= 100) return;
+          if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === '.git') continue;
+          const full = path.join(dir, entry.name);
+          if (entry.isSymbolicLink()) continue;
+          if (entry.isDirectory()) {
+            walk(full);
+          } else if (entry.isFile()) {
+            const stat = fs.statSync(full);
+            if (stat.size > 512 * 1024) continue;
+            const text = fs.readFileSync(full, 'utf8');
+            if (!text.includes(query)) continue;
+            const relFile = `apps/${app}/${path.relative(appReal, full).replaceAll(path.sep, '/')}`;
+            const lines = text.split('\n');
+            for (let i = 0; i < lines.length && matches.length < 100; i++) {
+              if (lines[i].includes(query)) {
+                matches.push({ file: relFile, line: i + 1, text: lines[i].slice(0, 200) });
+              }
+            }
+          }
+        }
+      };
+      walk(appReal);
+      return { app, query, count: matches.length, matches };
 safe-outputs:
   timeout-minutes: 10
-  noop: {}
+  report-failure-as-issue: false
+  report-failed-jobs: false
+  threat-detection:
+    continue-on-error: false
+    report-as-issue: false
+  noop:
+    report-as-issue: false
+  report-missing-tool:
+    create-issue: false
+  report-incomplete:
+    create-issue: false
+  report-missing-data:
+    create-issue: false
   jobs:
     upsert-unused-code-bead:
       description: "Record or refresh a verified single-app unused-code finding on the CI-silent refs/heads/memory/beads branch"
       runs-on: ubuntu-latest
+      if: "needs.detection.outputs.detection_success == 'true' && needs.detection.outputs.detection_conclusion == 'success'"
       permissions:
         contents: write
       outputs:
@@ -104,12 +284,15 @@ safe-outputs:
           required: false
       steps:
         - uses: actions/checkout@v7
+          timeout-minutes: 5
           with:
             ref: ${{ github.event.repository.default_branch }}
             fetch-depth: 0
             persist-credentials: false
         - uses: pnpm/action-setup@v6
+          timeout-minutes: 3
         - uses: actions/setup-node@v7
+          timeout-minutes: 3
           with:
             node-version: 22
             cache: pnpm
@@ -122,12 +305,13 @@ safe-outputs:
           env:
             DRY_RUN: ${{ inputs.dry_run }}
             GITHUB_TOKEN: ${{ github.token }}
+            GH_AW_DETECTION_SUCCESS: ${{ needs.detection.outputs.detection_success }}
             GIT_AUTHOR_NAME: github-actions[bot]
             GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
             GIT_COMMITTER_NAME: github-actions[bot]
             GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
           run: |
-            ARGS=(--actor gh-aw/unused-code-triage --max-creates 5 --max-updates 10)
+            ARGS=(--actor gh-aw/unused-code-triage --max-creates 5 --max-updates 10 --require-clean-detection)
             if [ "${DRY_RUN}" = "true" ]; then
               ARGS+=(--dry-run)
             fi
@@ -144,9 +328,11 @@ You are a **read-only** repository maintenance analyst for `neurodesk/webapps`.
 
 ## Inputs already generated in the workspace
 
-1. `quality-artifacts/unused-code/summary.md` — concise summary of current Knip unused-code candidates.
-2. `quality-artifacts/unused-code/knip.json` — full structured Knip JSON report.
-3. `quality-artifacts/unused-code/beads-snapshot.json` — bounded snapshot of open Beads items on `refs/heads/memory/beads` (including each bead's `id`, `dedupeKey`, `revision`, and `status`).
+Use the read-only MCP tools (`read_triage_artifact`, `list_app_files`, `read_app_file`, `search_app_files`) to inspect:
+
+1. `summary.md` — concise summary of current Knip unused-code candidates.
+2. `knip.json` — full structured Knip JSON report.
+3. `beads-snapshot.json` — bounded snapshot of open Beads items on `refs/heads/memory/beads` (including each bead's `id`, `dedupeKey`, `revision`, and `status`).
 
 ## Your task
 
@@ -156,7 +342,7 @@ Inspect the report-only Knip candidates (unused exports, types, dependencies, de
    - **Skip** any app that has `apps/<app>/upstream.json` (e.g., `qsmbly`, `seedseg`, `dicompare`).
    - **Skip** shared packages (`packages/*`), native executables (`exes/*`), root `scripts/*`, and `test-utils/*`.
 2. **Verify every candidate in source code before emitting a bead:**
-   - Read the referenced file and search the app (`rg`) to confirm the symbol/dependency is genuinely unused.
+   - Read the referenced file with `read_app_file` and search the app with `search_app_files` to confirm the symbol/dependency is genuinely unused.
    - **Skip** anything loaded dynamically at runtime (`_runtime/`, worker URLs, HTML `<script>`/`<link>`, `examples.json`, Vite config, or public API exports consumed by tests or other packages).
 3. **Deduplicate cleanly against `beads-snapshot.json`:**
    - Use deterministic `dedupe_key` format: `knip:apps/<app>/<relative-file>:<symbol>`.

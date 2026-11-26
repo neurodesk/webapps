@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
@@ -331,51 +332,116 @@ test('contract and correctness owners replace duplicate invocations without losi
 });
 
 const GH_AW_BOILERPLATE_JOBS = new Set(['pre_activation', 'activation', 'conclusion', 'unlock']);
+const SHA_64 = /^[0-9a-f]{64}$/;
+const PINNED_ACTION = /^[^@\s]+@[0-9a-f]{40}$/i;
+const GH_AW_SETUP_ACTION = /^github\/gh-aw-actions\/setup@[0-9a-f]{40}$/i;
+const GH_AW_DOWNLOAD_ARTIFACT = /^actions\/download-artifact@[0-9a-f]{40}$/i;
 
 function hasValidTimeout(timeout) {
   return (Number.isInteger(timeout) && timeout > 0)
     || (typeof timeout === 'string' && /^\$\{\{[\s\S]+\}\}$/.test(timeout.trim()));
 }
 
-function parseMarkdownFrontmatter(markdown) {
-  const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+function parseMarkdownWorkflow(markdown) {
+  const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n([\s\S]*))?$/);
   if (!match) return null;
   try {
-    return YAML.parse(match[1]);
+    return {
+      frontmatter: YAML.parse(match[1]),
+      body: (match[2] ?? '').trim(),
+    };
   } catch {
     return null;
   }
+}
+
+function parseVerifiedGhAwLock(file, text, sourceMarkdown) {
+  if (!file.endsWith('.lock.yml') || typeof sourceMarkdown !== 'string') return null;
+  const lines = text.split(/\r?\n/);
+  const metaMatch = lines[0]?.match(/^# gh-aw-metadata:\s*(\{.*\})$/);
+  const manifestMatch = lines[1]?.match(/^# gh-aw-manifest:\s*(\{.*\})$/);
+  if (!metaMatch || !manifestMatch) return null;
+
+  let meta;
+  let manifest;
+  try {
+    meta = JSON.parse(metaMatch[1]);
+    manifest = JSON.parse(manifestMatch[1]);
+  } catch {
+    return null;
+  }
+  if (
+    meta?.strict !== true
+    || typeof meta?.compiler_version !== 'string'
+    || !/^v\d+\.\d+\.\d+/.test(meta.compiler_version)
+    || !SHA_64.test(meta?.frontmatter_hash ?? '')
+    || !SHA_64.test(meta?.body_hash ?? '')
+    || manifest?.version !== 1
+    || !Array.isArray(manifest?.actions)
+  ) {
+    return null;
+  }
+
+  const parsedMd = parseMarkdownWorkflow(sourceMarkdown);
+  if (!parsedMd || !parsedMd.frontmatter || typeof parsedMd.frontmatter !== 'object') return null;
+  const computedBodyHash = createHash('sha256').update(parsedMd.body).digest('hex');
+  if (computedBodyHash !== meta.body_hash) return null;
+
+  return { meta, manifest, frontmatter: parsedMd.frontmatter };
+}
+
+function isVerifiedBoilerplateJob(id, job, frontmatter) {
+  if (!GH_AW_BOILERPLATE_JOBS.has(id)) return false;
+  if (Object.hasOwn(frontmatter?.jobs ?? {}, id)) return false;
+  const steps = Array.isArray(job?.steps) ? job.steps : [];
+  if (steps.length === 0) return false;
+  const setupStep = steps[0];
+  if (setupStep?.name !== 'Setup Scripts' || !GH_AW_SETUP_ACTION.test(setupStep?.uses ?? '')) {
+    return false;
+  }
+  // Every action step in a compiler boilerplate job must be SHA-pinned, and any untimed step must
+  // belong to compiler-generated scripts/actions (never unpinned actions).
+  return steps.every((step) => {
+    if (typeof step?.uses === 'string') return PINNED_ACTION.test(step.uses);
+    return typeof step?.run === 'string' && (
+      step.run.includes('${RUNNER_TEMP}/gh-aw/actions/')
+      || step.run.includes('/tmp/gh-aw/')
+      || step.run.includes('::warning::Threat detection produced no security verdict')
+      || step.run.trim() === 'sleep 10'
+    );
+  });
+}
+
+function isStepBoundedSafeOutputJob(id, job, frontmatter) {
+  const safeOutputsTimeoutOk = hasValidTimeout(frontmatter?.['safe-outputs']?.['timeout-minutes']);
+  const declaredSafeOutputJobs = new Set(
+    Object.keys(frontmatter?.['safe-outputs']?.jobs ?? {}).map((name) => name.replaceAll('-', '_')),
+  );
+  if (!safeOutputsTimeoutOk || !declaredSafeOutputJobs.has(id)) return false;
+  const steps = Array.isArray(job?.steps) ? job.steps : [];
+  if (steps.length < 2) return false;
+  const [firstStep, ...authoredSteps] = steps;
+  // gh-aw v1.2.2 prepends the compiler-managed "Download agent output artifact" step without a
+  // timeout; every authored step (both `uses:` and `run:`) must declare an explicit timeout-minutes.
+  const firstIsCompilerDownload = firstStep?.name === 'Download agent output artifact'
+    && GH_AW_DOWNLOAD_ARTIFACT.test(firstStep?.uses ?? '');
+  const stepsToCheck = firstIsCompilerDownload ? authoredSteps : steps;
+  return stepsToCheck.length > 0 && stepsToCheck.every((step) => hasValidTimeout(step?.['timeout-minutes']));
 }
 
 function findJobsMissingTimeout(entries) {
   const missing = [];
   for (const { file, text, sourceMarkdown } of entries) {
     const flow = YAML.parse(text);
-    const isGhAwLock = file.endsWith('.lock.yml')
-      && text.startsWith('# gh-aw-metadata:')
-      && typeof sourceMarkdown === 'string';
-    const frontmatter = isGhAwLock ? parseMarkdownFrontmatter(sourceMarkdown) : null;
-    const safeOutputsTimeoutOk = frontmatter
-      && hasValidTimeout(frontmatter['safe-outputs']?.['timeout-minutes']);
-    const declaredSafeOutputJobs = new Set(
-      Object.keys(frontmatter?.['safe-outputs']?.jobs ?? {}).map((name) => name.replaceAll('-', '_')),
-    );
+    const ghAw = parseVerifiedGhAwLock(file, text, sourceMarkdown);
 
     for (const [id, job] of Object.entries(flow?.jobs ?? {})) {
       if (job?.uses) continue;
       if (hasValidTimeout(job?.['timeout-minutes'])) continue;
 
-      if (isGhAwLock && frontmatter) {
-        // gh-aw v1.2.2 compiler boilerplate jobs cannot take explicit timeout-minutes in source frontmatter.
-        if (GH_AW_BOILERPLATE_JOBS.has(id)) continue;
-        // gh-aw v1.2.2 rejects timeout-minutes on safe-outputs.jobs.<id>, so require safe-outputs.timeout-minutes
-        // in the paired .md source plus explicit step-level timeout-minutes on every `run:` step in the job.
-        if (declaredSafeOutputJobs.has(id) && safeOutputsTimeoutOk) {
-          const runSteps = (job.steps ?? []).filter((step) => typeof step?.run === 'string');
-          if (runSteps.length > 0 && runSteps.every((step) => hasValidTimeout(step['timeout-minutes']))) {
-            continue;
-          }
-        }
+      if (ghAw) {
+        if (isVerifiedBoilerplateJob(id, job, ghAw.frontmatter)) continue;
+        if (isStepBoundedSafeOutputJob(id, job, ghAw.frontmatter)) continue;
       }
 
       missing.push(`${file}: ${id}`);
@@ -404,7 +470,13 @@ test('every non-reusable workflow job declares an explicit timeout-minutes', asy
   assert.deepEqual(missing, [], `jobs missing explicit timeout-minutes: ${missing.join(', ')}`);
 });
 
-test('gh-aw timeout exemption only covers verified compiled boilerplate and step-bounded safe-output jobs', () => {
+test('gh-aw timeout exemption requires verified metadata, body hash, compiler boilerplate steps, and timeouts on every authored safe-output step', () => {
+  const body = 'Inspect unused code candidates.';
+  const bodyHash = createHash('sha256').update(body).digest('hex');
+  const frontmatterHash = 'a'.repeat(64);
+  const setupSha = '53d0749e19424a918acd82b4d140264ce48f2f14';
+  const downloadSha = '9000827ccba6bdab643e8b6fd33ac0654aef8333';
+  const checkoutSha = '3d3c42e5aac5ba805825da76410c181273ba90b1';
   const validMd = [
     '---',
     'name: demo',
@@ -414,13 +486,21 @@ test('gh-aw timeout exemption only covers verified compiled boilerplate and step
     '    record-finding:',
     '      runs-on: ubuntu-latest',
     '---',
-    'body',
+    body,
+  ].join('\n');
+  const validHeader = [
+    `# gh-aw-metadata: ${JSON.stringify({ schema_version: 'v4', frontmatter_hash: frontmatterHash, body_hash: bodyHash, compiler_version: 'v1.2.2', strict: true })}`,
+    `# gh-aw-manifest: ${JSON.stringify({ version: 1, actions: [] })}`,
   ].join('\n');
   const validLock = [
-    '# gh-aw-metadata: {"compiler_version":"v1.2.2"}',
+    validHeader,
     'jobs:',
     '  activation:',
     '    runs-on: ubuntu-slim',
+    '    steps:',
+    '      - name: Setup Scripts',
+    `        uses: github/gh-aw-actions/setup@${setupSha}`,
+    '      - run: bash "${RUNNER_TEMP}/gh-aw/actions/mask_otlp_headers.sh"',
     '  agent:',
     '    runs-on: ubuntu-latest',
     '    timeout-minutes: 20',
@@ -433,32 +513,50 @@ test('gh-aw timeout exemption only covers verified compiled boilerplate and step
     '  record_finding:',
     '    runs-on: ubuntu-latest',
     '    steps:',
+    '      - name: Download agent output artifact',
+    `        uses: actions/download-artifact@${downloadSha}`,
+    `      - uses: actions/checkout@${checkoutSha}`,
+    '        timeout-minutes: 5',
     '      - run: echo ok',
     '        timeout-minutes: 5',
     '  conclusion:',
     '    runs-on: ubuntu-slim',
+    '    steps:',
+    '      - name: Setup Scripts',
+    `        uses: github/gh-aw-actions/setup@${setupSha}`,
   ].join('\n');
   assert.deepEqual(findJobsMissingTimeout([{ file: 'demo.lock.yml', text: validLock, sourceMarkdown: validMd }]), []);
 
-  // Normal .yml workflows get no exemption even if a job is named activation/conclusion.
+  // Normal .yml workflows get no exemption even with gh-aw headers and job IDs.
   assert.deepEqual(
-    findJobsMissingTimeout([{ file: 'regular.yml', text: 'jobs:\n  activation:\n    runs-on: ubuntu-latest\n', sourceMarkdown: null }]),
-    ['regular.yml: activation'],
+    findJobsMissingTimeout([{ file: 'regular.yml', text: validLock, sourceMarkdown: validMd }]),
+    ['regular.yml: activation', 'regular.yml: record_finding', 'regular.yml: conclusion'],
   );
 
-  // A .lock.yml without gh-aw header or paired .md gets no exemption.
+  // Stale body hash (edited .md without recompile) or hand-written boilerplate steps reject the exemption.
   assert.deepEqual(
-    findJobsMissingTimeout([{ file: 'fake.lock.yml', text: 'jobs:\n  activation:\n    runs-on: ubuntu-latest\n', sourceMarkdown: validMd }]),
-    ['fake.lock.yml: activation'],
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: validLock, sourceMarkdown: `${validMd}\nextra line` }]),
+    ['demo.lock.yml: activation', 'demo.lock.yml: record_finding', 'demo.lock.yml: conclusion'],
+  );
+  const handWrittenBoilerplate = validLock.replace(
+    'bash "${RUNNER_TEMP}/gh-aw/actions/mask_otlp_headers.sh"',
+    'echo hand-written',
   );
   assert.deepEqual(
-    findJobsMissingTimeout([{ file: 'orphan.lock.yml', text: validLock, sourceMarkdown: null }]),
-    ['orphan.lock.yml: activation', 'orphan.lock.yml: record_finding', 'orphan.lock.yml: conclusion'],
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: handWrittenBoilerplate, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: activation'],
+  );
+
+  // Untimed `uses:` action step inside a safe-output job STILL fails.
+  const untimedActionStep = validLock.replace(`      - uses: actions/checkout@${checkoutSha}\n        timeout-minutes: 5\n`, `      - uses: actions/checkout@${checkoutSha}\n`);
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: untimedActionStep, sourceMarkdown: validMd }]),
+    ['demo.lock.yml: record_finding'],
   );
 
   // Core gh-aw jobs (agent, detection, safe_outputs) and custom non-safe-output jobs still require job-level timeout-minutes.
   const missingCore = [
-    '# gh-aw-metadata: {"compiler_version":"v1.2.2"}',
+    validHeader,
     'jobs:',
     '  agent:',
     '    runs-on: ubuntu-latest',
@@ -472,12 +570,5 @@ test('gh-aw timeout exemption only covers verified compiled boilerplate and step
   assert.deepEqual(
     findJobsMissingTimeout([{ file: 'demo.lock.yml', text: missingCore, sourceMarkdown: validMd }]),
     ['demo.lock.yml: agent', 'demo.lock.yml: detection', 'demo.lock.yml: safe_outputs', 'demo.lock.yml: custom_extra'],
-  );
-
-  // A safe-output custom job missing step-level timeout-minutes on any run step still fails.
-  const unboundedStep = validLock.replace('        timeout-minutes: 5\n', '');
-  assert.deepEqual(
-    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: unboundedStep, sourceMarkdown: validMd }]),
-    ['demo.lock.yml: record_finding'],
   );
 });

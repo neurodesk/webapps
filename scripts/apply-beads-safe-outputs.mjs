@@ -20,11 +20,11 @@ function parseStrictPositiveInt(value, flag) {
   return parsed;
 }
 
-function sanitizeAnnotationText(value) {
+function sanitizeDiagnosticText(value) {
   let out = '';
   for (const ch of String(value)) {
-    const code = ch.charCodeAt(0);
-    if (code < 0x20 || code === 0x7f) {
+    const code = ch.codePointAt(0);
+    if (code < 0x20 || code === 0x7f || /[\p{Cc}\p{Cf}]/u.test(ch)) {
       out += ' ';
     } else if (ch === '%') {
       out += '%25';
@@ -54,6 +54,7 @@ async function main() {
       'item-type': { type: 'string', default: UNUSED_CODE_ITEM_TYPE },
       'dry-run': { type: 'boolean', default: false },
       'no-sync': { type: 'boolean', default: false },
+      'require-clean-detection': { type: 'boolean', default: false },
       json: { type: 'boolean', default: false },
     },
   });
@@ -75,12 +76,15 @@ async function main() {
     staged,
     dryRun: values['dry-run'],
     skipSync: values['no-sync'],
+    requireCleanDetection: values['require-clean-detection'],
+    detectionConclusion: process.env.GH_AW_DETECTION_CONCLUSION ?? null,
+    detectionSuccess: process.env.GH_AW_DETECTION_SUCCESS ?? null,
     itemType: values['item-type'],
   });
 
   for (const item of result.skipped) {
-    const label = item.dedupeKey ? `${sanitizeAnnotationText(item.dedupeKey)}: ` : '';
-    process.stderr.write(`::warning::Skipped invalid bead item #${item.index + 1}: ${label}${sanitizeAnnotationText(item.reason)}\n`);
+    const label = item.dedupeKey ? `${sanitizeDiagnosticText(item.dedupeKey)}: ` : '';
+    process.stderr.write(`::warning::Skipped invalid bead item #${item.index + 1}: ${label}${sanitizeDiagnosticText(item.reason)}\n`);
   }
 
   const summary = formatSafeOutputsSummary(result, {
@@ -108,6 +112,6 @@ async function main() {
 
 main().catch((error) => {
   writeGithubOutput(process.env.GITHUB_OUTPUT, { status: 'failure' });
-  process.stderr.write(`Error: ${error.message}\n`);
+  process.stderr.write(`Error: ${sanitizeDiagnosticText(error.message)}\n`);
   process.exitCode = 1;
 });

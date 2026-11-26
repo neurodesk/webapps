@@ -1,13 +1,13 @@
-import { existsSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { loadAppsRegistry } from './apps-registry.mjs';
 import {
+  DEFAULT_BEADS_REF,
   LIMITS,
   applyOperations,
+  applyRemoteBeadsRef,
   mutateBeadsRef,
   readBeadsFromRef,
-  syncBeadsRef,
-  DEFAULT_BEADS_REF,
 } from './beads.mjs';
 import { upstreamAppPrefixes } from '../report-unused-code.mjs';
 
@@ -15,28 +15,26 @@ export const UNUSED_CODE_ITEM_TYPE = 'upsert_unused_code_bead';
 export const DEFAULT_TRIAGE_ACTOR = 'gh-aw/unused-code-triage';
 
 const APP_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
+const FORBIDDEN_DEDUPE_UNICODE = /[\p{Cc}\p{Cf}\p{Cs}\p{Cn}\s]/u;
 const KNIP_ARTIFACT_PATH = 'quality-artifacts/unused-code/knip.json';
 
 function hasForbiddenDedupeChar(value) {
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    if (code <= 0x20 || code === 0x7f) return true;
-  }
-  return /\s/.test(value);
+  return FORBIDDEN_DEDUPE_UNICODE.test(value);
 }
 
 function stripControlChars(value) {
   let out = '';
   let lastWasSpace = false;
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    if (code < 0x20 || code === 0x7f) {
+  for (const ch of String(value)) {
+    const code = ch.codePointAt(0);
+    const isControl = code < 0x20 || code === 0x7f || /[\p{Cc}\p{Cf}]/u.test(ch);
+    if (isControl) {
       if (!lastWasSpace) {
         out += ' ';
         lastWasSpace = true;
       }
     } else {
-      out += value[i];
+      out += ch;
       lastWasSpace = false;
     }
   }
@@ -59,12 +57,41 @@ function parseBoundedInt(raw, field, { min, max }) {
   return value;
 }
 
+function isStrictlyContained(parentReal, childReal) {
+  const rel = relative(parentReal, childReal);
+  return rel !== '' && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+}
+
+function resolveTrustedAppDir(cwd, app) {
+  const appsDir = resolve(cwd, 'apps');
+  if (!existsSync(appsDir)) {
+    throw new Error('apps directory does not exist');
+  }
+  const appsStat = lstatSync(appsDir);
+  if (appsStat.isSymbolicLink() || !appsStat.isDirectory()) {
+    throw new Error('apps directory must be a real directory, not a symlink');
+  }
+  const appDir = resolve(appsDir, app);
+  if (!existsSync(appDir)) {
+    throw new Error(`app directory apps/${app} does not exist`);
+  }
+  const appStat = lstatSync(appDir);
+  if (appStat.isSymbolicLink() || !appStat.isDirectory()) {
+    throw new Error(`app directory apps/${app} must be a real directory, not a symlink`);
+  }
+  const appsReal = realpathSync(appsDir);
+  const appDirReal = realpathSync(appDir);
+  if (!isStrictlyContained(appsReal, appDirReal)) {
+    throw new Error(`app directory apps/${app} escapes apps/`);
+  }
+  return appDirReal;
+}
+
 function isContainedFileInDir(parentReal, targetPath) {
   if (!existsSync(targetPath)) return false;
   const targetReal = realpathSync(targetPath);
   if (!statSync(targetReal).isFile()) return false;
-  const rel = relative(parentReal, targetReal);
-  return rel !== '' && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+  return isStrictlyContained(parentReal, targetReal);
 }
 
 function validateRepoPathForApp(cwd, app, rawPath, { allowKnipArtifact = false } = {}) {
@@ -86,16 +113,22 @@ function validateRepoPathForApp(cwd, app, rawPath, { allowKnipArtifact = false }
   if (!normalized.startsWith(appPrefix)) {
     throw new Error(`path "${normalized}" must stay under ${appPrefix}`);
   }
-  const appDir = resolve(cwd, 'apps', app);
-  if (!existsSync(appDir)) {
-    throw new Error(`app directory apps/${app} does not exist`);
-  }
-  const appDirReal = realpathSync(appDir);
+  const appDirReal = resolveTrustedAppDir(cwd, app);
   const fullPath = resolve(cwd, normalized);
   if (!isContainedFileInDir(appDirReal, fullPath)) {
     throw new Error(`file "${normalized}" does not exist inside apps/${app}/`);
   }
   return normalized;
+}
+
+export function assertCleanThreatDetection({ detectionConclusion, detectionSuccess }) {
+  const conclusion = typeof detectionConclusion === 'string' ? detectionConclusion.trim() : '';
+  const success = typeof detectionSuccess === 'string' ? detectionSuccess.trim() : '';
+  if (conclusion !== 'success' || success !== 'true') {
+    throw new Error(
+      `Threat detection verdict is not cleanly verified (conclusion="${conclusion || 'missing'}", success="${success || 'missing'}"); refusing to apply Beads safe outputs.`,
+    );
+  }
 }
 
 export async function discoverFirstPartyApps(cwd) {
@@ -235,10 +268,18 @@ export async function applyUnusedCodeSafeOutputs(rawOutput, {
   staged = false,
   dryRun = false,
   skipSync = false,
+  requireCleanDetection = false,
+  detectionConclusion = null,
+  detectionSuccess = null,
+  beforePush = null,
   allowedApps = null,
   itemType = UNUSED_CODE_ITEM_TYPE,
   now = new Date(),
 } = {}) {
+  if (requireCleanDetection) {
+    assertCleanThreatDetection({ detectionConclusion, detectionSuccess });
+  }
+
   const matchingItems = parseAgentOutput(rawOutput, itemType);
   if (matchingItems.length === 0) {
     return {
@@ -270,10 +311,42 @@ export async function applyUnusedCodeSafeOutputs(rawOutput, {
   };
 
   const previewOnly = Boolean(staged || dryRun);
-  if (previewOnly) {
-    if (!skipSync) {
-      syncBeadsRef(cwd, { ref, remote, push: false });
+
+  if (!skipSync) {
+    const remoteResult = applyRemoteBeadsRef(cwd, operations, {
+      ref,
+      remote,
+      message: 'beads: weekly unused-code triage',
+      dryRun: previewOnly,
+      beforePush,
+      ...safeOpts,
+    });
+    if (previewOnly) {
+      return {
+        status: 'skipped',
+        staged: true,
+        pushed: false,
+        createdIds: remoteResult.createdIds,
+        updatedIds: remoteResult.updatedIds,
+        untouchedIds: remoteResult.untouchedIds,
+        skipped,
+        message: `Staged preview: ${remoteResult.createdIds.length} create(s), ${remoteResult.updatedIds.length} update(s), ${remoteResult.untouchedIds.length} untouched.`,
+      };
     }
+    return {
+      status: 'success',
+      staged: false,
+      pushed: remoteResult.pushed,
+      commitSha: remoteResult.commitSha,
+      createdIds: remoteResult.createdIds,
+      updatedIds: remoteResult.updatedIds,
+      untouchedIds: remoteResult.untouchedIds,
+      skipped,
+      message: `Applied to ${ref}: ${remoteResult.createdIds.length} created, ${remoteResult.updatedIds.length} updated, ${remoteResult.untouchedIds.length} untouched${remoteResult.pushed ? ' (pushed)' : ' (no remote push needed)'}.`,
+    };
+  }
+
+  if (previewOnly) {
     const { beads } = readBeadsFromRef(cwd, ref);
     const preview = applyOperations(beads, operations, safeOpts);
     return {
@@ -288,36 +361,41 @@ export async function applyUnusedCodeSafeOutputs(rawOutput, {
     };
   }
 
-  if (!skipSync) {
-    syncBeadsRef(cwd, { ref, remote, push: false });
-  }
   const applied = mutateBeadsRef(cwd, operations, {
     ref,
     message: 'beads: weekly unused-code triage',
     ...safeOpts,
   });
-  let pushed = false;
-  let finalCommitSha = applied.commitSha;
-  if (!skipSync && applied.changed) {
-    const synced = syncBeadsRef(cwd, { ref, remote, push: true });
-    pushed = synced.pushed;
-    finalCommitSha = synced.sha;
-  }
-
   return {
     status: 'success',
     staged: false,
-    pushed,
-    commitSha: finalCommitSha,
+    pushed: false,
+    commitSha: applied.commitSha,
     createdIds: applied.createdIds,
     updatedIds: applied.updatedIds,
     untouchedIds: applied.untouchedIds,
     skipped,
-    message: `Applied to ${ref}: ${applied.createdIds.length} created, ${applied.updatedIds.length} updated, ${applied.untouchedIds.length} untouched${pushed ? ' (pushed)' : ' (no remote push needed)'}.`,
+    message: `Applied to ${ref}: ${applied.createdIds.length} created, ${applied.updatedIds.length} updated, ${applied.untouchedIds.length} untouched (no remote push needed).`,
   };
 }
 
-function sanitizeInlineMarkdown(value) {
+function escapeMarkdownText(value) {
+  return stripControlChars(String(value))
+    .replaceAll('\\', '\\\\')
+    .replaceAll('`', '\\`')
+    .replaceAll('*', '\\*')
+    .replaceAll('_', '\\_')
+    .replaceAll('[', '\\[')
+    .replaceAll(']', '\\]')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('|', '\\|')
+    .replaceAll('#', '\\#')
+    .replaceAll('~', '\\~')
+    .trim();
+}
+
+function sanitizeCodeSpan(value) {
   return stripControlChars(String(value)).replaceAll('`', "'").trim();
 }
 
@@ -337,10 +415,10 @@ export function formatSafeOutputsSummary(result, { workflow = 'unused-code-triag
   if (result.skipped.length > 0) {
     lines.push('', '### Skipped invalid items', '');
     for (const item of result.skipped) {
-      const keyPart = item.dedupeKey ? ` (\`${sanitizeInlineMarkdown(item.dedupeKey)}\`)` : '';
-      lines.push(`- Item #${item.index + 1}${keyPart}: ${sanitizeInlineMarkdown(item.reason)}`);
+      const keyPart = item.dedupeKey ? ` (\`${sanitizeCodeSpan(item.dedupeKey)}\`)` : '';
+      lines.push(`- Item #${item.index + 1}${keyPart}: ${escapeMarkdownText(item.reason)}`);
     }
   }
-  lines.push('', `> Generated by agentic workflow \`${sanitizeInlineMarkdown(workflow)}\` via deterministic \`scripts/apply-beads-safe-outputs.mjs\`.`);
+  lines.push('', `> Generated by agentic workflow \`${sanitizeCodeSpan(workflow)}\` via deterministic \`scripts/apply-beads-safe-outputs.mjs\`.`);
   return `${lines.join('\n')}\n`;
 }

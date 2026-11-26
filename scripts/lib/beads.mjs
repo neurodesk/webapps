@@ -1692,3 +1692,122 @@ export function syncBeadsRef(cwd, { ref = DEFAULT_BEADS_REF, remote = 'origin', 
 
   return { ref, remote, remoteFetched: remoteExists, sha: finalSha, count: mergedCount, pushed };
 }
+
+function isLeasePushRejection(error) {
+  const detail = `${error?.stderr || ''}\n${error?.message || ''}`;
+  return /stale info|non-fast-forward|fetch first|\[rejected\]/i.test(detail);
+}
+
+export function applyRemoteBeadsRef(cwd, operations, {
+  ref = DEFAULT_BEADS_REF,
+  remote = 'origin',
+  message = 'beads: update',
+  dryRun = false,
+  maxRetries = 5,
+  beforePush = null,
+  ...applyOpts
+} = {}) {
+  assertMemoryRef(ref);
+  const repoTop = resolveGitRoot(cwd);
+  assertNotSymbolicRef(repoTop, ref);
+  assertRefNotCheckedOut(repoTop, ref);
+  assertConfiguredRemote(repoTop, remote);
+
+  if (!dryRun) {
+    const rawPushUrls = git(['remote', 'get-url', '--push', '--all', '--', remote], { cwd: repoTop });
+    const pushUrls = rawPushUrls.length === 0 ? [] : rawPushUrls.replace(/\r?\n$/, '').split('\n');
+    if (pushUrls.length !== 1) {
+      throw new BeadsValidationError(`Remote "${remote}" has ${pushUrls.length} push URLs; beads remote apply requires a single push destination for atomic --force-with-lease`);
+    }
+  }
+
+  const shortBranch = ref.replace(/^refs\/heads\//, '');
+  const trackingRef = `refs/remotes/${remote}/${shortBranch}`;
+  assertNotSymbolicRef(repoTop, trackingRef);
+
+  const attempts = dryRun ? 1 : Math.max(1, maxRetries);
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const tempRef = `refs/beads-tmp/${randomBytes(8).toString('hex')}`;
+    let remoteState = { sha: null, beads: new Map() };
+    try {
+      const remoteExists = remoteBranchExists(repoTop, remote, ref);
+      if (remoteExists) {
+        git(['-c', `remote.${remote}.fetch=`, 'fetch', '--no-tags', '--no-prune', '--no-recurse-submodules', '--no-write-fetch-head', '--refmap=', '--', remote, `+${ref}:${tempRef}`], { cwd: repoTop });
+        remoteState = readBeadsTree(repoTop, tempRef);
+      }
+    } finally {
+      try {
+        git(['update-ref', '-d', tempRef], { cwd: repoTop });
+      } catch {
+        // Temp ref may not have been created when remote branch does not exist yet.
+      }
+    }
+
+    const applied = applyOperations(remoteState.beads, operations, applyOpts);
+    const changed = applied.changedIds.length > 0;
+    if (dryRun || !changed) {
+      return {
+        ref,
+        remote,
+        dryRun: Boolean(dryRun),
+        changed,
+        pushed: false,
+        commitSha: remoteState.sha,
+        createdIds: applied.createdIds,
+        updatedIds: applied.updatedIds,
+        untouchedIds: applied.untouchedIds,
+        count: applied.beads.size,
+      };
+    }
+
+    const treeSha = buildTreeFromMap(repoTop, applied.beads);
+    const parents = remoteState.sha ? [remoteState.sha] : [];
+    const commitSha = commitTree(repoTop, treeSha, parents, message);
+
+    if (typeof beforePush === 'function') {
+      beforePush({ attempt, expectedSha: remoteState.sha, commitSha });
+    }
+
+    const leaseArg = remoteState.sha ? `--force-with-lease=${ref}:${remoteState.sha}` : `--force-with-lease=${ref}:`;
+    try {
+      git(['-c', `remote.${remote}.fetch=`, '-c', `remote.${remote}.mirror=false`, 'push', '--no-follow-tags', '--recurse-submodules=no', leaseArg, '--', remote, `${commitSha}:${ref}`], { cwd: repoTop });
+    } catch (error) {
+      if (isLeasePushRejection(error)) {
+        if (attempt + 1 < attempts) continue;
+        throw new BeadsConflictError(`Concurrent remote update conflict on ${remote}/${shortBranch} after ${attempts} attempt(s)`);
+      }
+      throw error;
+    }
+
+    git(['update-ref', '--no-deref', trackingRef, commitSha], { cwd: repoTop });
+    const localSha = gitRefSha(repoTop, ref);
+    if (!localSha) {
+      try {
+        updateMemoryRefCas(repoTop, ref, commitSha, ZERO_OID);
+      } catch {
+        // Best-effort local mirror update; remote push already succeeded.
+      }
+    } else if (localSha === remoteState.sha || isAncestor(repoTop, localSha, commitSha)) {
+      try {
+        updateMemoryRefCas(repoTop, ref, commitSha, localSha);
+      } catch {
+        // Best-effort local mirror update; remote push already succeeded.
+      }
+    }
+
+    return {
+      ref,
+      remote,
+      dryRun: false,
+      changed: true,
+      pushed: true,
+      commitSha,
+      createdIds: applied.createdIds,
+      updatedIds: applied.updatedIds,
+      untouchedIds: applied.untouchedIds,
+      count: applied.beads.size,
+    };
+  }
+
+  throw new BeadsConflictError(`Failed to apply remote update on ${remote}/${shortBranch}`);
+}
