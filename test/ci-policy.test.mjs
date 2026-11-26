@@ -336,6 +336,15 @@ const SHA_64 = /^[0-9a-f]{64}$/;
 const PINNED_ACTION = /^[^@\s]+@[0-9a-f]{40}$/i;
 const GH_AW_SETUP_ACTION = /^github\/gh-aw-actions\/setup@[0-9a-f]{40}$/i;
 const GH_AW_DOWNLOAD_ARTIFACT = /^actions\/download-artifact@[0-9a-f]{40}$/i;
+// Exact compiler-emitted shell commands in gh-aw v1.2.2 boilerplate jobs (no chaining or extra commands).
+const GH_AW_BOILERPLATE_ACTION_SCRIPT = /^bash "\$\{RUNNER_TEMP\}\/gh-aw\/actions\/[a-z0-9_]+\.sh"$/;
+const GH_AW_BOILERPLATE_EXACT_RUNS = new Set([
+  'sleep 10',
+  'mkdir -p /tmp/gh-aw/aw-prompts\ncp -a "${RUNNER_TEMP}/gh-aw/aw-prompts/." /tmp/gh-aw/aw-prompts/',
+  'if [ -f /tmp/gh-aw/runtime/aw_info.json ]; then cp /tmp/gh-aw/runtime/aw_info.json /tmp/gh-aw/aw_info.json; fi',
+  'echo "::warning::Threat detection produced no security verdict. Review the detection job logs before trusting the agent outputs."',
+  'mkdir -p /tmp/gh-aw/\nfind "/tmp/gh-aw/" -type f -print\nif [ -f "/tmp/gh-aw/agent_output.json" ]; then\n  echo "GH_AW_AGENT_OUTPUT=/tmp/gh-aw/agent_output.json" >> "$GITHUB_OUTPUT"\nfi',
+]);
 
 function hasValidTimeout(timeout) {
   return (Number.isInteger(timeout) && timeout > 0)
@@ -343,16 +352,27 @@ function hasValidTimeout(timeout) {
 }
 
 function parseMarkdownWorkflow(markdown) {
-  const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n([\s\S]*))?$/);
-  if (!match) return null;
+  const lines = markdown.split(/\r?\n/);
+  if (lines.length === 0 || lines[0].trim() !== '---') return null;
+  const endIndex = lines.findIndex((line, index) => index > 0 && line.trim() === '---');
+  if (endIndex === -1) return null;
+  const rawFrontmatter = lines.slice(1, endIndex).join('\n');
+  const body = lines.slice(endIndex + 1).join('\n').trim();
   try {
     return {
-      frontmatter: YAML.parse(match[1]),
-      body: (match[2] ?? '').trim(),
+      frontmatter: YAML.parse(rawFrontmatter),
+      normalizedFrontmatter: rawFrontmatter.split('\n').map((line) => line.trimEnd()).join('\n').trim(),
+      body,
     };
   } catch {
     return null;
   }
+}
+
+function computeGhAwFrontmatterHash(normalizedFrontmatter) {
+  return createHash('sha256')
+    .update(JSON.stringify({ 'frontmatter-text': normalizedFrontmatter }), 'utf8')
+    .digest('hex');
 }
 
 function parseVerifiedGhAwLock(file, text, sourceMarkdown) {
@@ -386,6 +406,14 @@ function parseVerifiedGhAwLock(file, text, sourceMarkdown) {
   if (!parsedMd || !parsedMd.frontmatter || typeof parsedMd.frontmatter !== 'object') return null;
   const computedBodyHash = createHash('sha256').update(parsedMd.body).digest('hex');
   if (computedBodyHash !== meta.body_hash) return null;
+  // Workflows using imports or body template expressions hash additional canonical fields;
+  // reject stale frontmatter cryptographically for standalone workflows.
+  const hasImportsOrBodyExpressions = Boolean(parsedMd.frontmatter.imports)
+    || /\$\{\{\s*(?:env|vars)\./.test(parsedMd.body);
+  if (!hasImportsOrBodyExpressions) {
+    const computedFrontmatterHash = computeGhAwFrontmatterHash(parsedMd.normalizedFrontmatter);
+    if (computedFrontmatterHash !== meta.frontmatter_hash) return null;
+  }
 
   return { meta, manifest, frontmatter: parsedMd.frontmatter };
 }
@@ -399,16 +427,11 @@ function isVerifiedBoilerplateJob(id, job, frontmatter) {
   if (setupStep?.name !== 'Setup Scripts' || !GH_AW_SETUP_ACTION.test(setupStep?.uses ?? '')) {
     return false;
   }
-  // Every action step in a compiler boilerplate job must be SHA-pinned, and any untimed step must
-  // belong to compiler-generated scripts/actions (never unpinned actions).
   return steps.every((step) => {
     if (typeof step?.uses === 'string') return PINNED_ACTION.test(step.uses);
-    return typeof step?.run === 'string' && (
-      step.run.includes('${RUNNER_TEMP}/gh-aw/actions/')
-      || step.run.includes('/tmp/gh-aw/')
-      || step.run.includes('::warning::Threat detection produced no security verdict')
-      || step.run.trim() === 'sleep 10'
-    );
+    if (typeof step?.run !== 'string') return false;
+    const normalizedRun = step.run.replace(/\r\n/g, '\n').trim();
+    return GH_AW_BOILERPLATE_ACTION_SCRIPT.test(normalizedRun) || GH_AW_BOILERPLATE_EXACT_RUNS.has(normalizedRun);
   });
 }
 
@@ -470,24 +493,23 @@ test('every non-reusable workflow job declares an explicit timeout-minutes', asy
   assert.deepEqual(missing, [], `jobs missing explicit timeout-minutes: ${missing.join(', ')}`);
 });
 
-test('gh-aw timeout exemption requires verified metadata, body hash, compiler boilerplate steps, and timeouts on every authored safe-output step', () => {
+test('gh-aw timeout exemption requires verified frontmatter/body hashes, exact compiler boilerplate steps, and timeouts on every authored safe-output step', () => {
   const body = 'Inspect unused code candidates.';
   const bodyHash = createHash('sha256').update(body).digest('hex');
-  const frontmatterHash = 'a'.repeat(64);
   const setupSha = '53d0749e19424a918acd82b4d140264ce48f2f14';
   const downloadSha = '9000827ccba6bdab643e8b6fd33ac0654aef8333';
   const checkoutSha = '3d3c42e5aac5ba805825da76410c181273ba90b1';
-  const validMd = [
-    '---',
+  const frontmatterText = [
     'name: demo',
+    'max-turns: 25',
     'safe-outputs:',
     '  timeout-minutes: 10',
     '  jobs:',
     '    record-finding:',
     '      runs-on: ubuntu-latest',
-    '---',
-    body,
   ].join('\n');
+  const frontmatterHash = computeGhAwFrontmatterHash(frontmatterText);
+  const validMd = ['---', frontmatterText, '---', body].join('\n');
   const validHeader = [
     `# gh-aw-metadata: ${JSON.stringify({ schema_version: 'v4', frontmatter_hash: frontmatterHash, body_hash: bodyHash, compiler_version: 'v1.2.2', strict: true })}`,
     `# gh-aw-manifest: ${JSON.stringify({ version: 1, actions: [] })}`,
@@ -533,17 +555,23 @@ test('gh-aw timeout exemption requires verified metadata, body hash, compiler bo
     ['regular.yml: activation', 'regular.yml: record_finding', 'regular.yml: conclusion'],
   );
 
-  // Stale body hash (edited .md without recompile) or hand-written boilerplate steps reject the exemption.
+  // Stale frontmatter (e.g. changing max-turns without recompiling) or stale body rejects the exemption.
+  assert.deepEqual(
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: validLock, sourceMarkdown: validMd.replace('max-turns: 25', 'max-turns: 99') }]),
+    ['demo.lock.yml: activation', 'demo.lock.yml: record_finding', 'demo.lock.yml: conclusion'],
+  );
   assert.deepEqual(
     findJobsMissingTimeout([{ file: 'demo.lock.yml', text: validLock, sourceMarkdown: `${validMd}\nextra line` }]),
     ['demo.lock.yml: activation', 'demo.lock.yml: record_finding', 'demo.lock.yml: conclusion'],
   );
-  const handWrittenBoilerplate = validLock.replace(
+
+  // Appending arbitrary shell commands to a recognized boilerplate script rejects the exemption.
+  const appendedBoilerplate = validLock.replace(
     'bash "${RUNNER_TEMP}/gh-aw/actions/mask_otlp_headers.sh"',
-    'echo hand-written',
+    'bash "${RUNNER_TEMP}/gh-aw/actions/mask_otlp_headers.sh" && pnpm test',
   );
   assert.deepEqual(
-    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: handWrittenBoilerplate, sourceMarkdown: validMd }]),
+    findJobsMissingTimeout([{ file: 'demo.lock.yml', text: appendedBoilerplate, sourceMarkdown: validMd }]),
     ['demo.lock.yml: activation'],
   );
 

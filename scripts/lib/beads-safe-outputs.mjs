@@ -6,6 +6,7 @@ import {
   LIMITS,
   applyOperations,
   applyRemoteBeadsRef,
+  filterClosedUpsertOperations,
   mutateBeadsRef,
   readBeadsFromRef,
 } from './beads.mjs';
@@ -310,6 +311,21 @@ export async function applyUnusedCodeSafeOutputs(rawOutput, {
     lockActor: true,
   };
 
+  const itemIndexByKey = new Map();
+  for (let i = 0; i < matchingItems.length; i++) {
+    const key = typeof matchingItems[i]?.dedupe_key === 'string' ? matchingItems[i].dedupe_key.trim() : null;
+    if (key && !itemIndexByKey.has(key)) itemIndexByKey.set(key, i);
+  }
+  const mergeSkippedClosed = (closedList) => [
+    ...skipped,
+    ...closedList.map((entry) => ({
+      index: itemIndexByKey.get(entry.dedupeKey) ?? -1,
+      dedupeKey: entry.dedupeKey,
+      app: matchingItems[itemIndexByKey.get(entry.dedupeKey)]?.app ?? null,
+      reason: entry.reason,
+    })),
+  ];
+
   const previewOnly = Boolean(staged || dryRun);
 
   if (!skipSync) {
@@ -318,19 +334,27 @@ export async function applyUnusedCodeSafeOutputs(rawOutput, {
       remote,
       message: 'beads: weekly unused-code triage',
       dryRun: previewOnly,
+      skipClosedUpserts: true,
       beforePush,
       ...safeOpts,
     });
-    if (previewOnly) {
+    const allSkipped = mergeSkippedClosed(remoteResult.skippedClosed ?? []);
+    const allSkippedAsClosed = remoteResult.createdIds.length === 0
+      && remoteResult.updatedIds.length === 0
+      && remoteResult.untouchedIds.length === 0
+      && (remoteResult.skippedClosed?.length ?? 0) > 0;
+    if (previewOnly || allSkippedAsClosed) {
       return {
         status: 'skipped',
-        staged: true,
+        staged: previewOnly,
         pushed: false,
         createdIds: remoteResult.createdIds,
         updatedIds: remoteResult.updatedIds,
         untouchedIds: remoteResult.untouchedIds,
-        skipped,
-        message: `Staged preview: ${remoteResult.createdIds.length} create(s), ${remoteResult.updatedIds.length} update(s), ${remoteResult.untouchedIds.length} untouched.`,
+        skipped: allSkipped,
+        message: allSkippedAsClosed && !previewOnly
+          ? `All ${remoteResult.skippedClosed.length} finding(s) correspond to already-closed beads; no writes needed.`
+          : `Staged preview: ${remoteResult.createdIds.length} create(s), ${remoteResult.updatedIds.length} update(s), ${remoteResult.untouchedIds.length} untouched.`,
       };
     }
     return {
@@ -341,14 +365,30 @@ export async function applyUnusedCodeSafeOutputs(rawOutput, {
       createdIds: remoteResult.createdIds,
       updatedIds: remoteResult.updatedIds,
       untouchedIds: remoteResult.untouchedIds,
-      skipped,
+      skipped: allSkipped,
       message: `Applied to ${ref}: ${remoteResult.createdIds.length} created, ${remoteResult.updatedIds.length} updated, ${remoteResult.untouchedIds.length} untouched${remoteResult.pushed ? ' (pushed)' : ' (no remote push needed)'}.`,
     };
   }
 
+  const { beads: localBeads } = readBeadsFromRef(cwd, ref);
+  const { activeOperations, skippedClosed } = filterClosedUpsertOperations(localBeads, operations);
+  const allSkipped = mergeSkippedClosed(skippedClosed);
+
+  if (activeOperations.length === 0) {
+    return {
+      status: 'skipped',
+      staged: previewOnly,
+      pushed: false,
+      createdIds: [],
+      updatedIds: [],
+      untouchedIds: [],
+      skipped: allSkipped,
+      message: `All ${skippedClosed.length} finding(s) correspond to already-closed beads; no writes needed.`,
+    };
+  }
+
   if (previewOnly) {
-    const { beads } = readBeadsFromRef(cwd, ref);
-    const preview = applyOperations(beads, operations, safeOpts);
+    const preview = applyOperations(localBeads, activeOperations, safeOpts);
     return {
       status: 'skipped',
       staged: true,
@@ -356,12 +396,12 @@ export async function applyUnusedCodeSafeOutputs(rawOutput, {
       createdIds: preview.createdIds,
       updatedIds: preview.updatedIds,
       untouchedIds: preview.untouchedIds,
-      skipped,
+      skipped: allSkipped,
       message: `Staged preview: ${preview.createdIds.length} create(s), ${preview.updatedIds.length} update(s), ${preview.untouchedIds.length} untouched.`,
     };
   }
 
-  const applied = mutateBeadsRef(cwd, operations, {
+  const applied = mutateBeadsRef(cwd, activeOperations, {
     ref,
     message: 'beads: weekly unused-code triage',
     ...safeOpts,
@@ -374,7 +414,7 @@ export async function applyUnusedCodeSafeOutputs(rawOutput, {
     createdIds: applied.createdIds,
     updatedIds: applied.updatedIds,
     untouchedIds: applied.untouchedIds,
-    skipped,
+    skipped: allSkipped,
     message: `Applied to ${ref}: ${applied.createdIds.length} created, ${applied.updatedIds.length} updated, ${applied.untouchedIds.length} untouched (no remote push needed).`,
   };
 }

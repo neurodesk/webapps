@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -10,6 +10,7 @@ import {
   DEFAULT_BEADS_REF,
   mutateBeadsRef,
   readBeadsFromRef,
+  summarizeBeads,
   syncBeadsRef,
 } from '../scripts/lib/beads.mjs';
 import { createAppPlan } from '../scripts/lib/app-plan.mjs';
@@ -398,6 +399,105 @@ test('applyUnusedCodeSafeOutputs enforces clean dry-run, fail-closed detection, 
   syncBeadsRef(verifyDir, { ref: DEFAULT_BEADS_REF, remote: 'origin', push: false });
   assert.equal(readBeadsFromRef(verifyDir, DEFAULT_BEADS_REF).beads.size, 3);
 
+  // Dry-run against a NON-EMPTY remote in a fresh clone writes ZERO refs and ZERO FETCH_HEAD
+  const freshDryClone = join(workDir, '..', 'fresh-dry');
+  runGit(join(workDir, '..'), ['clone', '--single-branch', remoteDir, freshDryClone]);
+  configureGitIdentity(freshDryClone);
+  const refsBefore = runGit(freshDryClone, ['for-each-ref']).trim();
+  const nonEmptyDry = await applyUnusedCodeSafeOutputs({
+    items: [{
+      type: UNUSED_CODE_ITEM_TYPE,
+      app: 'alpha',
+      dedupe_key: 'knip:apps/alpha/src/other.js:dryprobe',
+      title: 'Dry probe on non-empty remote',
+      summary: 'Verified unused.',
+      evidence: 'apps/alpha/src/other.js',
+    }],
+  }, {
+    cwd: freshDryClone,
+    allowedApps,
+    dryRun: true,
+    now: new Date('2026-11-26T08:05:30Z'),
+  });
+  assert.equal(nonEmptyDry.status, 'skipped');
+  assert.equal(nonEmptyDry.createdIds.length, 1);
+  assert.equal(runGit(freshDryClone, ['for-each-ref']).trim(), refsBefore, 'non-empty dry-run must not create or mutate any ref');
+  assert.equal(existsSync(join(freshDryClone, '.git', 'FETCH_HEAD')), false, 'non-empty dry-run must not write FETCH_HEAD');
+
+  // Previously closed bead in the same batch as an unrelated new finding skips the closed bead cleanly without blocking
+  syncBeadsRef(verifyDir, { ref: DEFAULT_BEADS_REF, remote: 'origin', push: false });
+  mutateBeadsRef(verifyDir, [{
+    op: 'close',
+    id: created.id,
+    reason: 'Intentionally exported helper',
+  }], { actor: 'maintainer', now: new Date('2026-11-26T08:05:45Z') });
+  syncBeadsRef(verifyDir, { ref: DEFAULT_BEADS_REF, remote: 'origin', push: true });
+
+  const snapAfterClose = summarizeBeads(readBeadsFromRef(verifyDir, DEFAULT_BEADS_REF).beads);
+  assert.ok(snapAfterClose.closedDedupeKeys.includes(rawOutput.items[0].dedupe_key), 'snapshot must advertise closedDedupeKeys');
+
+  // Mixed closed + new finding: skips closed bead, creates new finding, pushes cleanly
+  const mixedClosedResult = await applyUnusedCodeSafeOutputs({
+    items: [
+      { ...rawOutput.items[0], summary: 'Weekly repeat of closed finding' },
+      {
+        type: UNUSED_CODE_ITEM_TYPE,
+        app: 'alpha',
+        dedupe_key: 'knip:apps/alpha/src/other.js:afterclose',
+        title: 'Unrelated new finding alongside closed finding',
+        summary: 'Verified unused.',
+        evidence: 'apps/alpha/src/other.js',
+      },
+    ],
+  }, {
+    cwd: workDir,
+    allowedApps,
+    now: new Date('2026-11-26T08:06:00Z'),
+  });
+  assert.equal(mixedClosedResult.status, 'success');
+  assert.equal(mixedClosedResult.pushed, true);
+  assert.equal(mixedClosedResult.createdIds.length, 1);
+  assert.equal(mixedClosedResult.skipped.length, 1);
+  assert.match(mixedClosedResult.skipped[0].reason, /already closed/);
+
+  // Batch with ONLY already-closed findings returns skipped cleanly without error
+  const onlyClosedResult = await applyUnusedCodeSafeOutputs({
+    items: [{ ...rawOutput.items[0], summary: 'Weekly repeat of closed finding' }],
+  }, {
+    cwd: workDir,
+    allowedApps,
+    now: new Date('2026-11-26T08:06:15Z'),
+  });
+  assert.equal(onlyClosedResult.status, 'skipped');
+  assert.equal(onlyClosedResult.pushed, false);
+  assert.equal(onlyClosedResult.skipped.length, 1);
+
+  // Tracking-ref lock error AFTER a successful remote push must NOT turn publication into a failure
+  const trackingLockDir = join(workDir, '.git', 'refs', 'remotes', 'origin', 'memory');
+  mkdirSync(trackingLockDir, { recursive: true });
+  const trackingLockFile = join(trackingLockDir, 'beads.lock');
+  writeFileSync(trackingLockFile, 'locked\n', 'utf8');
+  try {
+    const lockedPushResult = await applyUnusedCodeSafeOutputs({
+      items: [{
+        type: UNUSED_CODE_ITEM_TYPE,
+        app: 'alpha',
+        dedupe_key: 'knip:apps/alpha/src/other.js:lockedtrack',
+        title: 'Push succeeds even if local tracking ref is locked',
+        summary: 'Verified unused.',
+        evidence: 'apps/alpha/src/other.js',
+      }],
+    }, {
+      cwd: workDir,
+      allowedApps,
+      now: new Date('2026-11-26T08:06:30Z'),
+    });
+    assert.equal(lockedPushResult.status, 'success');
+    assert.equal(lockedPushResult.pushed, true);
+  } finally {
+    rmSync(trackingLockFile, { force: true });
+  }
+
   // All-invalid batch rejects without touching remote
   await assert.rejects(
     () => applyUnusedCodeSafeOutputs({ items: [rawOutput.items[1]] }, { cwd: workDir, allowedApps }),
@@ -430,7 +530,7 @@ test('applyUnusedCodeSafeOutputs enforces clean dry-run, fail-closed detection, 
     /maxCreates/,
   );
   syncBeadsRef(verifyDir, { ref: DEFAULT_BEADS_REF, remote: 'origin', push: false });
-  assert.equal(readBeadsFromRef(verifyDir, DEFAULT_BEADS_REF).beads.size, 3);
+  assert.equal(readBeadsFromRef(verifyDir, DEFAULT_BEADS_REF).beads.size, 5);
 });
 
 test('apply-beads-safe-outputs CLI honors detection gate, writes escaped summary/outputs, and sanitizes stderr on warnings and fatal errors', (t) => {
@@ -517,11 +617,11 @@ test('apply-beads-safe-outputs CLI honors detection gate, writes escaped summary
   assert.match(outputs, /^skipped_count=1$/m);
   assert.match(outputs, /^pushed=false$/m);
 
-  // 3. All-invalid batch escapes agent-derived error text in stderr (no raw workflow commands)
+  // 3. All-invalid batch escapes agent-derived error text in stderr (no raw :: or legacy ##[ workflow commands)
   writeFileSync(allBadInput, JSON.stringify({
     items: [{
       type: UNUSED_CODE_ITEM_TYPE,
-      app: 'bad\n::add-mask::secret%0A',
+      app: 'bad\n::add-mask::secret%0A ##[add-mask]legacy',
       dedupe_key: 'knip:apps/topofit/package.json:x',
       title: 'Bad',
       summary: 'Bad',
@@ -535,6 +635,7 @@ test('apply-beads-safe-outputs CLI honors detection gate, writes escaped summary
   });
   assert.notEqual(allBad.status, 0);
   assert.ok(!allBad.stderr.includes('\n::add-mask::'), 'fatal error stderr must flatten injected newlines');
+  assert.ok(!allBad.stderr.includes('##['), 'fatal error stderr must neutralize legacy ##[ command markers');
   assert.match(allBad.stderr, /%250A/, 'fatal error stderr must escape percent sequences');
 
   // 4. formatSafeOutputsSummary escapes Markdown metacharacters and HTML tags in rejection reasons
@@ -570,9 +671,12 @@ test('unused-code-triage gh-aw workflow enforces read-only no-shell agent, zero 
     assert.notEqual(job?.permissions?.issues, 'write', `job ${id} must not hold issues: write`);
   }
 
-  // Agent job: read-only checkout with .git stripped before credential step, no shell tools, only mcpscripts + safeoutputs
+  // Agent job: read-only checkout pinned to github.sha with .git stripped before credential step, no shell/file built-ins
   assert.equal(flow.jobs.agent.permissions.contents, 'read', 'agent job must keep contents: read');
   assert.equal(flow.jobs.agent.permissions['copilot-requests'], 'write', 'agent job uses Copilot inference');
+  const agentCheckout = flow.jobs.agent.steps.find((step) => typeof step.uses === 'string' && step.uses.startsWith('actions/checkout@'));
+  assert.equal(agentCheckout?.with?.ref, '${{ github.sha }}', 'agent checkout must pin to triggering github.sha');
+  assert.equal(agentCheckout?.with?.['persist-credentials'], false, 'agent checkout must disable persist-credentials');
   const stripIdx = flow.jobs.agent.steps.findIndex((step) => typeof step.run === 'string' && step.run.includes('rm -rf .git'));
   const credIdx = flow.jobs.agent.steps.findIndex((step) => typeof step.run === 'string' && step.run.includes('configure_git_credentials.sh'));
   assert.ok(stripIdx >= 0 && credIdx > stripIdx, 'agent must strip .git before configure_git_credentials.sh runs');
@@ -582,6 +686,10 @@ test('unused-code-triage gh-aw workflow enforces read-only no-shell agent, zero 
   assert.doesNotMatch(execStep.run, /--allow-tool github\b/, 'agent must not be granted GitHub MCP tools');
   assert.match(execStep.run, /--allow-tool mcpscripts\b/);
   assert.match(execStep.run, /--allow-tool safeoutputs\b/);
+  assert.match(execStep.run, /--deny-tool shell\b/);
+  assert.match(execStep.run, /--deny-tool write\b/);
+  assert.match(execStep.run, /--deny-tool url\b/);
+  assert.match(execStep.run, /--excluded-tools bash,shell,powershell,view,grep,glob,edit,create,web_fetch,fetch_url,url\b/);
 
   // Threat detection must fail closed (not warn mode)
   const detConclusion = flow.jobs.detection.steps.find((step) => step.id === 'detection_conclusion');
@@ -595,7 +703,7 @@ test('unused-code-triage gh-aw workflow enforces read-only no-shell agent, zero 
   assert.doesNotMatch(lockText, /GH_AW_MISSING_TOOL_CREATE_ISSUE:\s*"true"/);
   assert.doesNotMatch(lockText, /GH_AW_REPORT_INCOMPLETE_CREATE_ISSUE:\s*"true"/);
 
-  // Only upsert_unused_code_bead may hold contents: write, gated on explicit clean detection verdict
+  // Only upsert_unused_code_bead may hold contents: write, gated on default branch + clean detection verdict + same github.sha
   const jobsWithContentsWrite = Object.entries(flow.jobs)
     .filter(([, job]) => job?.permissions?.contents === 'write')
     .map(([id]) => id);
@@ -603,17 +711,71 @@ test('unused-code-triage gh-aw workflow enforces read-only no-shell agent, zero 
 
   const safeJob = flow.jobs.upsert_unused_code_bead;
   assert.ok(safeJob.needs.includes('agent') && safeJob.needs.includes('detection'));
+  assert.match(safeJob.if, /github\.ref == format\('refs\/heads\/\{0\}', github\.event\.repository\.default_branch\)/);
   assert.match(safeJob.if, /needs\.detection\.result == 'success'/);
   assert.match(safeJob.if, /needs\.detection\.outputs\.detection_success == 'true'/);
   assert.match(safeJob.if, /needs\.detection\.outputs\.detection_conclusion == 'success'/);
   const checkoutStep = safeJob.steps.find((step) => typeof step.uses === 'string' && step.uses.startsWith('actions/checkout@'));
   assert.equal(checkoutStep?.with?.['persist-credentials'], false, 'checkout must not persist credentials on disk');
-  assert.equal(checkoutStep?.with?.ref, '${{ github.event.repository.default_branch }}');
+  assert.equal(checkoutStep?.with?.ref, '${{ github.sha }}', 'applier checkout must pin to the exact same github.sha as agent');
   const applyStep = safeJob.steps.find((step) => step.id === 'apply');
   assert.match(applyStep?.run ?? '', /node scripts\/apply-beads-safe-outputs\.mjs/);
   assert.match(applyStep?.run ?? '', /--require-clean-detection/);
   assert.equal(applyStep?.env?.GH_AW_DETECTION_SUCCESS, '${{ needs.detection.outputs.detection_success }}');
   assert.equal(typeof applyStep?.['timeout-minutes'], 'number');
+});
+
+test('unused-code-triage mcp-scripts enforce strict file caps, byte caps, and ancestor symlink checks', (t) => {
+  const mdText = readFileSync(join(REPO_ROOT, '.github', 'workflows', 'unused-code-triage.md'), 'utf8');
+  const fmMatch = mdText.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  const fm = YAML.parse(fmMatch[1]);
+  const scripts = fm['mcp-scripts'];
+
+  const scratch = mkdtempSync(join(process.env.TMPDIR || tmpdir(), 'mcp-scripts-'));
+  t.after(() => rmSync(scratch, { recursive: true, force: true }));
+
+  mkdirSync(join(scratch, 'apps', 'many', 'dir-a'), { recursive: true });
+  mkdirSync(join(scratch, 'apps', 'many', 'dir-b'), { recursive: true });
+  for (let i = 0; i < 260; i++) {
+    writeFileSync(join(scratch, 'apps', 'many', 'dir-a', `f${String(i).padStart(3, '0')}.js`), 'x\n', 'utf8');
+    writeFileSync(join(scratch, 'apps', 'many', 'dir-b', `g${String(i).padStart(3, '0')}.js`), 'y\n', 'utf8');
+  }
+  writeFileSync(join(scratch, 'apps', 'many', 'huge.js'), `${'a'.repeat(50000)}\n`, 'utf8');
+
+  const outsideQa = join(scratch, 'outside-qa');
+  mkdirSync(join(outsideQa, 'unused-code'), { recursive: true });
+  writeFileSync(join(outsideQa, 'unused-code', 'summary.md'), 'leaked\n', 'utf8');
+  symlinkSync(outsideQa, join(scratch, 'quality-artifacts'));
+
+  const runTool = (toolName, inputs) => {
+    const paramNames = Object.keys(scripts[toolName].inputs);
+    const code = `const execute = async (inputs) => { const { ${paramNames.join(', ')} } = inputs || {}; ${scripts[toolName].script} }; execute(${JSON.stringify(inputs)}).then((r) => console.log(JSON.stringify(r)));`;
+    return spawnSync(process.execPath, ['-e', code], {
+      cwd: scratch,
+      encoding: 'utf8',
+      env: { ...process.env, GITHUB_WORKSPACE: scratch },
+    });
+  };
+
+  // list_app_files strictly caps at 500 across two directories
+  const listed = runTool('list_app_files', { app: 'many' });
+  assert.equal(listed.status, 0, listed.stderr);
+  const listOut = JSON.parse(listed.stdout);
+  assert.equal(listOut.count, 500);
+  assert.equal(listOut.files.length, 500);
+  assert.equal(listOut.truncated, true);
+
+  // read_app_file caps output at 32 KB even for a 50 KB single-line file
+  const readHuge = runTool('read_app_file', { app: 'many', file: 'apps/many/huge.js' });
+  assert.equal(readHuge.status, 0, readHuge.stderr);
+  const hugeOut = JSON.parse(readHuge.stdout);
+  assert.equal(hugeOut.truncated, true);
+  assert.equal(hugeOut.content.length, 32768);
+
+  // read_triage_artifact rejects symlinked quality-artifacts parent directory
+  const symArtifact = runTool('read_triage_artifact', { name: 'summary.md' });
+  assert.notEqual(symArtifact.status, 0);
+  assert.match(symArtifact.stderr, /Artifact directory invalid/);
 });
 
 test('gh-aw triage workflow and safe-outputs bridge select no apps or site builds in app-plan', async () => {

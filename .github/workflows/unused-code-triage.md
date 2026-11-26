@@ -15,7 +15,17 @@ concurrency:
 permissions:
   contents: read
   copilot-requests: write
-engine: copilot
+engine:
+  id: copilot
+  args:
+    - "--deny-tool"
+    - "shell"
+    - "--deny-tool"
+    - "write"
+    - "--deny-tool"
+    - "url"
+    - "--excluded-tools"
+    - "bash,shell,powershell,view,grep,glob,edit,create,web_fetch,fetch_url,url"
 strict: true
 checkout: false
 timeout-minutes: 15
@@ -34,7 +44,7 @@ tools:
 steps:
   - uses: actions/checkout@v7
     with:
-      ref: ${{ github.event.repository.default_branch }}
+      ref: ${{ github.sha }}
       persist-credentials: false
   - uses: pnpm/action-setup@v6
   - uses: actions/setup-node@v7
@@ -78,21 +88,37 @@ mcp-scripts:
     script: |
       const fs = require('node:fs');
       const path = require('node:path');
+      const MAX_CHARS = 32768;
       const allowed = new Set(['summary.md', 'knip.json', 'beads-snapshot.json']);
       if (!allowed.has(name)) {
         throw new Error('Allowed artifacts: summary.md, knip.json, beads-snapshot.json');
       }
       const root = process.env.GITHUB_WORKSPACE || process.cwd();
-      const artifactDir = path.join(root, 'quality-artifacts', 'unused-code');
+      const qaDir = path.join(root, 'quality-artifacts');
+      const artifactDir = path.join(qaDir, 'unused-code');
+      for (const dir of [qaDir, artifactDir]) {
+        if (!fs.existsSync(dir) || fs.lstatSync(dir).isSymbolicLink() || !fs.lstatSync(dir).isDirectory()) {
+          throw new Error('Artifact directory invalid');
+        }
+      }
+      const artifactDirReal = fs.realpathSync(artifactDir);
       const fullPath = path.join(artifactDir, name);
-      if (!fs.existsSync(fullPath) || fs.lstatSync(fullPath).isSymbolicLink() || !fs.statSync(fullPath).isFile()) {
+      if (!fs.existsSync(fullPath) || fs.lstatSync(fullPath).isSymbolicLink()) {
         throw new Error(`Artifact ${name} not found`);
       }
-      const lines = fs.readFileSync(fullPath, 'utf8').split('\n');
+      const targetReal = fs.realpathSync(fullPath);
+      const rel = path.relative(artifactDirReal, targetReal);
+      if (!rel || rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel) || !fs.statSync(targetReal).isFile()) {
+        throw new Error(`Artifact ${name} escapes artifact directory`);
+      }
+      const lines = fs.readFileSync(targetReal, 'utf8').split('\n');
       const start = Math.max(1, Number.isInteger(start_line) ? start_line : 1);
       const count = Math.min(400, Math.max(1, Number.isInteger(max_lines) ? max_lines : 200));
       const slice = lines.slice(start - 1, start - 1 + count);
-      return { total_lines: lines.length, start_line: start, end_line: start + slice.length - 1, content: slice.join('\n') };
+      const rawContent = slice.join('\n');
+      const truncated = rawContent.length > MAX_CHARS;
+      const content = truncated ? rawContent.slice(0, MAX_CHARS) : rawContent;
+      return { total_lines: lines.length, start_line: start, end_line: start + slice.length - 1, truncated, content };
   list_app_files:
     description: "List source files inside a first-party non-upstream app directory apps/<app>/"
     inputs:
@@ -103,6 +129,7 @@ mcp-scripts:
     script: |
       const fs = require('node:fs');
       const path = require('node:path');
+      const MAX_FILES = 500;
       if (!/^[a-z][a-z0-9-]*$/.test(app || '')) throw new Error('Invalid app id');
       const root = process.env.GITHUB_WORKSPACE || process.cwd();
       const appsDir = path.join(root, 'apps');
@@ -112,8 +139,18 @@ mcp-scripts:
       if (fs.existsSync(path.join(appDir, 'upstream.json'))) throw new Error('Upstream-tracked app is out of scope');
       const appReal = fs.realpathSync(appDir);
       const results = [];
+      let truncated = false;
       const walk = (dir) => {
-        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (results.length >= MAX_FILES) {
+          truncated = true;
+          return;
+        }
+        const entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+        for (const entry of entries) {
+          if (results.length >= MAX_FILES) {
+            truncated = true;
+            return;
+          }
           if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === '.git') continue;
           const full = path.join(dir, entry.name);
           if (entry.isSymbolicLink()) continue;
@@ -121,13 +158,11 @@ mcp-scripts:
             walk(full);
           } else if (entry.isFile()) {
             results.push(`apps/${app}/${path.relative(appReal, full).replaceAll(path.sep, '/')}`);
-            if (results.length >= 500) return;
           }
         }
       };
       walk(appReal);
-      results.sort();
-      return { app, count: results.length, files: results };
+      return { app, count: results.length, truncated, files: results };
   read_app_file:
     description: "Read a slice of a regular file strictly contained inside apps/<app>/"
     inputs:
@@ -150,6 +185,7 @@ mcp-scripts:
     script: |
       const fs = require('node:fs');
       const path = require('node:path');
+      const MAX_CHARS = 32768;
       if (!/^[a-z][a-z0-9-]*$/.test(app || '')) throw new Error('Invalid app id');
       if (typeof file !== 'string' || !file.startsWith(`apps/${app}/`) || file.includes('..') || file.includes('\\')) {
         throw new Error(`File must be inside apps/${app}/`);
@@ -172,7 +208,10 @@ mcp-scripts:
       const start = Math.max(1, Number.isInteger(start_line) ? start_line : 1);
       const count = Math.min(400, Math.max(1, Number.isInteger(max_lines) ? max_lines : 200));
       const slice = lines.slice(start - 1, start - 1 + count);
-      return { file, total_lines: lines.length, start_line: start, end_line: start + slice.length - 1, content: slice.join('\n') };
+      const rawContent = slice.join('\n');
+      const truncated = rawContent.length > MAX_CHARS;
+      const content = truncated ? rawContent.slice(0, MAX_CHARS) : rawContent;
+      return { file, total_lines: lines.length, start_line: start, end_line: start + slice.length - 1, truncated, content };
   search_app_files:
     description: "Plain substring search across regular files strictly inside apps/<app>/ (no shell or regex execution)"
     inputs:
@@ -244,7 +283,7 @@ safe-outputs:
     upsert-unused-code-bead:
       description: "Record or refresh a verified single-app unused-code finding on the CI-silent refs/heads/memory/beads branch"
       runs-on: ubuntu-latest
-      if: "needs.detection.outputs.detection_success == 'true' && needs.detection.outputs.detection_conclusion == 'success'"
+      if: "github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && needs.detection.outputs.detection_success == 'true' && needs.detection.outputs.detection_conclusion == 'success'"
       permissions:
         contents: write
       outputs:
@@ -286,7 +325,7 @@ safe-outputs:
         - uses: actions/checkout@v7
           timeout-minutes: 5
           with:
-            ref: ${{ github.event.repository.default_branch }}
+            ref: ${{ github.sha }}
             fetch-depth: 0
             persist-credentials: false
         - uses: pnpm/action-setup@v6
@@ -332,7 +371,7 @@ Use the read-only MCP tools (`read_triage_artifact`, `list_app_files`, `read_app
 
 1. `summary.md` — concise summary of current Knip unused-code candidates.
 2. `knip.json` — full structured Knip JSON report.
-3. `beads-snapshot.json` — bounded snapshot of open Beads items on `refs/heads/memory/beads` (including each bead's `id`, `dedupeKey`, `revision`, and `status`).
+3. `beads-snapshot.json` — bounded snapshot of open Beads items (`items`) and previously closed dedupe keys (`closedDedupeKeys`) on `refs/heads/memory/beads`.
 
 ## Your task
 
@@ -346,6 +385,7 @@ Inspect the report-only Knip candidates (unused exports, types, dependencies, de
    - **Skip** anything loaded dynamically at runtime (`_runtime/`, worker URLs, HTML `<script>`/`<link>`, `examples.json`, Vite config, or public API exports consumed by tests or other packages).
 3. **Deduplicate cleanly against `beads-snapshot.json`:**
    - Use deterministic `dedupe_key` format: `knip:apps/<app>/<relative-file>:<symbol>`.
+   - **Skip** any `dedupe_key` listed in `closedDedupeKeys` (a maintainer already closed that finding).
    - If a bead with the same `dedupe_key` is already open in `beads-snapshot.json` and nothing material changed, do **not** emit a redundant update.
    - If you do update an existing open bead, pass its exact `expected_revision` from `beads-snapshot.json`.
 4. **Emit outputs:**

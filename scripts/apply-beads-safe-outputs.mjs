@@ -32,7 +32,7 @@ function sanitizeDiagnosticText(value) {
       out += ch;
     }
   }
-  return out.replace(/ +/g, ' ').trim();
+  return out.replaceAll('##[', '# #[').replace(/ +/g, ' ').trim();
 }
 
 function writeGithubOutput(outputPath, values) {
