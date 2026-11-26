@@ -1,0 +1,17 @@
+[
+  {
+    "id": "brats-met-00110",
+    "label": "Brain metastasis, T1c (BraTS-MET)",
+    "description": "Contrast-enhanced T1 (T1c) brain metastasis MRI, skull-stripped on the 240 × 240 × 155 1 mm SRI24 atlas grid (BraTS-MET-00110-000, redistributed in BrainLesion/AURORA under Apache-2.0 / BraTS-METS CC BY 4.0).",
+    "expectedResult": "Two-region segmentation (label 1 peritumoral oedema, label 2 metastasis enhancing + necrosis), binary channel masks, lesion count and volume table.",
+    "files": [
+      {
+        "role": "t1c",
+        "name": "BraTS-MET-00110-000-t1c.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9ea32f6bb6fc9d4c9e4259e3125b9bec432073f1/aurora/examples/BraTS-MET-00110-000-t1c.nii.gz",
+        "sha256": "60dea0229037efb7f51e8c61697013094375ad02e24c1924de54035d41d777fe",
+        "bytes": 2137224
+      }
+    ]
+  }
+]

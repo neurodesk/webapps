@@ -1339,6 +1339,23 @@ try {
     await expect(page.locator('#resultList')).toContainText('Equidistant layers (4)');
     await expect(page.locator('#resultList')).toContainText('Cortical thickness (mm)');
   });
+  await check('aurora', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await expect(page.locator('#runButton')).toBeDisabled();
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#threshold')).toBeHidden();
+    await advanced.tap();
+    await expect(page.locator('#threshold')).toHaveValue('0.5');
+    await page.locator('#threshold').fill('0.6');
+    await page.locator('#backend').selectOption('wasm');
+    await advanced.tap();
+    await expect(page.locator('#threshold')).toBeHidden();
+    await advanced.tap();
+    await expect(page.locator('#threshold')).toHaveValue('0.6');
+    await expect(page.locator('#backend')).toHaveValue('wasm');
+    await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
+  });
 } finally { await browser.close(); await site.close(); }
 if (failures.length) throw new Error(failures.join('\n'));
 requireChecked(checked, selection, 'Interface workflows');

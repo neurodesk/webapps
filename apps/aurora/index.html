@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AURORA — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" multiple data-neurodesk-input="image" aria-label="Choose a skull-stripped T1c NIfTI image" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a skull-stripped T1c NIfTI image</span>
+          </label>
+          <p class="nd-hint">Prepared T1c on the 240 × 240 × 155 BraTS/SRI24 grid.
+            <span class="nd-info-icon" tabindex="0" aria-label="About the input grid">i<span class="nd-info-tooltip">AURORA expects a skull-stripped, contrast-enhanced T1 (T1c) NIfTI registered to the 1 mm SRI24/BraTS atlas grid (240 × 240 × 155). BrainLes preprocessing or the BraTS orchestrator produce this grid. Multi-modality combinations and test-time augmentation are available in the Standalone container.</span></span>
+          </p>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Metastasis segmentation</summary>
+        <div class="nd-section-content">
+          <p id="modelHint" class="nd-hint">Model: T1c-only (t1c-o_best, deterministic baseline).</p>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="threshold">Probability threshold
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the probability threshold">i<span class="nd-info-tooltip">Sigmoid probability cutoff applied independently to the whole-lesion and metastasis (enhancing + necrosis) channels. Upstream AURORA defaults to 0.50.</span></span>
+                </label>
+                <input id="threshold" type="number" min="0.05" max="0.95" step="0.05" value="0.5" />
+              </div>
+              <div class="nd-field">
+                <label for="backend">Processing</label>
+                <select id="backend">
+                  <option value="auto">Automatic</option>
+                  <option value="wasm">CPU</option>
+                </select>
+                <p class="nd-hint">Automatic uses the GPU through WebGPU when available.</p>
+              </div>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Segment metastases</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="labelLegend" aria-label="Metastasis labels and volumes" hidden></div>
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a prepared T1c NIfTI anywhere, or choose an example.</p>
+        <p id="viewerNotice" class="nd-viewer-notice" hidden></p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="privacyContent">
+      <p>Images are processed locally in this browser and are never uploaded. The AURORA model (11.5 MB) is downloaded from Hugging Face, verified against its pinned SHA-256 checksum, and cached in this browser.</p>
+    </template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

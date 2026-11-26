@@ -8143,6 +8143,21 @@
         "bytes": 7364937,
         "kind": "example"
       }
+    ],
+    "aurora": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9ea32f6bb6fc9d4c9e4259e3125b9bec432073f1/aurora/examples/BraTS-MET-00110-000-t1c.nii.gz",
+        "sha256": "60dea0229037efb7f51e8c61697013094375ad02e24c1924de54035d41d777fe",
+        "bytes": 2137224,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9ea32f6bb6fc9d4c9e4259e3125b9bec432073f1/aurora/models/aurora-t1c-o_best.onnx",
+        "sha256": "020f8ac41e799878522c9b9abc48c75d54dd622a533623229f9244647dd8680d",
+        "bytes": 11553858,
+        "kind": "model",
+        "license": "CC-BY-4.0"
+      }
     ]
   },
   "exclusions": [],

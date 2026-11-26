@@ -95,6 +95,7 @@ const REQUIRED_METHODS = {
   'derm-compare': ['10.1001/archderm.142.9.1113', '10.1067/mjd.2000.107504', '10.1016/j.artmed.2012.08.002', '10.1002/col.20070', '10.1016/s0010-4825(97)00020-6', '10.2352/CIC.2004.12.1.art00008', '10.1109/TSMC.1979.4310076', 'isic-archive.com'],
   dermvit: ['10.48550/arXiv.2010.11929', '10.1038/sdata.2018.161', '10.2352/CIC.2004.12.1.art00008', '10.1007/978-3-319-10590-1_53', 'onnxruntime.ai', 'isic-archive.com'],
   laynii: ['10.1016/j.neuroimage.2021.118091', '10.1016/j.neuroimage.2013.03.078', '10.1002/cne.24080', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  aurora: ['10.1016/j.radonc.2023.109901', '10.1016/j.radonc.2022.11.014', 'arxiv.org/abs/2306.00838', 'github.com/niivue/niivue'],
 };
 
 test('every registered app has app information with packages and cited methods', () => {

@@ -2199,3 +2199,30 @@ apps:
       shared_runtime: false
       browser_test: true
       release: true
+  - id: aurora
+    path: aurora
+    catalog: neuro
+    title: AURORA
+    description: Segment brain metastases on T1c MRI with AURORA.
+    categories: [segmentation, lesion-mapping]
+    keywords: [brain metastasis, metastases, lesion, oncology, segmentation, BraTS-MET, AURORA, BrainLesion, T1c, MONAI]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [nifti]
+    hardware: webgpu-optional
+    handoff: none
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: models/aurora.manifest.json
+    asset_manifest_schema: scientific-assets-v1
+    source: neurodesk/webapps@local
+    license: Apache-2.0
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    app_scoped_runtime_families: [ort-web-asyncify]
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: true
