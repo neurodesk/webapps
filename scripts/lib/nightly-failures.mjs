@@ -193,7 +193,7 @@ export async function reportNightlyFailure({ run, repository, defaultBranch, cli
     '', `[Run ${runId}, attempt ${attempt}](${runUrl})`,
     `- Conclusion: ${plain(run.conclusion)}. Event: schedule.`,
     `- Commit: ${plain(run.head_sha)}. Branch: ${plain(run.head_branch)}.`,
-    `- Started: ${plain(run.run_started_at ?? run.created_at)}. Updated: ${plain(run.updated_at)}.`,
+    `- ${run.created_at ? `Created: ${plain(run.created_at)}. ` : ''}Started: ${plain(run.run_started_at ?? run.created_at)}. Updated: ${plain(run.updated_at)}.`,
     `- Jobs: ${failed.length} failed or timed out; ${cancelled.length} cancelled; ${jobs.filter(job => job.conclusion === 'skipped').length} skipped.`,
     ...affectedGroups([...failed, ...cancelled]),
     '', incomplete ? 'Coverage is incomplete. Cancellation does not establish that the cancelled checks passed.' : 'Investigate the failed jobs below.', ''];
@@ -251,5 +251,99 @@ export async function reportNightlyFailure({ run, repository, defaultBranch, cli
     title, body: `${workflowMarker}\n${body}`,
   } });
   return { issue: created.number, created: true };
+}
+
+function reportedFailureInfo(body, fallback) {
+  const header = body?.slice(0, 1000) ?? '';
+  const marker = header.match(/<!-- nightly-run:(\d+):attempt:(\d+) -->/);
+  const meta = header.match(/^- (?:Created: ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+-]+Z?)\. )?(?:Started: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+-]+Z?\. )?Updated: ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+-]+Z?)\.$/m);
+  const createdAt = meta?.[1] ? time(meta[1]) : Number.NaN;
+  const updatedAt = meta?.[2] ? time(meta[2]) : time(fallback);
+  return {
+    runId: marker?.[1] ?? null,
+    attempt: marker?.[2] ? Number(marker[2]) : null,
+    createdAt,
+    updatedAt,
+  };
+}
+
+function runSupersedesReport({ runId, attempt, runCreatedAt, runCompletedAt }, report) {
+  if (!Number.isNaN(report.updatedAt) && !(runCompletedAt > report.updatedAt)) return false;
+  if (report.runId === runId) {
+    return report.attempt === null || Number(attempt) > report.attempt;
+  }
+  if (report.runId !== null && BigInt(runId) < BigInt(report.runId)) return false;
+  if (!Number.isNaN(report.createdAt) && !Number.isNaN(runCreatedAt) && runCreatedAt < report.createdAt) return false;
+  return true;
+}
+
+export async function closeRecoveredNightlyIssue({ run, repository, defaultBranch, client, dryRun = false, openIssue = null }) {
+  if (run.event !== 'schedule' || run.status !== 'completed' || run.conclusion !== 'success') {
+    return { skipped: 'Not a passing completed scheduled workflow' };
+  }
+  if (!defaultBranch || run.head_branch !== defaultBranch || run.head_repository?.full_name !== repository) {
+    return { skipped: 'Not a default-branch run from this repository' };
+  }
+  const runId = numeric(run.id);
+  const attempt = numeric(run.run_attempt ?? 1);
+  const workflowId = numeric(run.workflow_id);
+  const workflowMarker = `<!-- nightly-workflow:${workflowId} -->`;
+  const recoveryMarker = `<!-- nightly-recovery:${runId}:attempt:${attempt} -->`;
+  let issue = openIssue;
+  if (!issue) {
+    const issues = await client.list('/issues?state=open&creator=github-actions%5Bbot%5D&sort=created&direction=desc');
+    issue = issues.find(entry => entry.state === 'open' && !entry.pull_request && entry.user?.login === 'github-actions[bot]' && entry.body?.startsWith(workflowMarker));
+  }
+  if (!issue || issue.state !== 'open' || issue.pull_request || issue.user?.login !== 'github-actions[bot]' || !issue.body?.startsWith(workflowMarker)) {
+    return { skipped: 'No open issue for workflow' };
+  }
+  const comments = await client.list(`/issues/${numeric(issue.number)}/comments`);
+  const botComments = comments.filter(comment => comment.user?.login === 'github-actions[bot]');
+  const existingRecovery = botComments.find(comment => comment.body?.startsWith(recoveryMarker));
+  if (existingRecovery) {
+    const events = await client.list(`/issues/${numeric(issue.number)}/events`);
+    const recoveryAt = time(existingRecovery.created_at);
+    const closedOrReopenedAfter = events.some(event => (event.event === 'closed' || event.event === 'reopened')
+      && (Number.isNaN(recoveryAt) || time(event.created_at) >= recoveryAt));
+    if (closedOrReopenedAfter) {
+      return { ...(dryRun && { dryRun: true }), duplicate: true, issue: issue.number };
+    }
+  }
+  const reports = [
+    reportedFailureInfo(issue.body, issue.created_at),
+    ...botComments
+      .filter(comment => comment.body?.startsWith('<!-- nightly-run:'))
+      .map(comment => reportedFailureInfo(comment.body, comment.created_at)),
+  ];
+  const candidate = { runId, attempt, runCreatedAt: time(run.created_at), runCompletedAt: time(run.updated_at) };
+  if (!reports.every(report => runSupersedesReport(candidate, report))) {
+    return { skipped: 'Passing run is not newer than the latest reported failure' };
+  }
+  if (existingRecovery) {
+    if (dryRun) return { dryRun: true, issue: issue.number, closed: true };
+    await client.request(`/issues/${numeric(issue.number)}`, { method: 'PATCH', body: { state: 'closed', state_reason: 'completed' } });
+    return { issue: issue.number, closed: true };
+  }
+  const runPath = `/actions/runs/${runId}`;
+  const jobs = await client.list(`${runPath}/attempts/${attempt}/jobs`, 'jobs');
+  const failed = jobs.filter(job => BAD_CONCLUSIONS.has(job.conclusion));
+  const cancelled = jobs.filter(job => job.conclusion === 'cancelled');
+  const succeeded = jobs.filter(job => job.conclusion === 'success');
+  if (failed.length || cancelled.length) return { skipped: 'Run has failed or cancelled jobs' };
+  if (!succeeded.length) return { skipped: 'Run had no passing jobs' };
+  const runUrl = `https://github.com/${repository}/actions/runs/${runId}/attempts/${attempt}`;
+  const body = [
+    recoveryMarker,
+    `## Scheduled workflow recovered: ${plain(run.name)}`,
+    '',
+    `[Run ${runId}, attempt ${attempt}](${runUrl}) passed cleanly on \`${plain(run.head_branch)}\` at commit \`${plain(run.head_sha)}\` (${succeeded.length} ${succeeded.length === 1 ? 'job' : 'jobs'} passed).`,
+    `- ${run.created_at ? `Created: ${plain(run.created_at)}. ` : ''}Started: ${plain(run.run_started_at ?? run.created_at)}. Updated: ${plain(run.updated_at)}.`,
+    '',
+    'Closing this issue automatically. A future scheduled failure will reopen it.',
+  ].join('\n');
+  if (dryRun) return { dryRun: true, issue: issue.number, closed: true, body };
+  await client.request(`/issues/${numeric(issue.number)}/comments`, { method: 'POST', body: { body } });
+  await client.request(`/issues/${numeric(issue.number)}`, { method: 'PATCH', body: { state: 'closed', state_reason: 'completed' } });
+  return { issue: issue.number, closed: true };
 }
 
