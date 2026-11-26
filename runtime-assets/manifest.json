@@ -154,9 +154,9 @@
       "version": "1.4.20260909",
       "target": "niimath/1.4.20260909",
       "deduplicate": true,
-      "consumers": ["brain2print", "edgereg", "synthseg", "topofit"],
+      "consumers": ["brain2print", "edgereg", "synthseg"],
       "match_by": "sha256",
-      "reason": "Share the @niivue/niimath 1.4.20260909 binary used by brain2print, EdgeReg, SynthSeg and TopoFit; each app keeps the single-threaded niimath module in its own worker bundle, which names the binary in a static new URL.",
+      "reason": "Share the @niivue/niimath 1.4.20260909 binary used by brain2print, EdgeReg and SynthSeg; each app keeps the single-threaded niimath module in its own worker bundle, which names the binary in a static new URL.",
       "files": [
         {
           "name": "niimath.wasm",
@@ -188,9 +188,9 @@
       "version": "1.4.20261114",
       "target": "niimath/1.4.20261114",
       "deduplicate": true,
-      "consumers": ["dwi2trx", "noddi"],
+      "consumers": ["dwi2trx", "noddi", "topofit"],
       "match_by": "sha256",
-      "reason": "Share the @niivue/niimath 1.4.20261114 binary used by DWI2TRX and NODDI; each app keeps the single-threaded niimath module in its own worker bundle, which names the binary in a static new URL.",
+      "reason": "Share the @niivue/niimath 1.4.20261114 binary used by DWI2TRX, NODDI and TopoFit; each app keeps the single-threaded niimath module in its own worker bundle, which names the binary in a static new URL.",
       "files": [
         {
           "name": "niimath.wasm",
