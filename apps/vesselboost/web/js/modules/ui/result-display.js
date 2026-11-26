@@ -188,3 +188,21 @@ export function buildEditVolumeStack({ stage, sourceFile = null, segmentationOpa
   ];
   return { visibility, baseStage: 'input', stack };
 }
+
+const KNOWN_VOLUME_EXT_RE = /\.(?:nii\.gz|nii|mgz|mgh|nrrd|nhdr|dcm|ima|img|hdr|mhd|mha)$/i;
+const VESSELBOOST_SUFFIX_RE = /_vesselboost_segmentation(?:_edited)?$/i;
+
+export function buildVesselCharterHandoffFile(segmentationFile, inputFile = null, { edited = false } = {}) {
+  if (!segmentationFile) return null;
+  const rawStem = inputFile?.name
+    ? inputFile.name.replace(KNOWN_VOLUME_EXT_RE, '').replace(VESSELBOOST_SUFFIX_RE, '')
+    : '';
+  const stem = rawStem.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+  const ext = /\.nii\.gz$/i.test(segmentationFile.name) ? '.nii.gz' : '.nii';
+  const isEdited = edited || /_edited\.nii(\.gz)?$/i.test(segmentationFile.name);
+  const suffix = isEdited ? '_vesselboost_segmentation_edited' : '_vesselboost_segmentation';
+  const name = stem
+    ? `${stem}${suffix}${ext}`
+    : (segmentationFile.name || `segmentation${isEdited ? '_edited' : ''}${ext}`);
+  return new File([segmentationFile], name, { type: segmentationFile.type || 'application/octet-stream' });
+}
