@@ -6,7 +6,7 @@ const DICOM_NAMING = ['-f', '%p_%t_%s'];
 
 export function createDicomConverter({ moduleUrl, timeoutMs = 120000 }) {
   if (typeof moduleUrl !== 'string' || !moduleUrl) throw new Error('A DICOM converter module URL is required');
-  return async (files, { signal } = {}) => {
+  return async (files, /** @type {{ signal?: AbortSignal }} */ { signal } = {}) => {
     const loading = new AbortController();
     const loadingSignal = signal ? AbortSignal.any([signal, loading.signal]) : loading.signal;
     const timer = setTimeout(() => loading.abort(new Error('DICOM converter loading timed out')), timeoutMs);

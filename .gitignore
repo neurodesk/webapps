@@ -124,3 +124,6 @@ apps/fastprep/public/meica/
 **/.claude/projects/
 **/.claude/settings.local.json
 **/CLAUDE.local.md
+
+# Local Beads database state stays off main (shared state lives on orphan ref memory/beads).
+.beads/

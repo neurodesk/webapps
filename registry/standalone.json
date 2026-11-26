@@ -3367,6 +3367,13 @@
       ],
       "containers": []
     },
+    "vesselcharter": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
     "laynii": {
       "desktop": true,
       "profile": "interactive",

@@ -72,6 +72,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/totalsegmentator': 'totalsegmentator',
   '@neurodesk/tumour-report': 'tumour-report',
   '@neurodesk/vesselboost': 'vesselboost',
+  '@neurodesk/vesselcharter': 'vesselcharter',
   '@neurodesk/white-matter-lesions': 'white-matter-lesions',
   '@neurodesk/wound-planimetry': 'wound-planimetry',
 });

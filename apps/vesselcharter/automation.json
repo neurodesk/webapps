@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 2,
+  "app": "vesselcharter",
+  "title": "VesselCharter",
+  "description": "Characterise 3D blood vessel diameter, branching, length, tortuosity and optional ROI vascular density from binary vessel masks.",
+  "defaultOperation": "characterize",
+  "operations": {
+    "characterize": {
+      "title": "Characterise vessels",
+      "description": "Extract 3D medial-axis centerlines, multigraph topology, diameters, tortuosity, bifurcation angles and optional brain/ROI density from a VesselBoost or binary vessel mask.",
+      "mode": "batch",
+      "inputs": {
+        "vessels": {
+          "source": "files",
+          "type": "neuro:mask",
+          "formats": [
+            "nifti"
+          ],
+          "description": "3D binary (or thresholdable) blood vessel segmentation NIfTI mask, such as VesselBoost output",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "brainMask": {
+          "source": "files",
+          "type": "neuro:mask",
+          "formats": [
+            "nifti"
+          ],
+          "description": "Optional same-grid 3D brain or ROI mask for vessel volume fraction, length density and junction density",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "referenceImage": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti"
+          ],
+          "description": "Optional TOF-MRA or SWI anatomical volume for slice overlay context",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "maskThreshold": {
+          "type": "number",
+          "description": "Voxels strictly above this intensity are treated as vessel foreground",
+          "minimum": 0,
+          "maximum": 1000000,
+          "default": 0
+        },
+        "fillHoles": {
+          "type": "boolean",
+          "description": "Fill 6-connected interior cavities inside vessels before skeletonisation",
+          "default": true
+        },
+        "minComponentVoxels": {
+          "type": "integer",
+          "description": "Minimum 26-connected vessel component size in voxels (0 keeps all)",
+          "minimum": 0,
+          "maximum": 1000000,
+          "default": 10
+        },
+        "minSpurLengthMm": {
+          "type": "number",
+          "description": "Iteratively prune terminal spurs shorter than this length in mm (0 disables)",
+          "minimum": 0,
+          "maximum": 50,
+          "default": 1
+        },
+        "pruneContainedSpurs": {
+          "type": "boolean",
+          "description": "Also prune terminal spurs whose tip stays within the parent junction inscribed sphere",
+          "default": false
+        },
+        "minIsolatedLengthMm": {
+          "type": "number",
+          "description": "Minimum length in mm for standalone endpoint-to-endpoint segments (0 keeps all)",
+          "minimum": 0,
+          "maximum": 50,
+          "default": 0
+        },
+        "smoothIterations": {
+          "type": "integer",
+          "description": "Pinned Taubin centerline smoothing iterations (0 keeps raw voxel polylines)",
+          "minimum": 0,
+          "maximum": 20,
+          "default": 6
+        }
+      },
+      "artifacts": {
+        "summary": {
+          "type": "neuro:json",
+          "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "graph": {
+          "type": "neuro:json",
+          "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "segments": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "junctions": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "diameter-bins": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "diameter-map": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "skeleton-labels": {
+          "type": "neuro:label-map",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "vessel-mesh": {
+          "type": "neuro:surface",
+          "mediaType": "application/octet-stream",
+          "formats": [
+            "mz3"
+          ],
+          "space": "input",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

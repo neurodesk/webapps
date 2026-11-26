@@ -7,8 +7,10 @@ export async function awaitPipelineStep(executor, { step, terminal = 'step', com
   if (activeExecutors.has(executor)) throw new Error('The pipeline already has a pending automation step.');
   activeExecutors.add(executor);
   const previous = Object.fromEntries(['onStepComplete', completionCallback, errorCallback].map(name => [name, executor[name]]));
-  let resolveCompletion;
-  let rejectCompletion;
+  /** @type {(value?: unknown) => void} */
+  let resolveCompletion = () => {};
+  /** @type {(reason?: unknown) => void} */
+  let rejectCompletion = () => {};
   const completion = new Promise((resolve, reject) => {
     resolveCompletion = resolve;
     rejectCompletion = reject;

@@ -5716,6 +5716,13 @@
       "license": "MIT",
       "dependencies": []
     },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/30e002f01b4f3d74dcd6c1cbcbe339036fa21730/examples/vesselcharter/lausanne-tof/lausanne-tof-crop-192x192x64_vesselboost-manual_0429.nii.gz": {
+      "sha256": "6502ec4c92e57bc98fda8d2c33f6cbd305d147a6d12b9982cf0932a2e37a3a1d",
+      "bytes": 13930,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
     "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2449b9ed41ae4d1e7fd8caa4142a5a64186b1bc/laynii/examples/Ding2016_occip_rim.nii.gz": {
       "sha256": "ca944ebb87836d4b0799dc31fb22d8cd4ed50f5186e1c39d81dc414c57340dfd",
       "bytes": 87500,
@@ -7192,6 +7199,9 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0000013.jpg",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3df17c47dc569e817546713e9e82ee0652359bfb/dermatology/examples/ISIC_0001115.jpg",
       "https://huggingface.co/sazio/skin-mole-vit-onnx/resolve/25be9e61a71125de9502648c1f6adceb7a882637/onnx/model_quantized.onnx"
+    ],
+    "vesselcharter": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/30e002f01b4f3d74dcd6c1cbcbe339036fa21730/examples/vesselcharter/lausanne-tof/lausanne-tof-crop-192x192x64_vesselboost-manual_0429.nii.gz"
     ],
     "laynii": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2449b9ed41ae4d1e7fd8caa4142a5a64186b1bc/laynii/examples/Ding2016_occip_rim.nii.gz",

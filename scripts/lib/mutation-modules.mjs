@@ -28,7 +28,7 @@ export const modules = [
     // The date arithmetic only: the rest of app-versions.mjs drives Changesets on a workspace.
     id: 'date-versions',
     file: 'scripts/lib/app-versions.mjs',
-    mutate: 'scripts/lib/app-versions.mjs:79-108',
+    mutate: 'scripts/lib/app-versions.mjs:80-109',
     files: [
       'scripts/lib/apps-registry.mjs',
       'scripts/lib/embedded-version-sites.mjs',
@@ -103,6 +103,13 @@ export const modules = [
     mutate: 'packages/lcmodel/src/voxel.js',
     files: ['packages/lcmodel/package.json', 'packages/lcmodel/test/voxel.test.js'],
     command: 'node --test --test-skip-pattern=oblique --test-skip-pattern=oriented packages/lcmodel/test/voxel.test.js',
+  },
+  {
+    id: 'automation-abort',
+    file: 'packages/components/src/automation/abort.js',
+    mutate: 'packages/components/src/automation/abort.js',
+    files: ['packages/components/package.json', 'packages/components/test/automation-abort.test.js'],
+    command: 'node --test packages/components/test/automation-abort.test.js',
   },
 ];
 

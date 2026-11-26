@@ -3301,12 +3301,50 @@ apps:
         reference: "International Skin Imaging Collaboration (ISIC). ISIC Archive public domain (CC-0) dermoscopic images (ISIC_0000000, ISIC_0000013, ISIC_0001115)."
         url: https://www.isic-archive.com/
 
+  vesselcharter:
+    packages:
+      - { name: "@neurodesk/vesselcharter", url: https://github.com/neurodesk/webapps/tree/main/packages/vesselcharter, role: 3D vessel skeletonisation, morphometry and graph metrics }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: 3D mesh and slice viewer }
+    citations:
+      - group: Skeletonisation & morphometry
+        title: Lee, Kashyap & Chu (1994) 3D Thinning
+        reference: "Lee TC, Kashyap RL, Chu CN. Building Skeleton Models via 3-D Medial Surface/Axis Thinning Algorithms. CVGIP: Graphical Models and Image Processing. 1994;56(6):462-478."
+        doi: 10.1006/cgip.1994.1042
+      - group: Skeletonisation & morphometry
+        title: Felzenszwalb & Huttenlocher (2012) Exact Distance Transform
+        reference: "Felzenszwalb PF, Huttenlocher DP. Distance Transforms of Sampled Functions. Theory of Computing. 2012;8:415-428."
+        doi: 10.4086/toc.2012.v008a019
+      - group: Skeletonisation & morphometry
+        title: Taubin (1995) Non-Shrinking Curve Smoothing
+        reference: "Taubin G. A Signal Processing Approach to Fair Surface Design. Proceedings of ACM SIGGRAPH. 1995:351-358."
+        doi: 10.1145/218380.218473
+      - group: Skeletonisation & morphometry
+        title: Bullitt et al. (2003) Cerebral MRA Tortuosity (SOAM)
+        reference: "Bullitt E, Gerig G, Pizer SM, Lin W, Aylward SR. Measuring Tortuosity of the Intracerebral Vasculature From MRA Images. IEEE Transactions on Medical Imaging. 2003;22(9):1163-1171."
+        doi: 10.1109/TMI.2003.816964
+      - group: Validation & upstream data
+        title: VesselBoost
+        reference: "Xu M, Ribeiro FL, Barth M, Bernier M, Bollmann S, Chatterjee S, et al. VesselBoost: A Python Toolbox for Small Blood Vessel Segmentation in Human Magnetic Resonance Angiography Data. Aperture Neuro. 2024;4."
+        doi: 10.52294/001c.123217
+      - group: Validation & upstream data
+        title: VesselVio (external validation reference)
+        reference: "Bumgarner JR, Nelson RJ. Open-source analysis and visualization of segmented vasculature datasets with VesselVio. Cell Reports Methods. 2022;2(4):100189."
+        doi: 10.1016/j.crmeth.2022.100189
+      - group: Validation & upstream data
+        title: Skan (external validation reference)
+        reference: "Nunez-Iglesias J, Blanch AJ, Looker O, Dixon MW, Tilley L. A new Python library to analyse skeleton images confirms malaria parasite remodelling of the red blood cell membrane skeleton. PeerJ. 2018;6:e4312."
+        doi: 10.7717/peerj.4312
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
   laynii:
     about:
       - "LayNii computes equidistant and equivolume cortical gray-matter layers (LN2_LAYERS) and layer-wise signal profiles (LN2_PROFILE) from a 3D rim segmentation in the browser. The WebAssembly build compiles unmodified LayNii v2.10.0 C++ sources on one thread without SharedArrayBuffer, reproducing native LN2_LAYERS and LN2_PROFILE voxels bit for bit."
       - "Supply a 3D rim NIfTI volume with integer labels 1 (outer gray-matter/CSF border), 2 (inner gray-matter/white-matter border), and 3 (pure gray matter). Enable Equivolume layers (-equivol) for Bok-principle volume-preserving layers on sub-millimetre rims (recommended at or below 0.3 mm resolution). Optional outputs include cortical thickness, curvature, equal-count layers and mid-GM surfaces."
       - "Optionally load a matched 3D functional or quantitative signal volume on the exact rim grid (such as BOLD, VASO, or T2*) to run LN2_PROFILE automatically and inspect the resulting mean ± SD laminar profile plot and CSV table in the Profile tab."
-      - "To protect browser memory in WebAssembly, volumes above 12 million voxels are refused before allocation. For whole-brain ultra-high-resolution datasets or batch processing, run the native LayNii 2.10.0 container listed under Standalone; the technical log prints the matching native CLI command for every run."
+      - "To protect browser memory in WebAssembly, volumes above 8 million voxels are refused before allocation. For whole-brain ultra-high-resolution datasets or batch processing, run the native LayNii 2.10.0 container listed under Standalone; the technical log prints the matching native CLI command for every run."
     packages:
       - { name: LayNii (WebAssembly), url: https://github.com/layerfMRI/LAYNII, role: "LN2_LAYERS and LN2_PROFILE v2.10.0 compiled to WebAssembly (@neurodesk/laynii)" }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }

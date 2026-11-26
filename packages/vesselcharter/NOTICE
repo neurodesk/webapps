@@ -1,0 +1,17 @@
+VesselCharter (@neurodesk/vesselcharter)
+Copyright (c) 2026 Neurodesk Contributors
+
+Clean-room JavaScript implementation of 3D vascular morphometry algorithms
+published in the scientific literature:
+- Lee TC, Kashyap RL, Chu CN (1994) Building Skeleton Models via 3-D Medial
+  Surface/Axis Thinning Algorithms. CVGIP 56(6):462-478.
+- Felzenszwalb PF, Huttenlocher DP (2012) Distance Transforms of Sampled
+  Functions. Theory of Computing 8:415-428.
+- Taubin G (1995) A Signal Processing Approach to Fair Surface Design.
+  SIGGRAPH 1995:351-358.
+- Bullitt E, Gerig G, Pizer SM, Lin W, Aylward SR (2003) Measuring Tortuosity
+  of the Intracerebral Vasculature From MRA Images. IEEE TMI 22(9):1163-1171.
+
+External validation references (executed separately, no source code incorporated):
+- scikit-image / SciPy / Skan (BSD-3-Clause)
+- VesselVio (GPL-3.0, Bumgarner & Nelson 2022, Cell Reports Methods)

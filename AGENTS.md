@@ -12,7 +12,7 @@ Before editing under `apps/<id>/`, `packages/<id>/`, or `exes/`, read any `AGENT
 
 - Per-app rules live in `apps/<id>/AGENTS.md` (and `apps/vesselboost/AGENT.md`), not in this root file.
 - Shared subsystem rules live in [packages/runtime-support/AGENTS.md](packages/runtime-support/AGENTS.md) (FreeBrowse viewer, `dcm2niix`), [packages/node-drivers/AGENTS.md](packages/node-drivers/AGENTS.md) (MindGrab, niimath CLI drivers), [packages/components/src/webmcp/AGENTS.md](packages/components/src/webmcp/AGENTS.md) (full WebMCP contract), [exes/AGENTS.md](exes/AGENTS.md) (native executables), and [exes/compute-server/AGENTS.md](exes/compute-server/AGENTS.md) (NeSVoR and `neurodesk-compute`).
-- Keep the four memory layers separate: permanent invariants stay in scoped `AGENTS.md` files and contract tests; catalog truth stays in `registry/`; point-in-time evidence and ADRs stay in `docs/`; transient work state, rollout queues and discovered follow-ups stay out of `AGENTS.md` and off `main` (no CI job, build or test may ever depend on external agent memory).
+- Keep the four memory layers separate: permanent invariants stay in scoped `AGENTS.md` files and contract tests; catalog truth stays in `registry/`; point-in-time evidence and ADRs stay in `docs/`; transient work state, rollout queues and discovered follow-ups stay out of `AGENTS.md` and off `main` (use `node scripts/beads.mjs` on orphan ref `memory/beads` — see [docs/architecture/beads-memory.md](docs/architecture/beads-memory.md); no CI job, build or test may ever depend on external agent memory).
 
 ## Interface changes and new applications
 
