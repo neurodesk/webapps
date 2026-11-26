@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "bd-5d2c07eb",
-  "revision": 1,
-  "stateRevision": 1,
+  "revision": 2,
+  "stateRevision": 2,
   "title": "Add Phase 2 weekly gh-aw unused-code triage workflow",
   "summary": "Read quality.yml knip.json artifact + memory/beads snapshot and propose idempotent beads via scripts/beads.mjs apply --safe.",
   "kind": "rollout",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "scope": {
     "type": "repo",
@@ -21,6 +21,7 @@
     "discoveredFrom": null
   },
   "links": {
+    "pr": 957,
     "evidence": [
       ".github/workflows/quality.yml",
       "docs/architecture/beads-memory.md"
@@ -29,12 +30,18 @@
   "lease": null,
   "releasedLeases": [],
   "leaseFloorAt": null,
-  "journal": [],
+  "journal": [
+    {
+      "at": "2026-11-26T14:03:49.314Z",
+      "actor": "t3/phase-2-gh-aw-unused-code-triage",
+      "note": "Closed: Added weekly read-only gh-aw unused-code-triage workflow (Copilot engine) and deterministic Beads safe-outputs bridge"
+    }
+  ],
   "createdAt": "2026-11-26T02:48:31.873Z",
-  "updatedAt": "2026-11-26T02:48:31.873Z",
-  "stateUpdatedAt": "2026-11-26T02:48:31.873Z",
+  "updatedAt": "2026-11-26T14:03:49.314Z",
+  "stateUpdatedAt": "2026-11-26T14:03:49.314Z",
   "lastSeenAt": "2026-11-26T02:48:31.873Z",
-  "closedAt": null,
+  "closedAt": "2026-11-26T14:03:49.314Z",
   "reopenedAt": null,
-  "closeReason": null
+  "closeReason": "Added weekly read-only gh-aw unused-code-triage workflow (Copilot engine) and deterministic Beads safe-outputs bridge"
 }
