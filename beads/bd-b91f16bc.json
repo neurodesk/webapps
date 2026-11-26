@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "id": "bd-b91f16bc",
   "revision": 1,
+  "stateRevision": 1,
   "title": "Return vendored FreeBrowse build to npm registry pin",
   "summary": "Blocked until upstream FreeBrowse publishes the unreleased development branch features to npm.",
   "kind": "blocker",
@@ -25,10 +26,14 @@
     ]
   },
   "lease": null,
+  "releasedLeases": [],
+  "leaseFloorAt": null,
   "journal": [],
   "createdAt": "2026-11-26T02:48:31.873Z",
   "updatedAt": "2026-11-26T02:48:31.873Z",
+  "stateUpdatedAt": "2026-11-26T02:48:31.873Z",
   "lastSeenAt": "2026-11-26T02:48:31.873Z",
   "closedAt": null,
+  "reopenedAt": null,
   "closeReason": null
 }

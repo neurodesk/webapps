@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "id": "bd-5d2c07eb",
   "revision": 1,
+  "stateRevision": 1,
   "title": "Add Phase 2 weekly gh-aw unused-code triage workflow",
   "summary": "Read quality.yml knip.json artifact + memory/beads snapshot and propose idempotent beads via scripts/beads.mjs apply --safe.",
   "kind": "rollout",
@@ -26,10 +27,14 @@
     ]
   },
   "lease": null,
+  "releasedLeases": [],
+  "leaseFloorAt": null,
   "journal": [],
   "createdAt": "2026-11-26T02:48:31.873Z",
   "updatedAt": "2026-11-26T02:48:31.873Z",
+  "stateUpdatedAt": "2026-11-26T02:48:31.873Z",
   "lastSeenAt": "2026-11-26T02:48:31.873Z",
   "closedAt": null,
+  "reopenedAt": null,
   "closeReason": null
 }

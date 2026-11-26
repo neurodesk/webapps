@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "id": "bd-a12e36f9",
   "revision": 1,
+  "stateRevision": 1,
   "title": "Drop direct niimath callMain path in topofit",
   "summary": "Adopt fluent Niimath STL output and drop manual writeMz3/readMz3 round-trip now that @niivue/niimath > 1.4.20260909 has shipped.",
   "kind": "maintenance",
@@ -26,10 +27,14 @@
     ]
   },
   "lease": null,
+  "releasedLeases": [],
+  "leaseFloorAt": null,
   "journal": [],
   "createdAt": "2026-11-26T02:48:31.873Z",
   "updatedAt": "2026-11-26T02:48:31.873Z",
+  "stateUpdatedAt": "2026-11-26T02:48:31.873Z",
   "lastSeenAt": "2026-11-26T02:48:31.873Z",
   "closedAt": null,
+  "reopenedAt": null,
   "closeReason": null
 }

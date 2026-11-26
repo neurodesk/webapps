@@ -1,11 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "bd-51178073",
-  "revision": 1,
+  "revision": 2,
+  "stateRevision": 2,
   "title": "Support gh-aw compiled lockfile activation/conclusion jobs in ci-policy test",
   "summary": "gh-aw v1.2.2 omits timeout-minutes on generated activation and conclusion boilerplate jobs while setting them on agent, detection, and safe_outputs.",
   "kind": "maintenance",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "scope": {
     "type": "repo",
@@ -18,16 +19,32 @@
     "discoveredFrom": null
   },
   "links": {
+    "branch": "t3/phase-2-gh-aw-unused-code-triage",
     "evidence": [
       "docs/architecture/beads-memory.md",
       "test/ci-policy.test.mjs"
     ]
   },
-  "lease": null,
-  "journal": [],
+  "lease": {
+    "owner": "t3/phase-2-gh-aw-unused-code-triage",
+    "branch": "t3/phase-2-gh-aw-unused-code-triage",
+    "claimedAt": "2026-11-26T07:10:47.003Z",
+    "expiresAt": "2026-11-27T07:10:47.003Z"
+  },
+  "releasedLeases": [],
+  "leaseFloorAt": null,
+  "journal": [
+    {
+      "at": "2026-11-26T07:10:47.003Z",
+      "actor": "t3/phase-2-gh-aw-unused-code-triage",
+      "note": "Claimed until 2026-11-27T07:10:47.003Z"
+    }
+  ],
   "createdAt": "2026-11-26T02:48:31.873Z",
-  "updatedAt": "2026-11-26T02:48:31.873Z",
+  "updatedAt": "2026-11-26T07:10:47.003Z",
+  "stateUpdatedAt": "2026-11-26T07:10:47.003Z",
   "lastSeenAt": "2026-11-26T02:48:31.873Z",
   "closedAt": null,
+  "reopenedAt": null,
   "closeReason": null
 }
