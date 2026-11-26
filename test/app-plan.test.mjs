@@ -6705,6 +6705,57 @@ test('lint runner and scripts/quality files select nothing when unreached, and h
       new Map(),
       (plan) => assert.equal(plan.allApps, true),
     ],
+    [
+      'reassigned exported provisionTestData binding fails closed',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'echo tests' }] },
+            'browser-e2e': { steps: [{ env: { APP: '${{ matrix.app }}' }, run: 'node scripts/e2e-test-data.mjs "$APP"' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/e2e-test-data.mjs': "import { provisionTestData } from './lib/e2e-test-data.mjs';\nconst [app] = process.argv.slice(2);\nawait provisionTestData(app, '.');\n",
+        'scripts/lib/e2e-test-data.mjs': "import { readFileSync } from 'node:fs';\nexport const provisioners = { noddi: { provision: () => readFileSync('exes/ref/sample.txt') } };\nexport async function provisionTestData(app, cache) { return provisioners[app]?.provision(cache) ?? {}; }\nconst orig = provisionTestData;\nprovisionTestData = (_app, cache) => orig('noddi', cache);\n",
+        'exes/ref/sample.txt': 'data\n',
+      },
+      'exes/ref/sample.txt',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
+    [
+      'forwarding lint script in a workspace preserves downstream standalone lint runner edge',
+      {
+        'scripts/lint.mjs': 'export const lint = 1;\n',
+        'apps/n4/package.json': JSON.stringify({ name: '@nd/n4', scripts: { build: 'pnpm --filter @nd/first check' } }),
+        'packages/first/package.json': JSON.stringify({ name: '@nd/first', scripts: { check: 'pnpm run lint', lint: 'pnpm --filter @nd/second lint' } }),
+        'packages/second/package.json': JSON.stringify({ name: '@nd/second', scripts: { lint: 'node ../../scripts/lint.mjs --workspace' } }),
+      },
+      'scripts/lint.mjs',
+      new Map(),
+      (plan) => assert.deepEqual(plan.selected.map((app) => app.id), ['n4']),
+    ],
+    [
+      'co-loaded sibling using syncBuiltinESMExports disables JSON narrowing in the entry module',
+      {
+        '.github/workflows/ci.yml': stringify({
+          jobs: {
+            'composite-site': { steps: [{ run: 'echo site' }] },
+            'app-tests': { steps: [{ run: 'node scripts/ci-helper.mjs' }] },
+            'browser-e2e': { steps: [{ run: 'echo e2e' }] },
+            'browser-e2e-gpu': { steps: [{ run: 'echo gpu' }] },
+          },
+        }),
+        'scripts/patch-fs.mjs': "import fs from 'node:fs';\nimport { syncBuiltinESMExports } from 'node:module';\nconst orig = fs.readFileSync;\nfs.readFileSync = () => orig('exes/demo/sample.json', 'utf8');\nsyncBuiltinESMExports();\n",
+        'scripts/ci-helper.mjs': "import './patch-fs.mjs';\nimport { readFileSync } from 'node:fs';\nreadFileSync('exes/demo/manifest.json', 'utf8');\n",
+        'exes/demo/manifest.json': '{}',
+        'exes/demo/sample.json': '{}',
+      },
+      'exes/demo/sample.json',
+      new Map(),
+      (plan) => assert.equal(plan.allApps, true),
+    ],
   ]) {
     const caseRoot = await mkdtemp(join(tmpdir(), 'neurodesk-cross-lint-'));
     t.after(() => rm(caseRoot, { recursive: true, force: true }));

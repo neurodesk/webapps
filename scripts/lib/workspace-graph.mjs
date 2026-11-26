@@ -141,13 +141,16 @@ function analyzeScriptFile(source, file) {
   // `syncBuiltinESMExports`, or shadows/reassigns those local binding names.
   const fsModules = new Set(['node:fs', 'fs', 'node:fs/promises', 'fs/promises']);
   const pathModules = new Set(['node:path', 'path', 'node:path/posix', 'path/posix']);
+  const moduleBuiltins = new Set(['node:module', 'module']);
   const readFileIds = new Set();
   const pathJoinIds = new Set();
   let hasMutableBuiltinImport = /\bsyncBuiltinESMExports\b/.test(source);
   for (const stmt of ast.body ?? []) {
     if (stmt.type !== 'ImportDeclaration' || stmt.source?.type !== 'Literal') continue;
     const mod = stmt.source.value;
-    if (fsModules.has(mod)) {
+    if (moduleBuiltins.has(mod)) {
+      hasMutableBuiltinImport = true;
+    } else if (fsModules.has(mod)) {
       for (const spec of stmt.specifiers ?? []) {
         if (spec.type === 'ImportSpecifier' && (moduleExportName(spec.imported) === 'readFile' || moduleExportName(spec.imported) === 'readFileSync') && spec.local?.name) {
           readFileIds.add(spec.local.name);
@@ -296,7 +299,7 @@ function analyzeScriptFile(source, file) {
     ancestors.pop();
   };
   visit(ast);
-  return { ast, literals, specifiers };
+  return { ast, literals, specifiers, builtinMutator: hasMutableBuiltinImport };
 }
 
 function matchScriptLiteral(text, match, literals) {
@@ -805,16 +808,32 @@ function computeProvisionerOnlyRanges(ast) {
   const { bindings, exportedNames } = collectTopLevelBindings(ast);
   const provisionersObj = bindings.get('provisioners');
   if (provisionersObj?.type !== 'ObjectExpression') return { ok: false, entries: [] };
+  let provisionersDecls = 0;
+  let dispatchDecls = 0;
   for (const stmt of ast.body ?? []) {
+    const inner = stmt.type === 'ExportNamedDeclaration' ? stmt.declaration : stmt;
+    if (inner?.type === 'FunctionDeclaration' && inner.id?.name) {
+      if (inner.id.name === 'provisioners') provisionersDecls++;
+      if (inner.id.name === 'provisionTestData') dispatchDecls++;
+    } else if (inner?.type === 'VariableDeclaration') {
+      for (const decl of inner.declarations ?? []) {
+        collectPatternNames(decl.id, (name) => {
+          if (name === 'provisioners') provisionersDecls++;
+          if (name === 'provisionTestData') dispatchDecls++;
+        });
+      }
+    }
     if (stmt.type === 'ExportNamedDeclaration') {
       for (const spec of stmt.specifiers ?? []) {
         const exported = moduleExportName(spec.exported);
         if (spec.local?.name === 'provisioners' && exported !== 'provisioners') return { ok: false, entries: [] };
+        if (exported === 'provisionTestData' && spec.local?.name !== 'provisionTestData') return { ok: false, entries: [] };
       }
     } else if (stmt.type === 'ExportDefaultDeclaration' && stmt.declaration?.type === 'Identifier' && stmt.declaration.name === 'provisioners') {
       return { ok: false, entries: [] };
     }
   }
+  if (provisionersDecls !== 1 || dispatchDecls !== 1) return { ok: false, entries: [] };
   const provisionFnApps = new Map();
   const provisionIdentApps = new Map();
   const recordProvisionProp = (obj, appId) => {
@@ -883,7 +902,16 @@ function computeProvisionerOnlyRanges(ast) {
   const provisionFns = new Set(provisionFnApps.keys());
   let provisionersUsedSafely = true;
   walkAstIdentifiers(ast, (idNode, ancestors) => {
-    if (!provisionersUsedSafely || idNode.name !== 'provisioners') return;
+    if (!provisionersUsedSafely) return;
+    if (idNode.name === 'eval') {
+      provisionersUsedSafely = false;
+      return;
+    }
+    if (idNode.name === 'provisionTestData') {
+      if (isWriteTarget(idNode, ancestors)) provisionersUsedSafely = false;
+      return;
+    }
+    if (idNode.name !== 'provisioners') return;
     const parent = ancestors[ancestors.length - 1];
     if (parent?.type === 'VariableDeclarator' && parent.id === idNode) return;
     if (parent?.type === 'ExportSpecifier' && (parent.local === idNode || parent.exported === idNode)) return;
@@ -1516,12 +1544,14 @@ export async function loadConservativeWorkspaceGraph(root) {
   const CROSS_WORKSPACE_TARGET = /(?:--filter\b|-F\b|--dir\b|-C\b|--prefix\b|--cwd\b|-r\b|--recursive\b|\brecursive\b|-w\b|--workspace|\bcd\s+|\.\.)/;
   const anyCrossWorkspaceLint = nodes.some((node) =>
     Object.entries(manifests.get(node)?.scripts ?? {}).some(([k, v]) => {
-      if (k === 'lint') return false;
       const str = String(v);
-      if (!CROSS_WORKSPACE_TARGET.test(str)) return false;
-      return /\blint\b/i.test(str)
-        || (/\b(?:pnpm|npm|yarn)\b/.test(str) && /[$`]|\$\{\{/.test(str))
-        || /\b(?:eval|exec)\b|\b(?:sh|bash|dash|zsh)\s+-[a-z]*c\b/.test(str);
+      const effective = k === 'lint'
+        ? str.split('&&').filter((seg) => !STANDALONE_LINT_SEGMENT.test(seg)).join(' && ')
+        : str;
+      if (!CROSS_WORKSPACE_TARGET.test(effective)) return false;
+      return /\blint\b/i.test(effective)
+        || (/\b(?:pnpm|npm|yarn)\b/.test(effective) && /[$`]|\$\{\{/.test(effective))
+        || /\b(?:eval|exec)\b|\b(?:sh|bash|dash|zsh)\s+-[a-z]*c\b/.test(effective);
     }),
   );
   const canStripStandaloneLint =
@@ -1730,6 +1760,7 @@ export async function loadConservativeWorkspaceGraph(root) {
     const analysis = analyzeScriptFile(text, file);
     const literals = analysis?.literals ?? null;
     const workspaceRefs = [];
+    const narrowedJsonRefs = [];
     const recordWorkspaceRef = (wsTarget, range) => workspaceRefs.push({ target: wsTarget, range });
     for (const match of text.matchAll(SCRIPT_REFERENCE)) {
       const [, top, name, inner] = match;
@@ -1740,7 +1771,10 @@ export async function loadConservativeWorkspaceGraph(root) {
       if (target && await isRegularUnlinkedFile(root, target)) {
         uses.add(target);
         recordWorkspaceRef(target, range);
-        if (literalMatch.derivedJson && target.endsWith('.json')) derivedJsonFiles.add(target);
+        if (target.endsWith('.json')) {
+          narrowedJsonRefs.push({ wsDir: `${top}/${name}`, range });
+          if (literalMatch.derivedJson) derivedJsonFiles.add(target);
+        }
         pendingRootFiles.push(target);
       } else {
         uses.add(`${top}/${name}`);
@@ -1796,7 +1830,7 @@ export async function loadConservativeWorkspaceGraph(root) {
           externalImporterDeps.set(file, fileOwner);
         }
       }
-      analyzedRootFiles.set(file, { ast: analysis.ast, workspaceRefs });
+      analyzedRootFiles.set(file, { ast: analysis.ast, workspaceRefs, narrowedJsonRefs, builtinMutator: analysis.builtinMutator });
     } else if (fileOwner) {
       for (const [, name] of text.matchAll(/(?:\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)['"]((?:@[\w.-]+\/)?[A-Za-z0-9_][\w.-]*)/g)) {
         if (!isBuiltin(name) && !nodeByPackageName.has(name)) externalImporterDeps.set(file, fileOwner);
@@ -1828,11 +1862,13 @@ export async function loadConservativeWorkspaceGraph(root) {
   const extraPeerCache = new Map();
   const loadPeerModule = async (peer) => {
     if (analyzedRootFiles.has(peer)) {
+      const entry = analyzedRootFiles.get(peer);
       return {
         kind: 'js',
-        ast: analyzedRootFiles.get(peer).ast,
+        ast: entry.ast,
         imports: moduleImportEdges.get(peer) ?? new Set(),
         opaque: opaqueImporters.has(peer),
+        builtinMutator: entry.builtinMutator,
       };
     }
     if (extraPeerCache.has(peer)) return extraPeerCache.get(peer);
@@ -1872,7 +1908,7 @@ export async function loadConservativeWorkspaceGraph(root) {
       }
       if (!isBuiltin(spec.value)) opaque = true;
     }
-    const info = { kind: 'js', ast: analysis.ast, imports, opaque };
+    const info = { kind: 'js', ast: analysis.ast, imports, opaque, builtinMutator: analysis.builtinMutator };
     extraPeerCache.set(peer, info);
     return info;
   };
@@ -1880,6 +1916,7 @@ export async function loadConservativeWorkspaceGraph(root) {
     const seen = new Set([start]);
     const stack = [start];
     let hasOpaque = false;
+    let hasBuiltinMutator = false;
     while (stack.length) {
       const current = stack.pop();
       const info = await loadPeerModule(current);
@@ -1889,6 +1926,7 @@ export async function loadConservativeWorkspaceGraph(root) {
       }
       if (info.kind === 'json') continue;
       if (info.opaque) hasOpaque = true;
+      if (info.builtinMutator) hasBuiltinMutator = true;
       for (const next of info.imports) {
         if (!seen.has(next)) {
           seen.add(next);
@@ -1896,12 +1934,33 @@ export async function loadConservativeWorkspaceGraph(root) {
         }
       }
     }
-    return { seen, hasOpaque };
+    return { seen, hasOpaque, hasBuiltinMutator };
   };
   const entryReaches = new Map();
   for (const entry of catalogDirect) {
     if (!SOURCE_FILE.test(entry)) continue;
     entryReaches.set(entry, await coLoadedModules(entry));
+  }
+  const allClosures = [...entryReaches.values()];
+  for (const entry of edges.get(SITE) ?? []) {
+    if (!SOURCE_FILE.test(entry) || entryReaches.has(entry)) continue;
+    allClosures.push(await coLoadedModules(entry));
+  }
+  // If any co-loaded module can mutate built-in exports (e.g. via
+  // `syncBuiltinESMExports()` or default/namespace `fs`/`path`), restore the
+  // full workspace directory edge for every narrowed `.json` read in that file.
+  for (const [file, info] of analyzedRootFiles) {
+    if (info.narrowedJsonRefs.length === 0) continue;
+    const ownClosure = entryReaches.get(file) ?? await coLoadedModules(file);
+    const unsafe = ownClosure.hasOpaque || ownClosure.hasBuiltinMutator || allClosures.some(
+      ({ seen, hasOpaque, hasBuiltinMutator }) => seen.has(file) && (hasOpaque || hasBuiltinMutator),
+    );
+    if (!unsafe) continue;
+    const fileEdges = edges.get(file);
+    for (const { wsDir, range } of info.narrowedJsonRefs) {
+      fileEdges?.add(wsDir);
+      info.workspaceRefs.push({ target: wsDir, range });
+    }
   }
   const coLoadedMutatesArgv = async (targetFile) => {
     for (const [entry, { seen, hasOpaque }] of entryReaches) {
