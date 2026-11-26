@@ -621,6 +621,14 @@ test('mergeBeadsMaps preserves closed status, bumps revision on merge, caps evid
   assert.equal(mergedCollidingLegacy.get(idA).status, 'open');
   assert.equal(mergedCollidingLegacy.get(idA).lease, null);
 
+  // Conversely, a pure v2: release (without any legacy tombstone) must NOT clear a DIFFERENT active claim whose owner matches "<expiresAt>|<hash>"
+  const mergedV2OnlyVsCollidingOwner = mergeBeadsMaps(releasedBranch, legacyCollidingClaim);
+  assert.equal(mergedV2OnlyVsCollidingOwner.get(idA).status, 'in_progress');
+  assert.equal(mergedV2OnlyVsCollidingOwner.get(idA).lease?.owner, collidingOwner);
+  const mergedV2OnlyReverse = mergeBeadsMaps(legacyCollidingClaim, releasedBranch);
+  assert.equal(mergedV2OnlyReverse.get(idA).status, 'in_progress');
+  assert.equal(mergedV2OnlyReverse.get(idA).lease?.owner, collidingOwner);
+
   // Adding audit notes to a tied branch must NEVER flip which scheduling edit wins
   const tiedTitle = applyOperations(base, [{ op: 'update', id: idA, title: 'Tied title' }], { actor: 'host-1', now: t1 }).beads;
   const tiedDep = applyOperations(base, [{ op: 'dep_add', id: idA, blockedBy: idB }], { actor: 'host-2', now: t1 }).beads;

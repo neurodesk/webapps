@@ -306,16 +306,31 @@ function leaseKey(lease) {
   return `v2:${lease.claimedAt}|${lease.expiresAt}|${hash}`;
 }
 
+function stripTombstonePrefix(entry) {
+  if (entry.startsWith('v2+:')) return entry.slice(4);
+  if (entry.startsWith('v2:')) return entry.slice(3);
+  return entry;
+}
+
 function tombstoneClaimedAt(entry) {
-  const body = entry.startsWith('v2:') ? entry.slice(3) : entry;
+  const body = stripTombstonePrefix(entry);
   return body.slice(0, body.indexOf('|'));
 }
 
 function sortTombstones(entries) {
   const unique = new Set(entries);
   for (const entry of [...unique]) {
-    if (entry.startsWith('v2:') && unique.has(entry.slice(3))) {
-      unique.delete(entry.slice(3));
+    if (entry.startsWith('v2+:')) {
+      const body = entry.slice(4);
+      unique.delete(`v2:${body}`);
+      unique.delete(body);
+    } else if (entry.startsWith('v2:')) {
+      const body = entry.slice(3);
+      if (unique.has(body)) {
+        unique.delete(entry);
+        unique.delete(body);
+        unique.add(`v2+:${body}`);
+      }
     }
   }
   return [...unique].sort((a, b) =>
@@ -353,17 +368,18 @@ function normalizeReleasedLeases(raw = []) {
     if (typeof item !== 'string') {
       throw new BeadsValidationError(`releasedLeases[${idx}] must be a string`);
     }
-    if (item.startsWith('v2:')) {
-      const parts = item.slice(3).split('|');
+    if (item.startsWith('v2:') || item.startsWith('v2+:')) {
+      const prefix = item.startsWith('v2+:') ? 'v2+:' : 'v2:';
+      const parts = item.slice(prefix.length).split('|');
       if (parts.length !== 3 || !RELEASED_LEASE_HASH_PATTERN.test(parts[2])) {
-        throw new BeadsValidationError(`releasedLeases[${idx}] must have format "v2:<claimedAt>|<expiresAt>|<hash>"`);
+        throw new BeadsValidationError(`releasedLeases[${idx}] must have format "${prefix}<claimedAt>|<expiresAt>|<hash>"`);
       }
       const claimedAt = assertIsoTimestamp(parts[0], `releasedLeases[${idx}].claimedAt`);
       const expiresAt = assertIsoTimestamp(parts[1], `releasedLeases[${idx}].expiresAt`);
       if (Date.parse(expiresAt) <= Date.parse(claimedAt)) {
         throw new BeadsValidationError(`releasedLeases[${idx}] expiresAt must be after claimedAt`);
       }
-      return `v2:${claimedAt}|${expiresAt}|${parts[2]}`;
+      return `${prefix}${claimedAt}|${expiresAt}|${parts[2]}`;
     }
     const firstPipe = item.indexOf('|');
     if (firstPipe <= 0) {
@@ -1236,11 +1252,13 @@ export function mergeBeadsMaps(localMap, remoteMap) {
     } else {
       const isSuperseded = (lease) => {
         const key = leaseKey(lease);
+        const body = key.slice(3);
         const legacyOwnerKey = `${lease.claimedAt}|${lease.owner}`;
         return releasedSet.has(key)
-          || releasedSet.has(key.slice(3))
+          || releasedSet.has(`v2+:${body}`)
+          || releasedSet.has(body)
           || releasedSet.has(legacyOwnerKey)
-          || releasedSet.has(`v2:${legacyOwnerKey}`)
+          || releasedSet.has(`v2+:${legacyOwnerKey}`)
           || Boolean(effectiveLeaseFloorAt && lease.claimedAt <= effectiveLeaseFloorAt)
           || Boolean(maxReopenedAt && lease.claimedAt < maxReopenedAt);
       };
