@@ -2278,3 +2278,29 @@ apps:
       shared_runtime: false
       browser_test: true
       release: true
+  - id: blastct
+    path: blastct
+    catalog: neuro
+    title: BLAST-CT
+    description: Segment TBI lesions on head CT with BLAST-CT.
+    categories: [segmentation, lesion-mapping]
+    keywords: [head CT, traumatic brain injury, TBI, haemorrhage, hemorrhage, IPH, EAH, IVH, oedema, edema, lesion, DeepMedic, BLAST-CT]
+    anatomy: [brain]
+    modalities: [ct]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: models/blastct.manifest.json
+    asset_manifest_schema: scientific-assets-v1
+    source: neurodesk/webapps@local
+    license: Apache-2.0
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    app_scoped_runtime_families: [ort-web-asyncify]
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: true

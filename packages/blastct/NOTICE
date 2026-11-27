@@ -1,0 +1,21 @@
+@neurodesk/blastct — Browser inference pipeline for BLAST-CT (v2.0.0)
+
+Upstream source and pretrained model weights:
+  BLAST-CT (Brain Lesion Analysis and Segmentation Tool for Computed Tomography)
+  Copyright 2020 BioMedIA / Imperial College London (Miguel Monteiro et al.)
+  Repository: https://github.com/biomedia-mira/blast-ct
+  Pinned commit: 613acbc1b6be455a44a9e6741eb899fbf082e6fd (v2.0.0)
+  License: Apache License, Version 2.0 (see LICENSE)
+
+  Reference:
+  Monteiro M, Newcombe VFJ, Mathieu F, Adatia K, Kamnitsas K, Ferrante E,
+  Das T, Whitehouse D, Rueckert D, Menon DK, Glocker B.
+  Multi-class semantic segmentation and quantification of traumatic brain
+  injury lesions on head CT using deep learning – an algorithm development
+  and multi-centre validation study.
+  The Lancet Digital Health. 2020;2(6):e314-e322.
+  https://doi.org/10.1016/S2589-7500(20)30085-6
+
+Example scan (`scan_0_head_ct.nii.gz`):
+  Derived from upstream `blast_ct/data/scans/scan_0/scan_0_image.nii.gz`
+  (Apache-2.0, rounded to integer Hounsfield Units in float32 storage).

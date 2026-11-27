@@ -3488,3 +3488,36 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  blastct:
+    about:
+      - "BLAST-CT segments traumatic brain injury (TBI) lesions on 3D non-contrast head CT scans in the browser using the pinned BLAST-CT v2 multi-centre DeepMedic model (blast-ct v2.1.0, checkpoint 1, Apache-2.0). Inference runs locally on WebGPU when a hardware GPU is available, or on threaded WebAssembly CPU."
+      - "Input NIfTI or DICOM scans are automatically reoriented and linearly resampled to 1 mm isotropic resolution, clamped to the [-15, 100] Hounsfield Unit brain window and linearly scaled to [-1, 1], and evaluated with non-overlapping 3D multi-scale DeepMedic patches before nearest-neighbour resampling back to native geometry."
+      - "Outputs include a native-space 4-class lesion label map — intraparenchymal haemorrhage (IPH, label 1), extra-axial haemorrhage (EAH, label 2), perilesional oedema (label 3), and intraventricular haemorrhage (IVH, label 4) — together with a native-space per-class volume table (CSV). For the 12-model ensemble or headless batch processing, use the Neurodesk blastct 2.0.0 container listed under Standalone."
+    packages:
+      - { name: BLAST-CT, url: https://github.com/biomedia-mira/blast-ct, role: "DeepMedic v2 multi-centre model (blast-ct v2.1.0, checkpoint 1) for head CT TBI lesion segmentation" }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai/, role: browser WebGPU and WebAssembly inference }
+      - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: 3D medical image viewer }
+    citations:
+      - group: Lesion segmentation
+        title: "Multiclass semantic segmentation and quantification of traumatic brain injury lesions on head CT using deep learning: an algorithm development and multicentre validation study"
+        reference: "Monteiro M, Newcombe VFJ, Mathieu F, Adatia K, Kamnitsas K, Ferrante E, Das T, Whitehouse D, Rueckert D, Menon DK, Glocker B. Multiclass semantic segmentation and quantification of traumatic brain injury lesions on head CT using deep learning: an algorithm development and multicentre validation study. The Lancet Digital Health. 2020;2(6):e314–e322."
+        doi: 10.1016/S2589-7500(20)30085-6
+        code: https://github.com/biomedia-mira/blast-ct
+      - group: Network architecture
+        title: "Efficient multi-scale 3D CNN with fully connected CRF for accurate brain lesion segmentation"
+        reference: "Kamnitsas K, Ledig C, Newcombe VFJ, Simpson JP, Kane AD, Menon DK, Rueckert D, Glocker B. Efficient multi-scale 3D CNN with fully connected CRF for accurate brain lesion segmentation. Medical Image Analysis. 2017;36:61–78."
+        doi: 10.1016/j.media.2016.10.004
+      - group: Conversion and inference
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Conversion and inference
+        title: ONNX Runtime
+        reference: "ONNX Runtime developers. ONNX Runtime [Computer software]."
+        url: https://onnxruntime.ai/
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

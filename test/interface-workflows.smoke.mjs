@@ -1377,6 +1377,21 @@ try {
     await expect(page.locator('#backend')).toHaveValue('wasm');
     await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
   });
+  await check('blastct', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await expect(page.locator('#runButton')).toBeDisabled();
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#backend')).toBeHidden();
+    await advanced.tap();
+    await expect(page.locator('#backend')).toHaveValue('auto');
+    await page.locator('#backend').selectOption('wasm');
+    await advanced.tap();
+    await expect(page.locator('#backend')).toBeHidden();
+    await advanced.tap();
+    await expect(page.locator('#backend')).toHaveValue('wasm');
+    await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
+  });
 } finally { await browser.close(); await site.close(); }
 if (failures.length) throw new Error(failures.join('\n'));
 requireChecked(checked, selection, 'Interface workflows');

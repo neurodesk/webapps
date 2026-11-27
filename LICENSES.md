@@ -45,6 +45,8 @@ for each app are recorded in `registry/apps.yml`.
 - `apps/aurora`: Apache-2.0 (`packages/aurora/LICENSE`), browser interface for `@neurodesk/aurora`
 - `packages/instanseg`: Apache-2.0 (`packages/instanseg/LICENSE`, `packages/instanseg/NOTICE`), browser inference pipeline and post-processing port for `instanseg/instanseg` v0.1.2 (`brightfield_nuclei` from `instanseg_models_v0.1.1`, Apache-2.0; `models/instanseg.manifest.json`)
 - `apps/instanseg`: Apache-2.0 (`packages/instanseg/LICENSE`), browser interface for `@neurodesk/instanseg`
+- `packages/blastct`: Apache-2.0 (`packages/blastct/LICENSE`, `packages/blastct/NOTICE`), browser geometry resampling, normalization, and DeepMedic tiling pipeline for `biomedia-mira/blast-ct` v2.1.0 (v2 multi-centre model, checkpoint 1, Apache-2.0; `models/blastct.manifest.json`)
+- `apps/blastct`: Apache-2.0 (`packages/blastct/LICENSE`), browser interface for `@neurodesk/blastct`
 - `apps/stardist`: BSD-3-Clause (`apps/stardist/LICENSE`), as the StarDist 0.9.1 and CSBDeep 0.8.1 code it
   ports and the pretrained `2D_versatile_fluo`, `2D_versatile_he`, `2D_paper_dsb2018` and `3D_demo` models
   it runs; attribution, and the Boost Software License of the bundled `clipper-lib`, in `apps/stardist/NOTICE`.
