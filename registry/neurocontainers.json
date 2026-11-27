@@ -206,9 +206,9 @@
       "url": "https://hub.docker.com/r/vnmd/relion_5.1.1",
       "source": "https://raw.githubusercontent.com/neurodesk/neurocontainers/c47213e98a34a5e8bcbcd111b030b3f2be611167/recipes/relion/build.yaml",
       "dockerImage": "vnmd/relion_5.1.1:20261107",
-      "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/relion_5.1.1_20261107.simg",
+      "apptainerUrl": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/f43c3cdab8ba43352f7774879016da5fdce65ae3/cryo-em/relion-image/relion_5.1.1.sif",
       "apptainerName": "relion_5.1.1_20261107",
-      "apptainerSource": "https://raw.githubusercontent.com/neurodesk/neurocommand/main/cvmfs/log.txt"
+      "apptainerSource": "https://huggingface.co/datasets/neurodeskorg/webapps/tree/f43c3cdab8ba43352f7774879016da5fdce65ae3/cryo-em/relion-image"
     },
     "totalsegmentator": {
       "id": "totalsegmentator",

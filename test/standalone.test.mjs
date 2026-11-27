@@ -89,7 +89,7 @@ test('standalone choices are ordered, omit technical clutter and never offer the
   assert.ok(links.every(href => !/\/webapps-v\d/.test(href)), 'an app links only its own releases, never the desktop suite');
   assert.doesNotMatch(dialog.root.textContent, /sha256|sha-256|shasum|Prepare this upstream|Model pack/i);
   assert.match(dialog.root.textContent, /docker pull demo:1/);
-  assert.match(dialog.root.textContent, /curl -X GET https:\/\/neurocontainers.neurodesk.workers.dev\/demo_1_20260915.simg -O/);
+  assert.match(dialog.root.textContent, /curl -fLO https:\/\/neurocontainers\.neurodesk\.workers\.dev\/demo_1_20260915\.simg/);
   assert.equal(dialog.root.querySelector('details').open, false);
   assert.match(dialog.root.textContent, /unzip app.zip/);
   dom.window.close();

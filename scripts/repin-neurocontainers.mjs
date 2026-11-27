@@ -7,7 +7,7 @@
 // build's .simg, Docker tag and digest, and the recipe at the release commit.
 // Copies the change into registry/standalone.json. The standalone-links
 // workflow runs this after its nightly check fails and opens a pull request.
-// NeSVoR and Spinal Cord Toolbox need coordinated compute-server pin updates.
+// NeSVoR, RELION and Spinal Cord Toolbox need coordinated compute-server pin updates.
 //
 //   node scripts/repin-neurocontainers.mjs [--write] [--body body.md]
 import { readFile, writeFile } from 'node:fs/promises';
@@ -94,11 +94,14 @@ async function main() {
   for (const [key, entry] of Object.entries(registry.containers)) {
     if (!entry.apptainerUrl?.startsWith(SIMG_HOST)) continue;
     const link = await checkLink(entry.apptainerUrl);
-    if (link.ok || link.status !== 404) continue;
+    // Neurocontainers' workers.dev mirror returns 404 from OpenStack Swift
+    // backends and 403 from S3-backed mirrors (e.g. US GitHub Actions runners)
+    // when a superseded .simg has been deleted.
+    if (link.ok || ![403, 404].includes(link.status)) continue;
     const parsed = parseApptainerName(entry.apptainerName);
     try {
       if (!parsed) throw new Error(`cannot read recipe and version from ${entry.apptainerName}`);
-      if (['nesvor', 'spinalcordtoolbox'].includes(parsed.recipe)) {
+      if (['nesvor', 'relion', 'spinalcordtoolbox'].includes(parsed.recipe)) {
         throw new Error(`${parsed.recipe} needs a coordinated update of its catalog, compute server, reference server, and documentation pins`);
       }
       const repository = entry.dockerImage.slice(0, entry.dockerImage.lastIndexOf(':'));
