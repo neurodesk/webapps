@@ -885,6 +885,12 @@ test('unused-code-triage gh-aw workflow enforces read-only no-shell agent, zero 
   assert.equal(applyStep?.env?.DEFAULT_BRANCH, '${{ github.event.repository.default_branch }}');
   assert.equal(applyStep?.env?.GH_AW_DETECTION_SUCCESS, '${{ needs.detection.outputs.detection_success }}');
   assert.equal(typeof applyStep?.['timeout-minutes'], 'number');
+
+  // Safe-outputs collector must allow up to 15 upsert_unused_code_bead items (5 creates + 10 updates), not gh-aw's default 1
+  const safeConfigStep = flow.jobs.agent.steps.find((step) => step.env?.GH_AW_SAFE_OUTPUTS_CONFIG);
+  assert.ok(safeConfigStep, 'safe-outputs config step must exist');
+  const safeOutputsConfig = JSON.parse(safeConfigStep.env.GH_AW_SAFE_OUTPUTS_CONFIG);
+  assert.equal(safeOutputsConfig['upsert-unused-code-bead']?.max, 15, 'upsert-unused-code-bead max must allow full create+update budget');
 });
 
 test('unused-code-triage mcp-scripts enforce strict file caps, byte caps, and ancestor symlink checks', (t) => {
@@ -958,6 +964,27 @@ test('unused-code-triage mcp-scripts enforce strict file caps, byte caps, and an
   const symArtifact = runTool('read_triage_artifact', { name: 'summary.md' });
   assert.notEqual(symArtifact.status, 0);
   assert.match(symArtifact.stderr, /Artifact directory invalid/);
+
+  // read_triage_artifact caps full serialized JSON response <= 16384 bytes and paginates quote-heavy Unicode content losslessly
+  rmSync(join(scratch, 'quality-artifacts'), { force: true });
+  mkdirSync(join(scratch, 'quality-artifacts', 'unused-code'), { recursive: true });
+  const bigKnip = `${'{"k":"\\"😀\\""},'.repeat(2500)}END_KNIP`;
+  writeFileSync(join(scratch, 'quality-artifacts', 'unused-code', 'knip.json'), bigKnip, 'utf8');
+  let artCursor = 0;
+  let artRecovered = '';
+  let artPages = 0;
+  while (artCursor !== null) {
+    const res = runTool('read_triage_artifact', { name: 'knip.json', start_line: 1, max_lines: 1, char_offset: artCursor });
+    assert.equal(res.status, 0, res.stderr);
+    assert.ok(Buffer.byteLength(res.stdout.trim(), 'utf8') <= 16384, 'read_triage_artifact serialized response must stay <= 16384 bytes');
+    const page = JSON.parse(res.stdout);
+    artRecovered += page.content;
+    artCursor = page.next_char_offset;
+    artPages += 1;
+    assert.ok(artPages <= 10, 'artifact paging must make forward progress');
+  }
+  assert.ok(artPages >= 3, 'large quote-heavy artifact must paginate cleanly into <= 16 KiB responses');
+  assert.equal(artRecovered, bigKnip, 'read_triage_artifact paging must recover exact content');
 
   // search_app_files reports incomplete coverage and caps FULL serialized JSON response <= 16384 bytes
   mkdirSync(join(scratch, 'apps', 'searchable'), { recursive: true });
