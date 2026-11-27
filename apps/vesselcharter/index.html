@@ -108,6 +108,22 @@
         <summary class="nd-section-title">Output</summary>
         <div class="nd-section-content">
           <div id="resultList"></div>
+          <details class="nd-sidebar-section" id="diameterScaleSection" hidden>
+            <summary class="nd-section-title">Diameter colour scale</summary>
+            <div class="nd-section-content">
+              <div class="nd-row">
+                <div class="nd-field">
+                  <label for="diameterMin">Min <small>mm</small></label>
+                  <input id="diameterMin" type="number" min="0.001" step="0.05" />
+                </div>
+                <div class="nd-field">
+                  <label for="diameterMax">Max <small>mm</small></label>
+                  <input id="diameterMax" type="number" min="0.01" step="0.1" />
+                </div>
+              </div>
+              <button id="resetDiameterScaleBtn" class="nd-btn nd-btn-secondary nd-btn-sm" type="button">Reset auto scale</button>
+            </div>
+          </details>
         </div>
       </details>
 
@@ -122,6 +138,7 @@
         <p id="viewerError" class="nd-viewer-notice" hidden></p>
         <section id="resultsReport" class="nd-viewer-report" aria-label="Vessel characterisation report" hidden></section>
       </div>
+      <div id="colorLegend" class="nd-viewer-legend" role="region" aria-label="Colour scale legend" hidden></div>
       <div class="nd-viewer-info">
         <span id="imageLabel"></span>
         <span id="location" class="nd-viewer-info-primary"></span>

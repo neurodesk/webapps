@@ -214,32 +214,124 @@ export function formatGraphJson(graph, segments, junctions, summary) {
   ) + '\n';
 }
 
-// Perceptually uniform Plasma-inspired RGB ramp (5 stops) for 3D diameter coloring.
-const COLOR_STOPS = [
-  [0.0, 28, 72, 180],
-  [0.25, 42, 165, 195],
-  [0.5, 92, 200, 118],
-  [0.75, 245, 188, 52],
-  [1.0, 232, 68, 48],
-];
+// NiiVue's built-in perceptually smooth Turbo colormap control points so the
+// standalone 3D mesh, 2D/3D NIfTI diameter map, and legend share one exact ramp.
+export const TURBO_COLORMAP = Object.freeze({
+  R: [48, 48, 64, 70, 65, 25, 132, 195, 244, 254, 218, 122],
+  G: [18, 18, 64, 107, 150, 226, 255, 241, 199, 158, 57, 4],
+  B: [59, 59, 162, 227, 255, 187, 81, 52, 58, 47, 7, 3],
+  I: [0, 1, 16, 32, 49, 83, 118, 140, 164, 181, 219, 255],
+});
+
+export function sampleColormapRgba(cmap, t) {
+  if (!cmap || !Array.isArray(cmap.R) || cmap.R.length === 0) {
+    return [128, 128, 128, 255];
+  }
+  const indices = Array.isArray(cmap.I) && cmap.I.length === cmap.R.length
+    ? cmap.I
+    : cmap.R.map((_, i) => (cmap.R.length > 1 ? (i * 255) / (cmap.R.length - 1) : 0));
+  const maxI = indices[indices.length - 1] || 255;
+  const position = Math.max(0, Math.min(1, t)) * maxI;
+  let high = 1;
+  while (high < indices.length - 1 && indices[high] < position) {
+    high += 1;
+  }
+  const low = Math.max(0, high - 1);
+  const span = Math.max(1e-9, indices[high] - indices[low]);
+  const u = Math.max(0, Math.min(1, (position - indices[low]) / span));
+  return [
+    Math.round(cmap.R[low] + u * (cmap.R[high] - cmap.R[low])),
+    Math.round(cmap.G[low] + u * (cmap.G[high] - cmap.G[low])),
+    Math.round(cmap.B[low] + u * (cmap.B[high] - cmap.B[low])),
+    255,
+  ];
+}
 
 function diameterColorRgba(diamMm, minD, maxD) {
   const span = Math.max(1e-6, maxD - minD);
-  const t = Math.max(0, Math.min(1, (diamMm - minD) / span));
-  for (let i = 1; i < COLOR_STOPS.length; i += 1) {
-    if (t <= COLOR_STOPS[i][0]) {
-      const a = COLOR_STOPS[i - 1];
-      const b = COLOR_STOPS[i];
-      const u = (t - a[0]) / Math.max(1e-9, b[0] - a[0]);
-      return [
-        Math.round(a[1] + u * (b[1] - a[1])),
-        Math.round(a[2] + u * (b[2] - a[2])),
-        Math.round(a[3] + u * (b[3] - a[3])),
-        255,
-      ];
+  const t = (diamMm - minD) / span;
+  return sampleColormapRgba(TURBO_COLORMAP, t);
+}
+
+function sortedQuantile(sorted, q) {
+  if (sorted.length === 0) {
+    return 0;
+  }
+  const pos = Math.max(0, Math.min(1, q)) * (sorted.length - 1);
+  const lo = Math.floor(pos);
+  const hi = Math.min(sorted.length - 1, Math.ceil(pos));
+  const frac = pos - lo;
+  return sorted[lo] + frac * (sorted[hi] - sorted[lo]);
+}
+
+function roundSignificant(value, digits = 3) {
+  if (!Number.isFinite(value) || value === 0) {
+    return 0;
+  }
+  return Number(value.toPrecision(digits));
+}
+
+/**
+ * Computes a scale-invariant, outlier-robust display window [minMm, maxMm] for
+ * vessel diameter maps and 3D trees. Keeps minMm strictly positive (and <= the
+ * smallest positive sample) so 0 mm background stays transparent in NiiVue
+ * without hiding real thin vessels, and caps maxMm at p95 only when extreme
+ * upper outliers (> 1.5x p95) exist.
+ */
+export function computeDiameterDisplayRange(segments = [], diameterMap = null) {
+  const values = [];
+  for (let s = 0; s < segments.length; s += 1) {
+    const radii = segments[s]?.sampleRadiiMm;
+    if (!radii) continue;
+    for (let i = 0; i < radii.length; i += 1) {
+      const d = radii[i] * 2;
+      if (Number.isFinite(d) && d > 0) {
+        values.push(d);
+      }
     }
   }
-  return [232, 68, 48, 255];
+  if (values.length === 0 && diameterMap) {
+    for (let i = 0; i < diameterMap.length; i += 1) {
+      const d = diameterMap[i];
+      if (Number.isFinite(d) && d > 0) {
+        values.push(d);
+      }
+    }
+  }
+  if (values.length === 0) {
+    return { minMm: 0.1, maxMm: 1, dataMinMm: 0, dataMaxMm: 1 };
+  }
+  values.sort((a, b) => a - b);
+  const dataMinMm = values[0];
+  const dataMaxMm = values[values.length - 1];
+  const p02 = sortedQuantile(values, 0.02);
+  const p95 = sortedQuantile(values, 0.95);
+  const rawMin = Math.max(1e-4, Math.min(dataMinMm, p02 * 0.5));
+  const rawMax = dataMaxMm > p95 * 1.5 ? p95 : dataMaxMm;
+  const minMm = Math.max(1e-4, Math.min(rawMin, roundSignificant(rawMin, 3)));
+  const maxMm = roundSignificant(Math.max(rawMax, minMm + 1e-3), 3);
+  return {
+    minMm,
+    maxMm: maxMm > minMm ? maxMm : minMm + 1e-3,
+    dataMinMm,
+    dataMaxMm,
+  };
+}
+
+function setNiftiDisplayRange(buffer, calMin, calMax) {
+  if (!Number.isFinite(calMin) || !Number.isFinite(calMax) || calMax <= calMin) {
+    return;
+  }
+  const view = new DataView(buffer);
+  if (view.getInt32(0, true) === 540) {
+    // NIfTI-2 header: cal_max at offset 192, cal_min at offset 200 (float64).
+    view.setFloat64(192, calMax, true);
+    view.setFloat64(200, calMin, true);
+  } else {
+    // NIfTI-1 header: cal_max at offset 124, cal_min at offset 128 (float32).
+    view.setFloat32(124, calMax, true);
+    view.setFloat32(128, calMin, true);
+  }
 }
 
 function normalize3(v) {
@@ -262,14 +354,15 @@ function cross3(a, b) {
  * Builds a compact 6-sided tubular 3D mesh (.mz3 with per-vertex RGBA diameter colors)
  * along all smoothed vessel centerlines for direct NiiVue 3D rendering.
  */
-export function buildVesselTreeMz3(segments, { sides = 6 } = {}) {
+export function buildVesselTreeMz3(segments, { sides = 6, displayRange = null } = {}) {
   const validSegments = segments.filter((s) => s.worldPointsMm && s.worldPointsMm.length >= 2);
   if (validSegments.length === 0) {
     return null;
   }
 
-  let minD = Infinity;
-  let maxD = 0;
+  const range = displayRange ?? computeDiameterDisplayRange(validSegments);
+  const minD = range.minMm;
+  const maxD = range.maxMm;
   let totalRings = 0;
   let totalQuads = 0;
 
@@ -278,17 +371,6 @@ export function buildVesselTreeMz3(segments, { sides = 6 } = {}) {
     const pts = seg.worldPointsMm;
     totalRings += pts.length;
     totalQuads += (pts.length - 1) * sides;
-    for (let i = 0; i < seg.sampleRadiiMm.length; i += 1) {
-      const d = seg.sampleRadiiMm[i] * 2;
-      if (d < minD) minD = d;
-      if (d > maxD) maxD = d;
-    }
-  }
-  if (!Number.isFinite(minD)) {
-    minD = 0;
-  }
-  if (maxD <= minD) {
-    maxD = minD + 1;
   }
 
   const vertices = new Float32Array(totalRings * sides * 3);
@@ -337,12 +419,13 @@ export function buildVesselTreeMz3(segments, { sides = 6 } = {}) {
       prevU = u;
       const v = normalize3(cross3(tang, u));
 
-      const r = Math.max(0.12, radii[Math.min(i, radii.length - 1)] ?? seg.medianDiameterMm * 0.5);
-      const rgba = diameterColorRgba(r * 2, minD, maxD);
+      const rawRadius = radii[Math.min(i, radii.length - 1)] ?? seg.medianDiameterMm * 0.5;
+      const tubeRadius = Math.max(0.12, rawRadius);
+      const rgba = diameterColorRgba(rawRadius * 2, minD, maxD);
 
       for (let k = 0; k < sides; k += 1) {
-        const ca = cosA[k] * r;
-        const sa = sinA[k] * r;
+        const ca = cosA[k] * tubeRadius;
+        const sa = sinA[k] * tubeRadius;
         const vx = p[0] + ca * u[0] + sa * v[0];
         const vy = p[1] + ca * u[1] + sa * v[1];
         const vz = p[2] + ca * u[2] + sa * v[2];
@@ -378,6 +461,37 @@ export function buildVesselTreeMz3(segments, { sides = 6 } = {}) {
   return new Uint8Array(writeMz3(vertices, faces, colors));
 }
 
+/**
+ * Returns per-vertex local vessel diameter (mm) in the exact vertex order of
+ * `buildVesselTreeMz3`, for interactive colormap and range updates in NiiVue.
+ */
+export function buildVesselTreeScalars(segments, { sides = 6 } = {}) {
+  const validSegments = segments.filter((s) => s.worldPointsMm && s.worldPointsMm.length >= 2);
+  if (validSegments.length === 0) {
+    return null;
+  }
+  let totalRings = 0;
+  for (let s = 0; s < validSegments.length; s += 1) {
+    totalRings += validSegments[s].worldPointsMm.length;
+  }
+  const scalars = new Float32Array(totalRings * sides);
+  let vIdx = 0;
+  for (let s = 0; s < validSegments.length; s += 1) {
+    const seg = validSegments[s];
+    const pts = seg.worldPointsMm;
+    const radii = seg.sampleRadiiMm;
+    for (let i = 0; i < pts.length; i += 1) {
+      const rawRadius = radii[Math.min(i, radii.length - 1)] ?? seg.medianDiameterMm * 0.5;
+      const diamMm = Math.max(0, rawRadius * 2);
+      for (let k = 0; k < sides; k += 1) {
+        scalars[vIdx] = diamMm;
+        vIdx += 1;
+      }
+    }
+  }
+  return scalars;
+}
+
 export function stemFromFilename(name = 'vessels.nii.gz') {
   return String(name)
     .replace(/\.nii\.gz$/i, '')
@@ -399,6 +513,7 @@ export async function buildOutputArtifacts(result, { baseName = 'vessels' } = {}
   const junctionsCsv = formatJunctionsCsv(junctions);
   const diameterBinsCsv = formatDiameterBinsCsv(summary.diameterBins);
 
+  const displayRange = computeDiameterDisplayRange(segments, diameterMap);
   const diameterNiiRaw = writeNiftiVolume(
     {
       data: diameterMap,
@@ -409,6 +524,7 @@ export async function buildOutputArtifacts(result, { baseName = 'vessels' } = {}
     },
     'VesselCharter diameter map (mm)',
   );
+  setNiftiDisplayRange(diameterNiiRaw, displayRange.minMm, displayRange.maxMm);
   const diameterNiiGz = await gzipBytes(diameterNiiRaw);
 
   const skeletonNiiRaw = writeNiftiVolume(
@@ -421,9 +537,10 @@ export async function buildOutputArtifacts(result, { baseName = 'vessels' } = {}
     },
     'VesselCharter skeleton labels (1=seg,2=junc,3=end,4=iso)',
   );
+  setNiftiDisplayRange(skeletonNiiRaw, 0.5, 4);
   const skeletonNiiGz = await gzipBytes(skeletonNiiRaw);
 
-  const meshMz3 = buildVesselTreeMz3(segments);
+  const meshMz3 = buildVesselTreeMz3(segments, { displayRange });
 
   const encoder = new TextEncoder();
   const artifacts = {

@@ -10,15 +10,19 @@ import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { writeNiftiVolume } from '@neurodesk/webapp-components/file-io/nifti-volume';
 import {
+  TURBO_COLORMAP,
   buildOutputArtifacts,
+  buildVesselTreeScalars,
   characterizeVesselMask,
   characterizeVesselNifti,
+  computeDiameterDisplayRange,
   euclideanDistanceTransform3D,
   inspectAffine,
   isEulerInvariant,
   isSimplePoint,
   pointToBackgroundBoxDistance,
   readBinaryMaskNifti,
+  sampleColormapRgba,
 } from '../src/index.js';
 import { characterize, checkInstallation } from '../src/node.js';
 import {
@@ -399,14 +403,75 @@ test('Lausanne TOF VesselBoost upstream fixture runs deterministically and produ
   assert.deepEqual(diamVol.dims, [192, 192, 64]);
   assert.equal(diamVol.foregroundCount, net.vesselVoxelCount);
 
-  // Confirm NIfTI header description strings were written cleanly into bytes [148..228].
-  const readDescrip = (gzBytes) =>
-    Buffer.from(gunzipSync(gzBytes).subarray(148, 228)).toString('ascii').replace(/\0+$/, '');
-  assert.equal(readDescrip(artifacts.diameterMap.bytes), 'VesselCharter diameter map (mm)');
+  // Confirm NIfTI header description strings and calibrated display ranges were written cleanly.
+  const diamRaw = gunzipSync(artifacts.diameterMap.bytes);
+  const skelRaw = gunzipSync(artifacts.skeletonLabels.bytes);
+  const readDescrip = (rawBytes) =>
+    Buffer.from(rawBytes.subarray(148, 228)).toString('ascii').replace(/\0+$/, '');
+  assert.equal(readDescrip(diamRaw), 'VesselCharter diameter map (mm)');
   assert.equal(
-    readDescrip(artifacts.skeletonLabels.bytes),
+    readDescrip(skelRaw),
     'VesselCharter skeleton labels (1=seg,2=junc,3=end,4=iso)',
   );
+
+  const displayRange = computeDiameterDisplayRange(result.segments, result.diameterMap);
+  assert.ok(
+    displayRange.minMm > 0 && displayRange.minMm <= displayRange.dataMinMm,
+    `Expected strictly positive minMm <= dataMinMm so no vessels are hidden, got ${displayRange.minMm} vs ${displayRange.dataMinMm}`,
+  );
+  assert.ok(
+    Math.abs(displayRange.maxMm - displayRange.dataMaxMm) < 0.05,
+    `Normal wide ICA trunk (${displayRange.dataMaxMm.toFixed(2)} mm) should not be over-clipped, got maxMm=${displayRange.maxMm}`,
+  );
+
+  const diamView = new DataView(diamRaw.buffer, diamRaw.byteOffset, diamRaw.byteLength);
+  assert.ok(Math.abs(diamView.getFloat32(124, true) - displayRange.maxMm) < 1e-4, 'cal_max should match displayRange.maxMm');
+  assert.ok(Math.abs(diamView.getFloat32(128, true) - displayRange.minMm) < 1e-4, 'cal_min should match displayRange.minMm');
+
+  // Verify scalar array matches MZ3 vertex count AND per-vertex baked Turbo RGBA values exactly.
+  const scalars = buildVesselTreeScalars(result.segments);
+  const meshBytes = artifacts.vesselMesh.bytes;
+  const meshView = new DataView(meshBytes.buffer, meshBytes.byteOffset, meshBytes.byteLength);
+  const meshFaceCount = meshView.getUint32(4, true);
+  const meshVertexCount = meshView.getUint32(8, true);
+  const meshSkip = meshView.getUint32(12, true);
+  assert.equal(scalars.length, meshVertexCount);
+  assert.ok(scalars.every((v) => Number.isFinite(v) && v >= 0));
+
+  const colorOffset = 16 + meshSkip + meshFaceCount * 12 + meshVertexCount * 12;
+  const span = Math.max(1e-6, displayRange.maxMm - displayRange.minMm);
+  for (let i = 0; i < meshVertexCount; i += 1) {
+    const expected = sampleColormapRgba(TURBO_COLORMAP, (scalars[i] - displayRange.minMm) / span);
+    const actual = [
+      meshBytes[colorOffset + i * 4],
+      meshBytes[colorOffset + i * 4 + 1],
+      meshBytes[colorOffset + i * 4 + 2],
+      meshBytes[colorOffset + i * 4 + 3],
+    ];
+    assert.deepEqual(actual, expected, `Vertex ${i} baked MZ3 RGBA should match scalar Turbo lookup`);
+  }
+});
+
+test('computeDiameterDisplayRange handles outlier trunks, uniform vessels and micron scales', () => {
+  // Multi-scale tree with a 12 mm outlier trunk (> 1.5x p95) clips maxMm to p95.
+  const multiSegs = [
+    { sampleRadiiMm: Array.from({ length: 95 }, (_, i) => 0.25 + (i / 94) * 0.75) },
+    { sampleRadiiMm: [4.5, 5.0, 5.5, 6.0, 6.0] },
+  ];
+  const multi = computeDiameterDisplayRange(multiSegs);
+  assert.ok(multi.minMm > 0 && multi.minMm <= multi.dataMinMm);
+  assert.ok(multi.maxMm < 3.0, `Outlier trunk should be clipped by p95, got maxMm=${multi.maxMm}`);
+  assert.equal(multi.dataMaxMm, 12);
+
+  // Uniform 4.0 mm cylinder keeps a positive lower bound well below dataMin and preserves dataMax unclipped.
+  const uniform = computeDiameterDisplayRange([{ sampleRadiiMm: [1.96, 2.0, 2.02, 2.04, 2.0] }]);
+  assert.ok(uniform.minMm > 0 && uniform.minMm < 3.0);
+  assert.ok(Math.abs(uniform.maxMm - 4.08) < 0.05);
+
+  // Micron-scale vessels (20-100 um = 0.02-0.10 mm) stay strictly positive and proportional.
+  const micro = computeDiameterDisplayRange([{ sampleRadiiMm: [0.01, 0.02, 0.03, 0.04, 0.05] }]);
+  assert.ok(micro.minMm > 0 && micro.minMm <= micro.dataMinMm);
+  assert.ok(micro.maxMm > 0.08 && micro.maxMm <= 0.101);
 });
 
 test('NIfTI spatial units (mm, um, m) convert cleanly without double scaling', async () => {

@@ -14,13 +14,24 @@ import {
   createViewerToolbar,
 } from '@neurodesk/webapp-components/ui';
 import { downloadFile } from '@neurodesk/webapp-components/file-io';
+import { writeMz3Scalars } from '@neurodesk/webapp-components/file-io/mesh';
 import {
   createNiivueAdapter,
   registerAppAutomation,
   registerViewer,
 } from '@neurodesk/webapp-components/automation';
-import NiiVue, { SLICE_TYPE } from '@niivue/niivue';
-import { APP } from './config.js';
+import NiiVue, { SLICE_TYPE, lookupColorMap } from '@niivue/niivue';
+import {
+  APP,
+  DEFAULT_DIAMETER_COLORMAP,
+  DIAMETER_COLORMAPS,
+  SKELETON_COLORMAP,
+  SKELETON_COLORMAP_NAME,
+  SKELETON_LEGEND_ITEMS,
+  buildColorMapCssGradient,
+  formatDiameterTicks,
+  formatDiameterValue,
+} from './config.js';
 import { renderVesselReport } from './report.js';
 import examples from '../examples.json';
 
@@ -48,11 +59,30 @@ const toolbar = createViewerToolbar({
   ],
   window: false,
   overlay: true,
-  colormap: false,
+  colormap: true,
   download: false,
   screenshot: true,
 });
 $('viewer').prepend(toolbar);
+
+const colormapSelect = toolbar.control('colormapSelect');
+if (colormapSelect) {
+  colormapSelect.replaceChildren();
+  for (const item of DIAMETER_COLORMAPS) {
+    colormapSelect.add(new Option(item.label, item.id));
+  }
+  colormapSelect.value = DEFAULT_DIAMETER_COLORMAP;
+  colormapSelect.setAttribute('aria-label', 'Diameter colormap');
+  colormapSelect.hidden = true;
+}
+const overlaySlider = toolbar.control('overlayOpacity');
+const overlayValueEl = toolbar.control('overlayOpacityValue');
+if (overlaySlider) {
+  overlaySlider.value = '0.8';
+  if (overlayValueEl) {
+    overlayValueEl.textContent = '80%';
+  }
+}
 
 const log = createConsole({ id: 'technicalLog', resizable: true });
 $('viewer').append(log);
@@ -69,6 +99,15 @@ let viewerExtension = null;
 let viewerReady = false;
 let viewerInitPromise = null;
 let hasVesselMesh = false;
+let viewerOpQueue = Promise.resolve();
+
+// Serialize NiiVue scene mutations (loadVolumes, setVolume, loadMeshes, addMeshLayer)
+// so overlapping async GPU uploads cannot corrupt each other's state.
+function queueViewerOp(step) {
+  const next = viewerOpQueue.then(step, step);
+  viewerOpQueue = next.catch(() => {});
+  return next;
+}
 
 function listViewerTabs() {
   return [
@@ -94,6 +133,7 @@ function ensureViewer() {
       });
       await instance.attachTo('gl1');
       instance.isLegendVisible = false;
+      instance.addColormap?.(SKELETON_COLORMAP_NAME, SKELETON_COLORMAP);
       instance.sliceType = SLICE_TYPE.MULTIPLANAR;
       instance.drawScene();
       viewerExtension = instance.createExtensionContext?.() ?? null;
@@ -134,13 +174,157 @@ let brainMaskFile = null;
 let referenceFile = null;
 let lastReportData = null;
 let lastArtifactFiles = null;
+let lastMeshScalarFile = null;
+let autoDiameterRange = null;
+let diameterScale = null;
+let diameterColormap = DEFAULT_DIAMETER_COLORMAP;
 let activeView = 'multiplanar';
 let activeDisplay = 'mask';
+let lastViewerLabel = '';
 let overlayOpacity = 0.8;
 let loadingController = null;
 let activeWorker = null;
 let activeRunCancel = null;
 let activeRunId = 0;
+
+function clearDiameterScaleValidity() {
+  $('diameterMin').setCustomValidity('');
+  $('diameterMax').setCustomValidity('');
+}
+
+function syncDiameterScaleInputs() {
+  clearDiameterScaleValidity();
+  if (!diameterScale) {
+    $('diameterMin').value = '';
+    $('diameterMax').value = '';
+    return;
+  }
+  $('diameterMin').value = String(Number(diameterScale.minMm.toPrecision(3)));
+  $('diameterMax').value = String(Number(diameterScale.maxMm.toPrecision(3)));
+}
+
+function updateLegendAndToolbar() {
+  const legendEl = $('colorLegend');
+  const isReport = activeView === 'report';
+  const isDiameterView = !isReport && (activeDisplay === 'vesselMesh' || activeDisplay === 'diameterMap') && Boolean(diameterScale);
+  const isSkeletonView = !isReport && activeDisplay === 'skeletonLabels' && Boolean(lastArtifactFiles?.skeletonLabels);
+
+  if (colormapSelect) {
+    colormapSelect.hidden = !isDiameterView;
+    colormapSelect.value = diameterColormap;
+  }
+
+  if (isDiameterView) {
+    const lut = lookupColorMap(diameterColormap);
+    const cmapLabel = DIAMETER_COLORMAPS.find((c) => c.id === diameterColormap)?.label ?? diameterColormap;
+    const ticks = formatDiameterTicks(diameterScale.minMm, diameterScale.maxMm, {
+      dataMaxMm: autoDiameterRange?.dataMaxMm ?? null,
+    });
+    const hidingThinVoxels =
+      activeDisplay === 'diameterMap'
+      && autoDiameterRange
+      && diameterScale.minMm > autoDiameterRange.dataMinMm * 1.001;
+    const header = document.createElement('div');
+    header.className = 'nd-viewer-legend-header';
+    const title = document.createElement('span');
+    title.className = 'nd-viewer-legend-title';
+    title.textContent = 'Diameter (mm)';
+    const meta = document.createElement('span');
+    meta.textContent = hidingThinVoxels
+      ? `${cmapLabel} · < ${formatDiameterValue(diameterScale.minMm)} mm hidden`
+      : cmapLabel;
+    header.append(title, meta);
+
+    const ramp = document.createElement('div');
+    ramp.className = 'nd-viewer-legend-ramp';
+    ramp.setAttribute('aria-hidden', 'true');
+    ramp.style.background = buildColorMapCssGradient(lut);
+
+    const tickRow = document.createElement('div');
+    tickRow.className = 'nd-viewer-legend-ticks';
+    for (const label of ticks) {
+      const span = document.createElement('span');
+      span.textContent = label;
+      tickRow.append(span);
+    }
+
+    legendEl.replaceChildren(header, ramp, tickRow);
+    legendEl.dataset.kind = 'diameter';
+    legendEl.hidden = false;
+    return;
+  }
+
+  if (isSkeletonView) {
+    const header = document.createElement('div');
+    header.className = 'nd-viewer-legend-header';
+    const title = document.createElement('span');
+    title.className = 'nd-viewer-legend-title';
+    title.textContent = 'Skeleton topology';
+    header.append(title);
+
+    const swatches = document.createElement('div');
+    swatches.className = 'nd-viewer-legend-swatches';
+    for (const item of SKELETON_LEGEND_ITEMS) {
+      const chip = document.createElement('span');
+      chip.className = 'nd-viewer-legend-chip';
+      const swatch = document.createElement('span');
+      swatch.className = 'nd-legend-swatch';
+      swatch.style.backgroundColor = `rgb(${item.color[0]} ${item.color[1]} ${item.color[2]})`;
+      const text = document.createElement('span');
+      text.textContent = `${item.value} ${item.label}`;
+      chip.append(swatch, text);
+      swatches.append(chip);
+    }
+
+    legendEl.replaceChildren(header, swatches);
+    legendEl.dataset.kind = 'skeleton';
+    legendEl.hidden = false;
+    return;
+  }
+
+  legendEl.hidden = true;
+  legendEl.replaceChildren();
+  delete legendEl.dataset.kind;
+}
+
+function applyDiameterDisplayStyle() {
+  updateLegendAndToolbar();
+  return queueViewerOp(async () => {
+    if (!nv || !diameterScale) {
+      return;
+    }
+    try {
+      if (activeDisplay === 'diameterMap' && nv.volumes.length > 0 && typeof nv.setVolume === 'function') {
+        const targetIndex = referenceFile && nv.volumes.length > 1 ? 1 : 0;
+        await nv.setVolume(targetIndex, {
+          colormap: diameterColormap,
+          calMin: diameterScale.minMm,
+          calMax: diameterScale.maxMm,
+          colormapType: 0,
+          isTransparentBelowCalMin: true,
+          isColorbarVisible: false,
+        });
+      } else if (
+        activeDisplay === 'vesselMesh'
+        && hasVesselMesh
+        && nv.meshes?.[0]?.layers?.length > 0
+        && typeof nv.setMeshLayerProperty === 'function'
+      ) {
+        await nv.setMeshLayerProperty(0, 0, {
+          colormap: diameterColormap,
+          calMin: diameterScale.minMm,
+          calMax: diameterScale.maxMm,
+          colormapType: 0,
+          isTransparentBelowCalMin: false,
+          opacity: 1,
+          isColorbarVisible: false,
+        });
+      }
+    } catch (err) {
+      log.log(`Colour scale update warning: ${err instanceof Error ? err.message : String(err)}`, 'warning');
+    }
+  });
+}
 
 function status(message, isError = false) {
   $('statusText').textContent = message;
@@ -178,9 +362,14 @@ function setView(viewId) {
     reportEl.hidden = false;
     $('emptyState').hidden = true;
     $('imageLabel').textContent = 'Vessel characterisation report';
+    updateLegendAndToolbar();
     return;
   }
   reportEl.hidden = true;
+  if (lastViewerLabel) {
+    $('imageLabel').textContent = lastViewerLabel;
+  }
+  updateLegendAndToolbar();
   if (!nv) {
     return;
   }
@@ -203,6 +392,12 @@ function setView(viewId) {
 
 toolbar.addEventListener('nd-view-change', (event) => {
   setView(event.detail.value);
+});
+
+toolbar.addEventListener('nd-colormap-change', (event) => {
+  const next = String(event.detail.value || DEFAULT_DIAMETER_COLORMAP);
+  diameterColormap = next;
+  void applyDiameterDisplayStyle();
 });
 
 toolbar.addEventListener('nd-overlay-change', (event) => {
@@ -228,6 +423,42 @@ toolbar.addEventListener('nd-screenshot', () => {
   }
 });
 
+function handleDiameterScaleInputChange() {
+  if (!diameterScale) {
+    return;
+  }
+  const minInput = $('diameterMin');
+  const maxInput = $('diameterMax');
+  clearDiameterScaleValidity();
+  const minVal = Number(minInput.value);
+  const maxVal = Number(maxInput.value);
+  if (!Number.isFinite(minVal) || minVal < 0.001) {
+    minInput.setCustomValidity('Minimum diameter must be at least 0.001 mm.');
+    minInput.reportValidity();
+    return;
+  }
+  if (!Number.isFinite(maxVal) || maxVal <= minVal) {
+    maxInput.setCustomValidity('Maximum diameter must be greater than minimum.');
+    maxInput.reportValidity();
+    return;
+  }
+  diameterScale = { minMm: minVal, maxMm: maxVal };
+  void applyDiameterDisplayStyle();
+}
+
+$('diameterMin').addEventListener('input', clearDiameterScaleValidity);
+$('diameterMax').addEventListener('input', clearDiameterScaleValidity);
+$('diameterMin').addEventListener('change', handleDiameterScaleInputChange);
+$('diameterMax').addEventListener('change', handleDiameterScaleInputChange);
+$('resetDiameterScaleBtn').addEventListener('click', () => {
+  if (!autoDiameterRange) {
+    return;
+  }
+  diameterScale = { minMm: autoDiameterRange.minMm, maxMm: autoDiameterRange.maxMm };
+  syncDiameterScaleInputs();
+  void applyDiameterDisplayStyle();
+});
+
 async function clearViewerMeshes(viewer) {
   hasVesselMesh = false;
   while (viewer.meshes && viewer.meshes.length > 0) {
@@ -240,80 +471,155 @@ async function clearViewerMeshes(viewer) {
   }
 }
 
-async function showVolumeInViewer(primaryFile, overlayFile = null, { colormap = 'warm', label = '' } = {}) {
-  const viewer = await ensureViewer();
-  if (!viewer || !primaryFile) {
-    return;
-  }
-  try {
-    await clearViewerMeshes(viewer);
-    const volumes = [
-      {
-        url: primaryFile,
-        name: primaryFile.name,
-        colormap: overlayFile ? 'gray' : colormap,
-        opacity: 1,
-        isColorbarVisible: false,
-      },
-    ];
-    if (overlayFile) {
-      volumes.push({
-        url: overlayFile,
-        name: overlayFile.name,
-        colormap,
-        opacity: overlayOpacity,
-        isColorbarVisible: false,
-      });
+function showVolumeInViewer(
+  primaryFile,
+  overlayFile = null,
+  {
+    colormap = 'warm',
+    label = '',
+    calMin,
+    calMax,
+    colormapType,
+    isTransparentBelowCalMin,
+    isNearestInterpolation,
+    alphaClipDark = false,
+  } = {},
+) {
+  updateLegendAndToolbar();
+  return queueViewerOp(async () => {
+    const viewer = await ensureViewer();
+    if (!viewer || !primaryFile) {
+      return;
     }
-    await viewer.loadVolumes(volumes);
-    $('emptyState').hidden = true;
-    $('imageLabel').textContent = label || primaryFile.name;
-  } catch (err) {
-    log.log(`Viewer load warning: ${err instanceof Error ? err.message : String(err)}`, 'warning');
+    try {
+      await clearViewerMeshes(viewer);
+      const displayOptions = {
+        ...(calMin !== undefined ? { calMin } : {}),
+        ...(calMax !== undefined ? { calMax } : {}),
+        ...(colormapType !== undefined ? { colormapType } : {}),
+        ...(isTransparentBelowCalMin !== undefined ? { isTransparentBelowCalMin } : {}),
+        ...(isNearestInterpolation !== undefined ? { isNearestInterpolation } : {}),
+      };
+      const volumes = [
+        {
+          url: primaryFile,
+          name: primaryFile.name,
+          colormap: overlayFile ? 'gray' : colormap,
+          opacity: 1,
+          isColorbarVisible: false,
+          ...(!overlayFile ? displayOptions : {}),
+        },
+      ];
+      if (overlayFile) {
+        volumes.push({
+          url: overlayFile,
+          name: overlayFile.name,
+          colormap,
+          opacity: overlayOpacity,
+          isColorbarVisible: false,
+          ...displayOptions,
+        });
+      }
+      if ('volumeIsAlphaClipDark' in viewer) {
+        viewer.volumeIsAlphaClipDark = Boolean(alphaClipDark && !overlayFile);
+      }
+      await viewer.loadVolumes(volumes);
+      $('emptyState').hidden = true;
+      lastViewerLabel = label || primaryFile.name;
+      $('imageLabel').textContent = lastViewerLabel;
+      updateLegendAndToolbar();
+    } catch (err) {
+      log.log(`Viewer load warning: ${err instanceof Error ? err.message : String(err)}`, 'warning');
+    }
+  });
+}
+
+async function showDiameterMapInViewer(diameterFile) {
+  const range = diameterScale ?? autoDiameterRange ?? { minMm: 0.1, maxMm: 4 };
+  const options = {
+    colormap: diameterColormap,
+    label: 'Diameter map (mm)',
+    calMin: range.minMm,
+    calMax: range.maxMm,
+    colormapType: 0,
+    isTransparentBelowCalMin: true,
+    alphaClipDark: true,
+  };
+  if (referenceFile) {
+    await showVolumeInViewer(referenceFile, diameterFile, options);
+  } else {
+    await showVolumeInViewer(diameterFile, null, options);
   }
 }
 
-async function showVesselTreeMesh(meshFile) {
-  const viewer = await ensureViewer();
-  if (!viewer || !meshFile) {
-    return;
-  }
-  try {
-    await clearViewerMeshes(viewer);
-    await viewer.loadMeshes([{ url: meshFile, name: meshFile.name }]);
-    hasVesselMesh = true;
-    setView('3d');
-    $('emptyState').hidden = true;
-    $('imageLabel').textContent = '3D Vessel Tree (coloured by diameter)';
-  } catch (err) {
-    log.log(`3D mesh display warning: ${err instanceof Error ? err.message : String(err)}`, 'warning');
-  }
+function showVesselTreeMesh(meshFile) {
+  updateLegendAndToolbar();
+  return queueViewerOp(async () => {
+    const viewer = await ensureViewer();
+    if (!viewer || !meshFile) {
+      return;
+    }
+    try {
+      await clearViewerMeshes(viewer);
+      if ('volumeIsAlphaClipDark' in viewer) {
+        viewer.volumeIsAlphaClipDark = false;
+      }
+      await viewer.loadMeshes([{ url: meshFile, name: meshFile.name }]);
+      if (lastMeshScalarFile && diameterScale && typeof viewer.addMeshLayer === 'function') {
+        await viewer.addMeshLayer(0, {
+          url: lastMeshScalarFile,
+          name: 'diameter',
+          colormap: diameterColormap,
+          calMin: diameterScale.minMm,
+          calMax: diameterScale.maxMm,
+          colormapType: 0,
+          isTransparentBelowCalMin: false,
+          opacity: 1,
+          isColorbarVisible: false,
+        });
+      }
+      hasVesselMesh = true;
+      lastViewerLabel = '3D Vessel Tree (coloured by diameter)';
+      setView('3d');
+      $('emptyState').hidden = true;
+      $('imageLabel').textContent = lastViewerLabel;
+      updateLegendAndToolbar();
+    } catch (err) {
+      log.log(`3D mesh display warning: ${err instanceof Error ? err.message : String(err)}`, 'warning');
+    }
+  });
 }
 
 const results = createResultList({
   element: $('resultList'),
   onView: async (stage, entry) => {
-    activeDisplay = stage;
-    if (stage === 'report' || stage === 'summary' || stage === 'segments' || stage === 'junctions' || stage === 'diameterBins') {
+    if (stage === 'report' || stage === 'summary' || stage === 'segments' || stage === 'junctions' || stage === 'diameterBins' || stage === 'graph') {
       setView('report');
       return;
     }
     if (stage === 'vesselMesh') {
+      activeDisplay = 'vesselMesh';
       await showVesselTreeMesh(entry.file);
       return;
     }
     if (stage === 'diameterMap') {
-      if (referenceFile) {
-        await showVolumeInViewer(referenceFile, entry.file, { colormap: 'plasma', label: 'Diameter map (mm)' });
-      } else {
-        await showVolumeInViewer(entry.file, null, { colormap: 'plasma', label: 'Diameter map (mm)' });
-      }
+      activeDisplay = 'diameterMap';
+      await showDiameterMapInViewer(entry.file);
       setView('multiplanar');
       return;
     }
     if (stage === 'skeletonLabels') {
+      activeDisplay = 'skeletonLabels';
       const base = referenceFile || vesselFile;
-      await showVolumeInViewer(base, entry.file, { colormap: 'actc', label: 'Skeleton topology (1=seg, 2=junc, 3=end, 4=iso)' });
+      await showVolumeInViewer(base, entry.file, {
+        colormap: SKELETON_COLORMAP_NAME,
+        calMin: 0.5,
+        calMax: 4,
+        colormapType: 1,
+        isTransparentBelowCalMin: true,
+        isNearestInterpolation: true,
+        label: 'Skeleton topology',
+      });
       setView('multiplanar');
     }
   },
@@ -325,8 +631,15 @@ const results = createResultList({
 function clearResults() {
   lastReportData = null;
   lastArtifactFiles = null;
+  lastMeshScalarFile = null;
+  autoDiameterRange = null;
+  diameterScale = null;
+  activeDisplay = 'mask';
+  syncDiameterScaleInputs();
   results.render();
   $('outputSection').open = false;
+  $('diameterScaleSection').hidden = true;
+  $('diameterScaleSection').open = false;
   renderVesselReport($('resultsReport'), null);
   const reportTab = toolbar.viewTabs.querySelector('[data-view="report"]');
   if (reportTab) {
@@ -334,6 +647,8 @@ function clearResults() {
   }
   if (activeView === 'report') {
     setView('multiplanar');
+  } else {
+    updateLegendAndToolbar();
   }
 }
 
@@ -454,15 +769,42 @@ function setReferenceFile(file) {
     $('referenceInfo').textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
     $('clearReferenceBtn').hidden = false;
     status(`Background scan attached: ${file.name}`);
-    if (vesselFile) {
-      void showVolumeInViewer(referenceFile, vesselFile, { colormap: 'red', label: `${referenceFile.name} + vessels` });
-    }
   } else {
     $('referenceInfo').hidden = true;
     $('referenceInfo').textContent = '';
     $('clearReferenceBtn').hidden = true;
     status('Background scan cleared');
-    if (vesselFile) {
+  }
+  if (activeDisplay === 'vesselMesh' && lastArtifactFiles?.vesselMesh) {
+    const meshFile = lastArtifactFiles.vesselMesh.file;
+    void (async () => {
+      if (referenceFile) {
+        await showVolumeInViewer(referenceFile, null, { colormap: 'gray', label: referenceFile.name });
+      } else if (vesselFile) {
+        await showVolumeInViewer(vesselFile, null, { colormap: 'red', label: vesselFile.name });
+      }
+      if (activeDisplay === 'vesselMesh' && lastArtifactFiles?.vesselMesh?.file === meshFile) {
+        await showVesselTreeMesh(meshFile);
+      }
+    })();
+  } else if (activeDisplay === 'diameterMap' && lastArtifactFiles?.diameterMap) {
+    void showDiameterMapInViewer(lastArtifactFiles.diameterMap.file);
+  } else if (activeDisplay === 'skeletonLabels' && lastArtifactFiles?.skeletonLabels) {
+    const base = referenceFile || vesselFile;
+    void showVolumeInViewer(base, lastArtifactFiles.skeletonLabels.file, {
+      colormap: SKELETON_COLORMAP_NAME,
+      calMin: 0.5,
+      calMax: 4,
+      colormapType: 1,
+      isTransparentBelowCalMin: true,
+      isNearestInterpolation: true,
+      label: 'Skeleton topology',
+    });
+  } else if (vesselFile) {
+    activeDisplay = 'mask';
+    if (referenceFile) {
+      void showVolumeInViewer(referenceFile, vesselFile, { colormap: 'red', label: `${referenceFile.name} + vessels` });
+    } else {
       void showVolumeInViewer(vesselFile, null, { colormap: 'red', label: vesselFile.name });
     }
   }
@@ -621,8 +963,17 @@ function runCharacterisation(parametersOverride = null, signal = null) {
         if (msg.type === 'result') {
           settled = true;
           cleanup();
-          const { reportData, artifacts } = msg;
+          const { reportData, artifacts, vesselMeshScalars } = msg;
           lastReportData = reportData;
+          autoDiameterRange = reportData.diameterRange ?? { minMm: 0.1, maxMm: 4, dataMinMm: 0.1, dataMaxMm: 4 };
+          diameterScale = { minMm: autoDiameterRange.minMm, maxMm: autoDiameterRange.maxMm };
+          syncDiameterScaleInputs();
+          $('diameterScaleSection').hidden = false;
+          lastMeshScalarFile = vesselMeshScalars
+            ? new File([writeMz3Scalars(new Float32Array(vesselMeshScalars))], 'vessel_diameters.mz3', {
+                type: 'application/octet-stream',
+              })
+            : null;
 
           const fileMap = {};
           for (const [key, item] of Object.entries(artifacts)) {
@@ -696,12 +1047,12 @@ function runCharacterisation(parametersOverride = null, signal = null) {
           await ensureViewer();
           if (activeRunId === runId) {
             if (fileMap.vesselMesh && viewerReady) {
+              activeDisplay = 'vesselMesh';
               await showVesselTreeMesh(fileMap.vesselMesh.file);
             } else if (fileMap.diameterMap) {
-              await showVolumeInViewer(referenceFile || fileMap.diameterMap.file, referenceFile ? fileMap.diameterMap.file : null, {
-                colormap: 'plasma',
-                label: 'Diameter map (mm)',
-              });
+              activeDisplay = 'diameterMap';
+              await showDiameterMapInViewer(fileMap.diameterMap.file);
+              setView('multiplanar');
             }
           }
 

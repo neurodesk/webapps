@@ -70,7 +70,7 @@ impact:
 | Help icon | `<span class="nd-info-icon" tabindex="0" aria-label="…">i<span class="nd-info-tooltip">…</span></span>` | `bindInfoTooltips()`, `renderInfoIcon()` |
 | Viewer toolbar | `.nd-viewer-toolbar > .nd-view-tabs > .nd-view-tab` (layout) + `.nd-viewer-actions` (opacity, colormap, window) | `createViewerToolbar({ views, window, overlay, colormap, download, screenshot, actions })` |
 | Mask editing | `.nd-mask-editor` (second toolbar row under the viewer toolbar) `> .nd-viewer-label + .nd-tool-group > .nd-tool-btn[aria-pressed]`, a Label `select`, `.nd-brush-control`, Undo/Apply/Cancel `.nd-btn-sm`; `.nd-edit-btn` in result rows | `createMaskEditor({ nv, onApply, onCancel, labelNames })`, `createResultList({ onEdit })`; see [mask editing](mask-editing.md) |
-| Viewer | `.nd-viewer-canvas-wrapper > canvas + p.nd-viewer-empty + p.nd-viewer-notice`, then `.nd-viewer-info` | |
+| Viewer | `.nd-viewer-canvas-wrapper > canvas + p.nd-viewer-empty + p.nd-viewer-notice`, optional `.nd-viewer-legend` (colour-scale ramp + ticks or inline categorical swatches), then `.nd-viewer-info` | |
 | Image comparison | `.nd-compare-grid[data-count] > .nd-compare-panel[aria-current] > button.nd-compare-title[aria-pressed] + canvas`, over the viewer wrapper; two columns, the active panel outlined | |
 | Report view | `section.nd-viewer-report[hidden]` inside the canvas wrapper, shown by its own view tab; `.nd-report-controls` (sticky row of `.nd-field`, `.nd-check`, `.nd-btn-sm`), `.nd-report-notes`, `.nd-table-scroll > table.nd-data-table` with `tr[data-flag]` for emphasis | |
 | Report metadata editor | `.nd-report-form` containing shared `.nd-field` controls and `.nd-sidebar-section` disclosures; uses sidebar field metrics and phone sizing | |
