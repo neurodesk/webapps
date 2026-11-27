@@ -64,7 +64,7 @@ test('every Standalone container copied from a re-pinned record follows it, and 
   assert.deepEqual(standalone, before);
 });
 
-async function runCli(keys, tag = { digest: release.digest }) {
+async function runCli(keys, tag = { digest: release.digest }, { missingStatus = 404, registryOverrides = {}, releaseBuild = '20990101' } = {}) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'repin-shared-pins-')));
   try {
     await mkdir(join(root, 'scripts'));
@@ -74,14 +74,14 @@ async function runCli(keys, tag = { digest: release.digest }) {
     }
     const registry = await read('../registry/neurocontainers.json');
     const standalone = await read('../registry/standalone.json');
-    registry.containers = Object.fromEntries(keys.map((key) => [key, registry.containers[key]]));
+    registry.containers = Object.fromEntries(keys.map((key) => [key, { ...registry.containers[key], ...registryOverrides[key] }]));
     await writeFile(join(root, 'registry/neurocontainers.json'), JSON.stringify(registry));
     await writeFile(join(root, 'registry/standalone.json'), JSON.stringify(standalone));
-    const cliRelease = { ...release, build: '20990101' };
+    const cliRelease = { ...release, build: releaseBuild };
     const next = repinnedEntry(registry.containers.synthseg, cliRelease);
     const responses = {
-      ...Object.fromEntries(keys.map((key) => [registry.containers[key].apptainerUrl, { status: 404 }])),
       [next.apptainerUrl]: { status: 200 },
+      ...Object.fromEntries(keys.map((key) => [registry.containers[key].apptainerUrl, { status: missingStatus }])),
       'https://api.github.com/repos/neurodesk/neurocontainers/commits?path=releases/synthseg/8.2.0.json&per_page=1': { body: [{ sha: cliRelease.releaseSha }] },
       [`https://raw.githubusercontent.com/neurodesk/neurocontainers/${cliRelease.releaseSha}/releases/synthseg/8.2.0.json`]: { body: { apps: { 'synthseg 8.2.0': { version: cliRelease.build } } } },
       [`https://hub.docker.com/v2/repositories/vnmd/synthseg_8.2.0/tags/${cliRelease.build}`]: { body: tag },
@@ -109,28 +109,55 @@ globalThis.fetch = async (url) => {
 }
 
 test('the CLI reports shared compute-server pins without changing them and still repairs eligible containers', async () => {
-  const { registry, standalone, summary, updated, updatedStandalone, body, next } = await runCli(['nesvor', 'spinalcordtoolbox', 'synthseg']);
-  assert.deepEqual(summary.repinned, ['synthseg']);
-  assert.deepEqual(summary.unresolved.map(({ key }) => key), ['nesvor', 'spinalcordtoolbox']);
-  for (const key of ['nesvor', 'spinalcordtoolbox']) {
-    assert.match(summary.unresolved.find((item) => item.key === key).reason, /coordinated update/);
-    assert.deepEqual(updated.containers[key], registry.containers[key]);
-    assert.match(body, new RegExp(`- ${key} .*coordinated update`));
-  }
-  assert.equal(updated.containers.synthseg.dockerImage, next.dockerImage);
-  let repairedDownloads = 0;
-  for (const [id, app] of Object.entries(standalone.apps)) {
-    for (const [index, container] of (app.containers ?? []).entries()) {
-      const changed = updatedStandalone.apps[id].containers[index];
-      if (container.apptainerName === registry.containers.synthseg.apptainerName) {
-        assert.equal(changed.apptainerName, next.apptainerName);
-        repairedDownloads += 1;
-      } else {
-        assert.deepEqual(changed, container);
+  for (const missingStatus of [404, 403]) {
+    const { registry, standalone, summary, updated, updatedStandalone, body, next } = await runCli(
+      ['nesvor', 'relion', 'spinalcordtoolbox', 'synthseg'],
+      { digest: release.digest },
+      {
+        missingStatus,
+        registryOverrides: {
+          relion: { apptainerUrl: 'https://neurocontainers.neurodesk.workers.dev/relion_5.1.1_20261107.simg' },
+        },
+      },
+    );
+    assert.deepEqual(summary.repinned, ['synthseg'], `HTTP ${missingStatus}`);
+    assert.deepEqual(summary.unresolved.map(({ key }) => key), ['nesvor', 'relion', 'spinalcordtoolbox'], `HTTP ${missingStatus}`);
+    for (const key of ['nesvor', 'relion', 'spinalcordtoolbox']) {
+      assert.match(summary.unresolved.find((item) => item.key === key).reason, /coordinated update/);
+      assert.deepEqual(updated.containers[key], registry.containers[key]);
+      assert.match(body, new RegExp(`- ${key} .*coordinated update`));
+    }
+    assert.equal(updated.containers.synthseg.dockerImage, next.dockerImage);
+    let repairedDownloads = 0;
+    for (const [id, app] of Object.entries(standalone.apps)) {
+      for (const [index, container] of (app.containers ?? []).entries()) {
+        const changed = updatedStandalone.apps[id].containers[index];
+        if (container.apptainerName === registry.containers.synthseg.apptainerName) {
+          assert.equal(changed.apptainerName, next.apptainerName);
+          repairedDownloads += 1;
+        } else {
+          assert.deepEqual(changed, container);
+        }
       }
     }
+    assert.ok(repairedDownloads > 0);
   }
-  assert.ok(repairedDownloads > 0);
+});
+
+test('an HTTP 403 whose release metadata still names the pinned build leaves both catalogs unchanged', async () => {
+  const current = (await read('../registry/neurocontainers.json')).containers.synthseg;
+  const { registry, standalone, summary, updated, updatedStandalone, body } = await runCli(
+    ['synthseg'],
+    { digest: release.digest },
+    { missingStatus: 403, releaseBuild: current.buildDate },
+  );
+  assert.deepEqual(summary.repinned, []);
+  assert.equal(summary.unresolved.length, 1);
+  assert.equal(summary.unresolved[0].key, 'synthseg');
+  assert.match(summary.unresolved[0].reason, /still names the deleted build/);
+  assert.deepEqual(updated, registry);
+  assert.deepEqual(updatedStandalone, standalone);
+  assert.match(body, /- synthseg .*still names the deleted build/);
 });
 
 test('the CLI leaves both catalogs unchanged when Docker Hub omits or malforms a digest', async (t) => {

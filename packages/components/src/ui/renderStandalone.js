@@ -141,7 +141,7 @@ export function openStandalone({ title, app, installed = false }, doc = globalTh
         const row = element('p');
         row.append(element('a', 'Download Apptainer image', { href: container.apptainerUrl }));
         root.append(row);
-        command(root, `apptainer-${container.id}`, `curl -X GET ${container.apptainerUrl} -O`);
+        command(root, `apptainer-${container.id}`, `curl -fLO ${container.apptainerUrl}`);
       }
     }
   }
