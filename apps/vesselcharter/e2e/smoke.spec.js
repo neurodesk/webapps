@@ -110,6 +110,7 @@ for (const example of examples) {
       .filter({ hasText: 'Diameter Map (NIfTI)' })
       .getByRole('button', { name: 'View', exact: true })
       .click();
+    await expect(page.locator('#imageLabel')).toContainText('Diameter map', { timeout: 30000 });
     await expect(legend).toBeVisible();
     await expect(legend).toHaveAttribute('data-kind', 'diameter');
     const colormapSelect = page.locator('select[aria-label="Diameter colormap"]');
@@ -123,11 +124,21 @@ for (const example of examples) {
     await expect(legend).toContainText('2.50 mm');
 
     // Verify NiiVue's actual volume display state reflects the chosen colormap and calMax.
-    const volumes = await page.evaluate(() =>
-      globalThis.neurodeskAutomation.dispatch('viewers.volumes', { viewerId: 'main' }),
-    );
-    expect(volumes[0].colormap.toLowerCase()).toBe('viridis');
-    expect(Math.abs(volumes[0].calMax - 2.5)).toBeLessThan(0.05);
+    await expect
+      .poll(
+        async () => {
+          const volumes = await page.evaluate(() =>
+            globalThis.neurodeskAutomation.dispatch('viewers.volumes', { viewerId: 'main' }),
+          );
+          if (!volumes[0]) return null;
+          return {
+            colormap: volumes[0].colormap.toLowerCase(),
+            calMaxOk: Math.abs(volumes[0].calMax - 2.5) < 0.05,
+          };
+        },
+        { timeout: 15000 },
+      )
+      .toEqual({ colormap: 'viridis', calMaxOk: true });
 
     // Invalid scale (max <= min) flags validation without overwriting the active range.
     await page.locator('#diameterMax').fill('0.005');
