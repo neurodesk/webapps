@@ -2,7 +2,7 @@
 // from an ephemeral local HTTP server via page.route(continue) so large ONNX models stream
 // directly over loopback without Playwright CDP base64 overhead.
 import { createHash } from "node:crypto";
-import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { join } from "node:path";
 import { MODEL } from "../src/config.js";
@@ -20,7 +20,9 @@ export async function ensurePinnedPath({ url, sha256, bytes }) {
   if (!existsSync(path)) {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
-    writeFileSync(path, Buffer.from(await response.arrayBuffer()));
+    const tmp = `${path}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
+    writeFileSync(tmp, Buffer.from(await response.arrayBuffer()));
+    renameSync(tmp, path);
   }
   const size = statSync(path).size;
   if (size !== bytes) throw new Error(`${url}: size mismatch (${size} !== ${bytes})`);
@@ -68,9 +70,15 @@ async function getAssetServerUrl() {
 
 export async function routeModels(page, { hold = null } = {}) {
   const baseUrl = await getAssetServerUrl();
-  for (const asset of [MODEL.imageEncoder, MODEL.maskDecoder, MODEL.memoryEncoder, MODEL.memoryAttention]) {
-    await ensurePinnedPath(asset);
+  const assets = [
+    MODEL.imageEncoder,
+    MODEL.maskDecoder,
+    MODEL.memoryEncoder,
+    MODEL.memoryAttention,
+  ];
+  for (const asset of assets) {
     await page.route(asset.url, async (route) => {
+      await ensurePinnedPath(asset);
       if (hold) await hold(asset);
       await route.fulfill({
         status: 302,
