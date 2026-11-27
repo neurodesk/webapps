@@ -640,7 +640,7 @@ function schedulePreencode(delayMs = PREENCODE_SCROLL_MS) {
 async function resolveBackend(requested = $("backend").value) {
   if (requested !== "auto") return requested;
   const adapter = navigator.gpu ? await navigator.gpu.requestAdapter().catch(() => null) : null;
-  if (!adapter || adapter.info?.isFallbackAdapter) return "wasm";
+  if (!adapter || adapter.info?.isFallbackAdapter || adapter.isFallbackAdapter) return "wasm";
   return "webgpu";
 }
 

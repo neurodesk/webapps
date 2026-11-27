@@ -7973,30 +7973,30 @@
         "bytes": 5176902
       },
       {
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/533874f097991cc1ec3280d36f6112cb97ec4821/medsam2/models/medsam2-image-encoder.onnx",
-        "sha256": "5659538a74f53b2ca9a53238b74e90311fd6ec2e51931aae1da78fa539f38b53",
-        "bytes": 115353088,
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cb3d4c365c96ecdcf2bc142227fc36c07f65d93b/medsam2/models/medsam2-image-encoder.onnx",
+        "sha256": "fc9889f0bf7a8fcff8d0e79491bb68e91f4c43c3e4f274106cdaecfc1ccc1b14",
+        "bytes": 57814725,
         "kind": "model",
         "license": "CC-BY-SA-4.0"
       },
       {
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/533874f097991cc1ec3280d36f6112cb97ec4821/medsam2/models/medsam2-mask-decoder.onnx",
-        "sha256": "8c67eeb202deb907b4ee9e444a93e36122131e9171676881f4e86b379b008a3d",
-        "bytes": 19793433,
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cb3d4c365c96ecdcf2bc142227fc36c07f65d93b/medsam2/models/medsam2-mask-decoder.onnx",
+        "sha256": "1ca835418ac0cc1da0eea75362cd0b489f71ab080848cb776f64d5d3da10ce7e",
+        "bytes": 9997389,
         "kind": "model",
         "license": "CC-BY-SA-4.0"
       },
       {
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/533874f097991cc1ec3280d36f6112cb97ec4821/medsam2/models/medsam2-memory-encoder.onnx",
-        "sha256": "c63b6dc169d13b5ff82afcb14d5876ddbd1149577bfba848ac1337c04b9e6b7c",
-        "bytes": 5831040,
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cb3d4c365c96ecdcf2bc142227fc36c07f65d93b/medsam2/models/medsam2-memory-encoder.onnx",
+        "sha256": "2d636ec0c395c34b82a94f60c4a940d4ab0fbd91f7fe62f4f46cee6828ec0704",
+        "bytes": 2941937,
         "kind": "model",
         "license": "CC-BY-SA-4.0"
       },
       {
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/533874f097991cc1ec3280d36f6112cb97ec4821/medsam2/models/medsam2-memory-attention.onnx",
-        "sha256": "64538939072492dd6f888efb7f68d1c4eacf978bcd7ff58bd3d764f53aad3df5",
-        "bytes": 26993241,
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/cb3d4c365c96ecdcf2bc142227fc36c07f65d93b/medsam2/models/medsam2-memory-attention.onnx",
+        "sha256": "99913fa6bdd3294ae59a4026fc40406df79b9560df128a2c4da3d05137f06315",
+        "bytes": 13578985,
         "kind": "model",
         "license": "CC-BY-SA-4.0"
       }
