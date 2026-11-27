@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "bd-a12e36f9",
-  "revision": 3,
-  "stateRevision": 2,
+  "revision": 4,
+  "stateRevision": 3,
   "title": "Drop direct niimath callMain path in topofit",
   "summary": "Adopt fluent Niimath STL output and drop manual writeMz3/readMz3 round-trip now that @niivue/niimath > 1.4.20260909 has shipped.",
   "kind": "maintenance",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "scope": {
     "type": "app",
@@ -21,19 +21,17 @@
     "discoveredFrom": null
   },
   "links": {
+    "pr": 969,
     "branch": "t3/topofit-fluent-niimath-stl",
     "evidence": [
       "apps/dwi2trx/AGENTS.md",
       "apps/topofit/AGENTS.md"
     ]
   },
-  "lease": {
-    "owner": "t3/topofit-fluent-niimath-stl",
-    "branch": "t3/topofit-fluent-niimath-stl",
-    "claimedAt": "2026-11-26T23:09:21.616Z",
-    "expiresAt": "2026-11-27T23:09:21.616Z"
-  },
-  "releasedLeases": [],
+  "lease": null,
+  "releasedLeases": [
+    "v2:2026-11-26T23:09:21.616Z|2026-11-27T23:09:21.616Z|74483258bc04"
+  ],
   "leaseFloorAt": null,
   "journal": [
     {
@@ -45,13 +43,18 @@
       "at": "2026-11-26T23:22:48.715Z",
       "actor": "t3/topofit-fluent-niimath-stl",
       "note": "Opened Draft PR #969 (https://github.com/neurodesk/webapps/pull/969); verified build, 18 unit tests, lint, and 3/3 Playwright STL e2e tests"
+    },
+    {
+      "at": "2026-11-27T01:15:33.189Z",
+      "actor": "t3/topofit-fluent-niimath-stl",
+      "note": "Closed: Upgraded TopoFit to @niivue/niimath@1.4.20261114 fluent STL worker API and removed direct callMain stl-worker.js"
     }
   ],
   "createdAt": "2026-11-26T02:48:31.873Z",
-  "updatedAt": "2026-11-26T23:22:48.715Z",
-  "stateUpdatedAt": "2026-11-26T23:09:21.616Z",
+  "updatedAt": "2026-11-27T01:15:33.189Z",
+  "stateUpdatedAt": "2026-11-27T01:15:33.189Z",
   "lastSeenAt": "2026-11-26T02:48:31.873Z",
-  "closedAt": null,
+  "closedAt": "2026-11-27T01:15:33.189Z",
   "reopenedAt": null,
-  "closeReason": null
+  "closeReason": "Upgraded TopoFit to @niivue/niimath@1.4.20261114 fluent STL worker API and removed direct callMain stl-worker.js"
 }
