@@ -2251,3 +2251,30 @@ apps:
       shared_runtime: false
       browser_test: true
       release: true
+  - id: instanseg
+    path: instanseg
+    catalog: microscopy
+    title: InstanSeg
+    description: Segment nuclei in brightfield histology with InstanSeg.
+    categories: [segmentation]
+    keywords: [InstanSeg, nucleus segmentation, nuclei, instance segmentation, histology, brightfield, H&E, pathology, microscopy, OME-TIFF, deep learning]
+    anatomy: [any]
+    modalities: [microscopy]
+    inputs: [tiff]
+    hardware: webgpu-optional
+    handoff: none
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: models/instanseg.manifest.json
+    asset_manifest_schema: scientific-assets-v1
+    source: neurodesk/webapps@local
+    license: Apache-2.0
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    app_scoped_runtime_families: [ort-web-asyncify]
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: true

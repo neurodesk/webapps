@@ -1,0 +1,40 @@
+{
+  "name": "@neurodesk/instanseg",
+  "version": "0.1.0",
+  "description": "InstanSeg brightfield nuclei instance segmentation for browsers over ONNX Runtime Web",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/pipeline.js",
+    "./models": "./src/models.js",
+    "./image-io": "./src/image-io.js",
+    "./results": "./src/results.js",
+    "./manifest": "./model.manifest.json"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/*.js test/*.test.js"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*",
+    "fast-png": "^6.4.0"
+  },
+  "devDependencies": {
+    "onnxruntime-node": "1.29.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/instanseg"
+  },
+  "files": [
+    "src",
+    "model.manifest.json",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ]
+}

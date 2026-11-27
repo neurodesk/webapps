@@ -1,0 +1,15 @@
+@neurodesk/instanseg
+Copyright NeuroDesk contributors
+
+This package ports the inference pipeline and brightfield_nuclei model weights of InstanSeg
+(https://github.com/instanseg/instanseg, release v0.1.2 and model bundle instanseg_models_v0.1.1),
+originally authored by Thibaut Goldsborough and contributors at the University of Edinburgh,
+licensed under the Apache License, Version 2.0.
+
+Original manuscripts:
+- Goldsborough T, Philps B, O'Callaghan A, Inglis F, Leplat L, Filby A, Bilen H, Bankhead P.
+  InstanSeg: an embedding-based instance segmentation algorithm optimized for accurate, efficient
+  and portable cell segmentation. arXiv:2408.15954, 2024.
+- Goldsborough T, O'Callaghan A, Inglis F, Leplat L, Filby A, Bilen H, Bankhead P.
+  A novel channel invariant architecture for the segmentation of cells and nuclei in multiplexed
+  images using InstanSeg. bioRxiv 2024.09.04.611150, 2024.

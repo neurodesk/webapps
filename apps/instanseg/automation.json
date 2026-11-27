@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 2,
+  "app": "instanseg",
+  "title": "InstanSeg",
+  "description": "Segment cell nuclei in 2D RGB brightfield histology images with InstanSeg brightfield_nuclei.",
+  "defaultOperation": "segment",
+  "operations": {
+    "segment": {
+      "title": "Segment nuclei",
+      "description": "Run InstanSeg brightfield_nuclei (v0.1.1) on one 2D RGB TIFF, OME-TIFF or PNG image and return the calibrated instance label TIFF and per-nucleus morphometry CSV.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:microscopy-image",
+          "formats": [
+            "tif",
+            "tiff",
+            "png"
+          ],
+          "description": "One bounded 2D RGB brightfield microscopy image (TIFF, OME-TIFF or PNG, up to 16 MP)",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "pixelSize": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 2,
+          "description": "Physical pixel size in micrometres per pixel (omitted uses TIFF/OME-TIFF metadata up to 2 µm/px or native 0.5 µm/px)"
+        },
+        "seedThreshold": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 0.95,
+          "default": 0.7,
+          "description": "Minimum seediness local-maximum score to propose a nucleus (default 0.70)"
+        },
+        "maskThreshold": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 0.95,
+          "default": 0.53,
+          "description": "Pixel probability threshold for each nucleus mask (default 0.53)"
+        },
+        "overlapThreshold": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 0.95,
+          "default": 0.3,
+          "description": "Intersection-over-minimum-area threshold for merging overlapping seed masks (default 0.30)"
+        },
+        "tileSize": {
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 1024,
+          "default": 512,
+          "description": "Tile size in pixels for overlap-tile inference on larger images (default 512)"
+        },
+        "backend": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "wasm"
+          ],
+          "default": "auto",
+          "description": "Requested inference backend; WebGPU failures fall back to WASM CPU."
+        }
+      },
+      "artifacts": {
+        "labels": {
+          "type": "neuro:label-map",
+          "mediaType": "image/tiff",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "table": {
+          "type": "file:nuclei-table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}
