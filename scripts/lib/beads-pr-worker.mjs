@@ -151,7 +151,7 @@ function normalizePullRequestRecord(pr) {
   const draft = Boolean(pr?.draft ?? pr?.isDraft ?? false);
   const userLogin = pr?.userLogin ?? pr?.user?.login ?? '';
   const number = Number(pr?.number);
-  const url = pr?.url ?? pr?.html_url ?? '';
+  const url = pr?.html_url ?? pr?.url ?? '';
   return { headRef, headSha, baseRef, baseSha, state, updatedAt, closedAt, mergedAt, draft, userLogin, number, url };
 }
 

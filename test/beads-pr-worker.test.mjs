@@ -566,6 +566,7 @@ test('recordVerifiedBeadDraftPr enforces immutable selection, live open status, 
     user: { login: 'github-actions[bot]' },
     base: { ref: 'main' },
     head: { ref: `beads/${beadId}-deconvolution-${salt16}` },
+    url: 'https://api.github.com/repos/neurodesk/webapps/pulls/12',
     html_url: 'https://github.com/neurodesk/webapps/pull/12',
   };
 
