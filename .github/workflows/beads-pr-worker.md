@@ -109,6 +109,13 @@ steps:
     with:
       node-version: 22
       cache: pnpm
+  - name: Expose pnpm inside AWF chroot PATH
+    run: |
+      PNPM_VERSION="$(pnpm --version)"
+      npm install -g "pnpm@${PNPM_VERSION}"
+      NODE_BIN_DIR="$(dirname "$(command -v node)")"
+      test -x "${NODE_BIN_DIR}/pnpm"
+      "${NODE_BIN_DIR}/pnpm" --version
   - name: Install workspace dependencies
     run: pnpm install --frozen-lockfile --ignore-scripts
   - name: Sync memory/beads (read-only) and select one eligible single-app maintenance bead
@@ -209,7 +216,7 @@ Your job is to pick up the ONE pre-selected single-app maintenance bead, verify 
    - If the dependency, file, or symbol is actually still needed (for example, read at build/staging time, referenced dynamically, or required by license/notice staging), do NOT force a removal. Discard any exploratory changes (`git checkout -- .`), call `noop` explaining why the bead was skipped, and stop.
 4. **Apply minimal change and run real verification:**
    - Make the smallest clean change that resolves the bead.
-   - Before invoking `pnpm` in shell commands, ensure the pre-installed workspace `pnpm` binary is on `PATH`: `export PATH="${PNPM_HOME}:${PNPM_HOME}/bin:$PATH"`.
+   - `pnpm` is pre-installed on `PATH` alongside `node` (if unavailable in your shell, fall back to `npx --yes pnpm@$(node -p "require('./package.json').packageManager.split('@')[1]")`).
    - If you edited `apps/<app>/package.json`, run `pnpm install --lockfile-only --ignore-scripts` so `pnpm-lock.yaml` stays deterministically synchronized under `--frozen-lockfile`.
    - Run the app's relevant checks (check `apps/<app>/package.json` scripts first):
      - `pnpm --filter <app> test` (when a `test` script exists and does not require unpublished data or browsers)
