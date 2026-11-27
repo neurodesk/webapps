@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "bd-7a37cab9",
-  "revision": 2,
-  "stateRevision": 2,
+  "revision": 3,
+  "stateRevision": 3,
   "title": "Remove unused devDependency jsdom from deconvolution",
   "summary": "jsdom 24.1.3 is declared in apps/deconvolution/package.json devDependencies but a full-app search finds no other reference (no tests, scripts, config or e2e import it). Safe to remove and refresh the lockfile.",
   "kind": "maintenance",
-  "status": "open",
+  "status": "closed",
   "priority": 3,
   "scope": {
     "type": "app",
@@ -40,13 +40,18 @@
       "at": "2026-11-27T13:45:29.808Z",
       "actor": "gh-aw/beads-pr-worker",
       "note": "Draft PR #982 opened (beads/bd-7a37cab9-deconvolution-3fdbc3cc31f8d35c, 2 file(s)): https://api.github.com/repos/neurodesk/webapps/pulls/982"
+    },
+    {
+      "at": "2026-11-27T21:13:02.384Z",
+      "actor": "ubuntu",
+      "note": "Closed: Merged PR #982 after Opus 5.5 and Sol 6.2 reviews and full CI"
     }
   ],
   "createdAt": "2026-11-27T05:28:29.936Z",
-  "updatedAt": "2026-11-27T13:45:29.808Z",
-  "stateUpdatedAt": "2026-11-27T13:45:29.808Z",
+  "updatedAt": "2026-11-27T21:13:02.384Z",
+  "stateUpdatedAt": "2026-11-27T21:13:02.384Z",
   "lastSeenAt": "2026-11-27T05:28:29.936Z",
-  "closedAt": null,
+  "closedAt": "2026-11-27T21:13:02.384Z",
   "reopenedAt": null,
-  "closeReason": null
+  "closeReason": "Merged PR #982 after Opus 5.5 and Sol 6.2 reviews and full CI"
 }
