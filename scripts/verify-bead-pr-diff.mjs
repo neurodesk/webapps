@@ -2,7 +2,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { validateWorkerChangedFiles } from './lib/beads-pr-worker.mjs';
+import { validatePackageJsonDiff, validateWorkerChangedFiles } from './lib/beads-pr-worker.mjs';
 
 function parseArgs(argv) {
   const args = {
@@ -16,6 +16,25 @@ function parseArgs(argv) {
     else throw new Error(`Unknown option: ${token}`);
   }
   return args;
+}
+
+function parseNameStatusZ(output) {
+  const tokens = output.split('\0').filter((token) => token.length > 0);
+  const files = [];
+  const previousFiles = [];
+  for (let i = 0; i < tokens.length; ) {
+    const status = tokens[i++];
+    if (status.startsWith('R') || status.startsWith('C')) {
+      const oldPath = tokens[i++];
+      const newPath = tokens[i++];
+      if (oldPath) previousFiles.push(oldPath);
+      if (newPath) files.push(newPath);
+    } else {
+      const filePath = tokens[i++];
+      if (filePath) files.push(filePath);
+    }
+  }
+  return { files, previousFiles };
 }
 
 function main() {
@@ -32,18 +51,26 @@ function main() {
   }
 
   const diffRange = args.allowUncommitted ? [selection.baseSha] : [`${selection.baseSha}...HEAD`];
-  const rawFiles = execFileSync('git', ['diff', '--name-only', ...diffRange], { cwd, encoding: 'utf8' });
-  const files = rawFiles
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const rawNameStatus = execFileSync('git', ['diff', '--name-status', '-z', ...diffRange], { cwd, encoding: 'utf8' });
+  const { files, previousFiles } = parseNameStatusZ(rawNameStatus);
 
-  const check = validateWorkerChangedFiles(files, { app: selection.app });
+  const check = validateWorkerChangedFiles(files, { app: selection.app, previousFiles });
   if (!check.valid) {
     throw new Error(`Diff scope check failed for apps/${selection.app}/:\n- ${check.violations.join('\n- ')}`);
   }
 
-  // Also check whitespace / conflict markers cleanly
+  const appPkg = `apps/${selection.app}/package.json`;
+  if (check.files.includes(appPkg)) {
+    const basePkg = execFileSync('git', ['show', `${selection.baseSha}:${appPkg}`], { cwd, encoding: 'utf8' });
+    const headPkg = args.allowUncommitted
+      ? readFileSync(resolve(cwd, appPkg), 'utf8')
+      : execFileSync('git', ['show', `HEAD:${appPkg}`], { cwd, encoding: 'utf8' });
+    const pkgCheck = validatePackageJsonDiff(basePkg, headPkg);
+    if (!pkgCheck.valid) {
+      throw new Error(`${appPkg} policy check failed:\n- ${pkgCheck.violations.join('\n- ')}`);
+    }
+  }
+
   execFileSync('git', ['diff', '--check', ...diffRange], { cwd, stdio: 'inherit' });
 
   console.log(`Diff verified for ${selection.bead.id} (apps/${selection.app}/): ${check.files.join(', ')}`);

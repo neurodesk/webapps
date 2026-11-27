@@ -7,6 +7,7 @@ import {
   DEFAULT_MAX_OPEN_WORKER_PRS,
   DEFAULT_RECENT_CLOSED_DAYS,
   assertTrustedAppDir,
+  fetchWorkerPullRequests,
   selectBeadForPullRequest,
 } from './lib/beads-pr-worker.mjs';
 import { discoverFirstPartyApps } from './lib/beads-safe-outputs.mjs';
@@ -22,6 +23,8 @@ function parseArgs(argv) {
     prsFile: null,
     repository: process.env.GITHUB_REPOSITORY || '',
     apiUrl: process.env.GITHUB_API_URL || 'https://api.github.com',
+    defaultBranch: process.env.DEFAULT_BRANCH || 'main',
+    githubRef: process.env.GITHUB_REF || '',
   };
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i];
@@ -33,6 +36,7 @@ function parseArgs(argv) {
     else if (token === '--output') args.output = argv[++i];
     else if (token === '--prs-file') args.prsFile = argv[++i];
     else if (token === '--repo') args.repository = argv[++i];
+    else if (token === '--default-branch') args.defaultBranch = argv[++i];
     else throw new Error(`Unknown option: ${token}`);
   }
   if (!Number.isSafeInteger(args.maxOpenPrs) || args.maxOpenPrs < 1 || args.maxOpenPrs > 10) {
@@ -42,30 +46,6 @@ function parseArgs(argv) {
     throw new Error(`--recent-closed-days must be an integer between 0 and 365 (got ${args.recentClosedDays})`);
   }
   return args;
-}
-
-async function fetchExistingPullRequests({ repository, apiUrl, token }) {
-  if (!repository || !token) return [];
-  const base = apiUrl.replace(/\/+$/, '');
-  const prs = [];
-  for (let page = 1; page <= 2; page++) {
-    const url = `${base}/repos/${repository}/pulls?state=all&sort=updated&direction=desc&per_page=100&page=${page}`;
-    const response = await fetch(url, {
-      headers: {
-        Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${token}`,
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`GitHub API ${url} returned ${response.status}: ${await response.text()}`);
-    }
-    const batch = await response.json();
-    if (!Array.isArray(batch) || batch.length === 0) break;
-    prs.push(...batch);
-    if (batch.length < 100) break;
-  }
-  return prs;
 }
 
 function writeGithubOutput(values) {
@@ -102,17 +82,26 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const cwd = process.cwd();
   const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim();
+
+  // Refuse to select a bead when dispatched from a non-default ref.
+  if (args.githubRef && args.githubRef !== `refs/heads/${args.defaultBranch}`) {
+    throw new Error(
+      `Refusing to run beads-pr-worker outside default branch refs/heads/${args.defaultBranch} (got ${args.githubRef})`,
+    );
+  }
+
   const allowedApps = await discoverFirstPartyApps(cwd);
   const { beads } = readBeadsFromRef(cwd, args.ref);
 
   let existingPullRequests = [];
   if (args.prsFile) {
     existingPullRequests = JSON.parse(readFileSync(args.prsFile, 'utf8'));
-  } else {
-    existingPullRequests = await fetchExistingPullRequests({
+  } else if (args.repository && process.env.GITHUB_TOKEN) {
+    existingPullRequests = await fetchWorkerPullRequests({
       repository: args.repository,
       apiUrl: args.apiUrl,
-      token: process.env.GITHUB_TOKEN || '',
+      token: process.env.GITHUB_TOKEN,
+      recentClosedDays: args.recentClosedDays,
     });
   }
 

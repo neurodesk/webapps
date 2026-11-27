@@ -1,4 +1,5 @@
-import { existsSync, lstatSync, realpathSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, lstatSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import {
   BEAD_ID_PATTERN,
@@ -17,10 +18,16 @@ export const BEADS_PR_BRANCH_PREFIX = 'beads/';
 export const DEFAULT_WORKER_ACTOR = 'gh-aw/beads-pr-worker';
 export const DEFAULT_MAX_OPEN_WORKER_PRS = 2;
 export const DEFAULT_RECENT_CLOSED_DAYS = 30;
-export const RECORD_BEAD_PR_ITEM_TYPE = 'record_bead_pr';
+export const DEFAULT_MAX_OPEN_PR_PAGES = 20;
+export const DEFAULT_MAX_CLOSED_PR_PAGES = 20;
+export const DEFAULT_MAX_PR_FILE_PAGES = 5;
 
 const APP_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
-const WORKER_BRANCH_PATTERN = /^beads\/(bd-[0-9a-f]{8})-([a-z][a-z0-9-]*)(?:-[a-z0-9-]+)?$/;
+const WORKER_BRANCH_PATTERN = /^beads\/(bd-[0-9a-f]{8})-([a-z][a-z0-9-]*)(?:-[0-9a-f]{16})?$/;
+const GH_AW_SALT_PATTERN = /^[0-9a-f]{16}$/;
+const FORBIDDEN_AGENT_GUIDE_BASENAME = /^(?:AGENTS|AGENT|CLAUDE)\.md$/i;
+const DEPENDENCY_SECTIONS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
+const NON_REGISTRY_SPEC_PATTERN = /^(?:file:|link:|git(?:\+[a-z0-9.+-]+)?:|https?:|ssh:|github:|gitlab:|bitbucket:|gist:|portal:|patch:)|(?:\.tgz|\.tar\.gz)(?:$|[?#])|^[a-z0-9_.-]+\/[a-z0-9_.-]+(?:#.*)?$/i;
 
 function isStrictlyContained(parentReal, childReal) {
   const rel = relative(parentReal, childReal);
@@ -77,20 +84,188 @@ export function matchesWorkerBranchForBead(branchName, beadId, app) {
   if (branchName === expectedPrefix) return true;
   if (!branchName.startsWith(`${expectedPrefix}-`)) return false;
   const suffix = branchName.slice(expectedPrefix.length + 1);
-  return /^[a-z0-9-]+$/.test(suffix);
+  return GH_AW_SALT_PATTERN.test(suffix);
 }
 
 function normalizePullRequestRecord(pr) {
   const headRef = pr?.headRef ?? pr?.head?.ref ?? '';
+  const headSha = pr?.headSha ?? pr?.head?.sha ?? '';
   const baseRef = pr?.baseRef ?? pr?.base?.ref ?? '';
+  const baseSha = pr?.baseSha ?? pr?.base?.sha ?? '';
   const state = String(pr?.state ?? '').toLowerCase();
+  const updatedAt = pr?.updatedAt ?? pr?.updated_at ?? null;
   const closedAt = pr?.closedAt ?? pr?.closed_at ?? null;
   const mergedAt = pr?.mergedAt ?? pr?.merged_at ?? null;
   const draft = Boolean(pr?.draft ?? pr?.isDraft ?? false);
   const userLogin = pr?.userLogin ?? pr?.user?.login ?? '';
   const number = Number(pr?.number);
   const url = pr?.url ?? pr?.html_url ?? '';
-  return { headRef, baseRef, state, closedAt, mergedAt, draft, userLogin, number, url };
+  return { headRef, headSha, baseRef, baseSha, state, updatedAt, closedAt, mergedAt, draft, userLogin, number, url };
+}
+
+async function githubRequestJson(url, token, { method = 'GET', body = undefined, fetchImpl = fetch } = {}) {
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    Authorization: `Bearer ${token}`,
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+  }
+  const response = await fetchImpl(url, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`GitHub API ${method} ${url} returned ${response.status}: ${await response.text()}`);
+  }
+  return response.json();
+}
+
+export async function fetchWorkerPullRequests({
+  repository,
+  apiUrl = 'https://api.github.com',
+  token,
+  recentClosedDays = DEFAULT_RECENT_CLOSED_DAYS,
+  maxOpenPages = DEFAULT_MAX_OPEN_PR_PAGES,
+  maxClosedPages = DEFAULT_MAX_CLOSED_PR_PAGES,
+  now = new Date(),
+  fetchImpl = fetch,
+}) {
+  if (!repository || !token) {
+    throw new Error('repository and token are required to query GitHub pull requests');
+  }
+  const base = apiUrl.replace(/\/+$/, '');
+  const nowMs = now instanceof Date ? now.getTime() : Date.parse(String(now));
+  const cutoffMs = nowMs - recentClosedDays * 24 * 60 * 60 * 1000;
+  const prs = [];
+
+  // 1. Fetch ALL open PRs (fail closed if page budget is exhausted before EOF).
+  let openDone = false;
+  for (let page = 1; page <= maxOpenPages; page++) {
+    const url = `${base}/repos/${repository}/pulls?state=open&sort=created&direction=desc&per_page=100&page=${page}`;
+    const batch = await githubRequestJson(url, token, { fetchImpl });
+    if (!Array.isArray(batch)) {
+      throw new Error(`Unexpected non-array response from ${url}`);
+    }
+    prs.push(...batch);
+    if (batch.length < 100) {
+      openDone = true;
+      break;
+    }
+  }
+  if (!openDone) {
+    throw new Error(`Open PR listing exceeded ${maxOpenPages} page(s); refusing to select a bead with incomplete open-PR state`);
+  }
+
+  // 2. Fetch closed PRs sorted by updated desc, stopping once updated_at < cutoff
+  //    (since closed_at <= updated_at, no later page can contain a PR closed within the cutoff).
+  if (recentClosedDays > 0) {
+    let closedDone = false;
+    for (let page = 1; page <= maxClosedPages; page++) {
+      const url = `${base}/repos/${repository}/pulls?state=closed&sort=updated&direction=desc&per_page=100&page=${page}`;
+      const batch = await githubRequestJson(url, token, { fetchImpl });
+      if (!Array.isArray(batch)) {
+        throw new Error(`Unexpected non-array response from ${url}`);
+      }
+      prs.push(...batch);
+      if (batch.length < 100) {
+        closedDone = true;
+        break;
+      }
+      const last = normalizePullRequestRecord(batch[batch.length - 1]);
+      const lastUpdatedMs = last.updatedAt ? Date.parse(last.updatedAt) : NaN;
+      if (Number.isFinite(lastUpdatedMs) && lastUpdatedMs < cutoffMs) {
+        closedDone = true;
+        break;
+      }
+    }
+    if (!closedDone) {
+      throw new Error(`Closed PR listing exceeded ${maxClosedPages} page(s) before reaching ${recentClosedDays}-day cutoff; failing closed`);
+    }
+  }
+
+  return prs;
+}
+
+export async function fetchPullRequestByNumber({
+  repository,
+  apiUrl = 'https://api.github.com',
+  token,
+  prNumber,
+  fetchImpl = fetch,
+}) {
+  if (!Number.isSafeInteger(prNumber) || prNumber <= 0) {
+    throw new Error(`Invalid PR number: ${prNumber}`);
+  }
+  const base = apiUrl.replace(/\/+$/, '');
+  const url = `${base}/repos/${repository}/pulls/${prNumber}`;
+  return githubRequestJson(url, token, { fetchImpl });
+}
+
+export async function fetchPullRequestFiles({
+  repository,
+  apiUrl = 'https://api.github.com',
+  token,
+  prNumber,
+  maxPages = DEFAULT_MAX_PR_FILE_PAGES,
+  fetchImpl = fetch,
+}) {
+  if (!Number.isSafeInteger(prNumber) || prNumber <= 0) {
+    throw new Error(`Invalid PR number: ${prNumber}`);
+  }
+  const base = apiUrl.replace(/\/+$/, '');
+  const filenames = [];
+  const previousFilenames = [];
+  let done = false;
+  for (let page = 1; page <= maxPages; page++) {
+    const url = `${base}/repos/${repository}/pulls/${prNumber}/files?per_page=100&page=${page}`;
+    const batch = await githubRequestJson(url, token, { fetchImpl });
+    if (!Array.isArray(batch)) {
+      throw new Error(`Unexpected non-array response from ${url}`);
+    }
+    for (const entry of batch) {
+      if (typeof entry?.filename === 'string') filenames.push(entry.filename);
+      if (typeof entry?.previous_filename === 'string') previousFilenames.push(entry.previous_filename);
+    }
+    if (batch.length < 100) {
+      done = true;
+      break;
+    }
+  }
+  if (!done) {
+    throw new Error(`PR #${prNumber} file listing exceeded ${maxPages} page(s); failing closed`);
+  }
+  return { filenames, previousFilenames };
+}
+
+export async function closeViolatingPullRequest({
+  repository,
+  apiUrl = 'https://api.github.com',
+  token,
+  prNumber,
+  reason,
+  fetchImpl = fetch,
+}) {
+  const base = apiUrl.replace(/\/+$/, '');
+  const commentBody = [
+    'Closing this automated draft PR because deterministic post-PR verification failed:',
+    '',
+    `> ${String(reason).replace(/[\r\n]+/g, ' ').trim()}`,
+    '',
+    'No update was recorded to `refs/heads/memory/beads`.',
+  ].join('\n');
+  await githubRequestJson(`${base}/repos/${repository}/issues/${prNumber}/comments`, token, {
+    method: 'POST',
+    body: { body: commentBody },
+    fetchImpl,
+  });
+  await githubRequestJson(`${base}/repos/${repository}/pulls/${prNumber}`, token, {
+    method: 'PATCH',
+    body: { state: 'closed' },
+    fetchImpl,
+  });
 }
 
 function summarizeExistingWorkerPrs(existingPullRequests = [], { nowMs, recentClosedDays }) {
@@ -275,7 +450,28 @@ export function selectBeadForPullRequest({
   };
 }
 
-export function validateWorkerChangedFiles(files, { app, maxFiles = 20, allowLockfile = true } = {}) {
+function normalizeRepoPath(rawFile, violations) {
+  if (typeof rawFile !== 'string') {
+    violations.push('Non-string file path in diff');
+    return null;
+  }
+  const file = rawFile.trim();
+  if (!file || file.startsWith('/') || file.includes('\\') || file.includes('://')) {
+    violations.push(`Invalid repo-relative path "${rawFile}"`);
+    return null;
+  }
+  const segments = file.split('/');
+  if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
+    violations.push(`Path traversal or empty segment in "${rawFile}"`);
+    return null;
+  }
+  return file;
+}
+
+export function validateWorkerChangedFiles(
+  files,
+  { app, maxFiles = 20, allowLockfile = true, previousFiles = [] } = {},
+) {
   if (typeof app !== 'string' || !APP_ID_PATTERN.test(app)) {
     return { valid: false, files: [], violations: [`Invalid target app id "${app}"`] };
   }
@@ -288,26 +484,24 @@ export function validateWorkerChangedFiles(files, { app, maxFiles = 20, allowLoc
   const seen = new Set();
 
   for (const rawFile of files) {
-    if (typeof rawFile !== 'string') {
-      violations.push('Non-string file path in diff');
-      continue;
-    }
-    const file = rawFile.trim();
-    if (!file || file.startsWith('/') || file.includes('\\') || file.includes('://')) {
-      violations.push(`Invalid repo-relative path "${rawFile}"`);
-      continue;
-    }
-    const segments = file.split('/');
-    if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
-      violations.push(`Path traversal or empty segment in "${rawFile}"`);
-      continue;
-    }
-    if (!seen.has(file)) {
+    const file = normalizeRepoPath(rawFile, violations);
+    if (file && !seen.has(file)) {
       seen.add(file);
       normalized.push(file);
     }
   }
 
+  const normalizedPrevious = [];
+  const seenPrevious = new Set();
+  for (const rawFile of previousFiles ?? []) {
+    const file = normalizeRepoPath(rawFile, violations);
+    if (file && !seenPrevious.has(file)) {
+      seenPrevious.add(file);
+      normalizedPrevious.push(file);
+    }
+  }
+
+  // Count unique current filenames against maxFiles (renames count once, matching gh-aw max-patch-files).
   if (normalized.length > maxFiles) {
     violations.push(`Too many changed files (${normalized.length} > ${maxFiles})`);
   }
@@ -317,18 +511,30 @@ export function validateWorkerChangedFiles(files, { app, maxFiles = 20, allowLoc
   const hasAppPackageJson = normalized.includes(appPackageJson);
   let hasAppFile = false;
 
-  for (const file of normalized) {
-    if (file.startsWith(appPrefix)) {
-      hasAppFile = true;
-      continue;
+  const checkPathAllowed = (file, { isCurrent }) => {
+    const baseName = file.split('/').at(-1);
+    if (FORBIDDEN_AGENT_GUIDE_BASENAME.test(baseName)) {
+      violations.push(`Agent instruction file "${file}" cannot be modified by automated worker PRs`);
+      return;
     }
-    if (allowLockfile && file === 'pnpm-lock.yaml') {
+    if (file.startsWith(appPrefix)) {
+      if (isCurrent) hasAppFile = true;
+      return;
+    }
+    if (isCurrent && allowLockfile && file === 'pnpm-lock.yaml') {
       if (!hasAppPackageJson) {
         violations.push(`pnpm-lock.yaml may only change alongside ${appPackageJson}`);
       }
-      continue;
+      return;
     }
     violations.push(`File "${file}" is outside allowed scope (${appPrefix}**${allowLockfile ? ' or pnpm-lock.yaml with package.json' : ''})`);
+  };
+
+  for (const file of normalized) {
+    checkPathAllowed(file, { isCurrent: true });
+  }
+  for (const file of normalizedPrevious) {
+    checkPathAllowed(file, { isCurrent: false });
   }
 
   if (!hasAppFile) {
@@ -342,50 +548,103 @@ export function validateWorkerChangedFiles(files, { app, maxFiles = 20, allowLoc
   };
 }
 
-export function parseRecordBeadPrItems(raw) {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new Error('Agent output JSON must be an object with an "items" array');
+export function validatePackageJsonDiff(baseJsonText, headJsonText) {
+  let basePkg;
+  let headPkg;
+  try {
+    basePkg = JSON.parse(baseJsonText);
+    headPkg = JSON.parse(headJsonText);
+  } catch (error) {
+    return { valid: false, violations: [`Invalid package.json JSON: ${error.message}`] };
   }
-  if (!Array.isArray(raw.items)) {
-    throw new Error('Agent output JSON is missing an "items" array');
+  if (!basePkg || typeof basePkg !== 'object' || Array.isArray(basePkg) || !headPkg || typeof headPkg !== 'object' || Array.isArray(headPkg)) {
+    return { valid: false, violations: ['package.json must be a JSON object'] };
   }
-  return raw.items.filter(
-    (item) => item && typeof item === 'object' && !Array.isArray(item) && item.type === RECORD_BEAD_PR_ITEM_TYPE,
-  );
+
+  const violations = [];
+  const baseScripts = basePkg.scripts ?? {};
+  const headScripts = headPkg.scripts ?? {};
+  if (JSON.stringify(baseScripts) !== JSON.stringify(headScripts)) {
+    violations.push('package.json "scripts" cannot be added, modified, or removed by automated worker PRs');
+  }
+
+  for (const section of DEPENDENCY_SECTIONS) {
+    const baseDeps = basePkg[section] && typeof basePkg[section] === 'object' ? basePkg[section] : {};
+    const headDeps = headPkg[section] && typeof headPkg[section] === 'object' ? headPkg[section] : {};
+    for (const [depName, spec] of Object.entries(headDeps)) {
+      if (baseDeps[depName] === spec) continue;
+      if (typeof spec !== 'string' || !spec.trim()) {
+        violations.push(`${section}.${depName} must have a non-empty version string`);
+        continue;
+      }
+      const trimmed = spec.trim();
+      if (NON_REGISTRY_SPEC_PATTERN.test(trimmed)) {
+        violations.push(`${section}.${depName} uses forbidden non-registry specifier "${trimmed}"`);
+      }
+    }
+  }
+
+  return { valid: violations.length === 0, violations };
 }
 
-export function findMatchingDraftPr(
-  pullRequests,
-  { beadId, app, defaultBranch = 'main', expectedAuthor = 'github-actions[bot]' },
-) {
-  const matches = [];
-  for (const rawPr of pullRequests ?? []) {
-    const pr = normalizePullRequestRecord(rawPr);
-    if (pr.state !== 'open') continue;
-    if (!pr.draft) continue;
-    if (pr.baseRef !== defaultBranch) continue;
-    if (expectedAuthor && pr.userLogin !== expectedAuthor) continue;
-    if (!matchesWorkerBranchForBead(pr.headRef, beadId, app)) continue;
-    matches.push(pr);
+export function verifyRegeneratedLockfile({
+  cwd,
+  baseSha,
+  headSha,
+  app,
+  regenerateLockfile = null,
+}) {
+  const pkgPath = `apps/${app}/package.json`;
+  const basePkgText = execFileSync('git', ['show', `${baseSha}:${pkgPath}`], { cwd, encoding: 'utf8' });
+  const headPkgText = execFileSync('git', ['show', `${headSha}:${pkgPath}`], { cwd, encoding: 'utf8' });
+  const pkgCheck = validatePackageJsonDiff(basePkgText, headPkgText);
+  if (!pkgCheck.valid) {
+    throw new Error(`${pkgPath} policy violation: ${pkgCheck.violations.join('; ')}`);
   }
-  matches.sort((a, b) => b.number - a.number);
-  return matches[0] ?? null;
+
+  const headLock = execFileSync('git', ['show', `${headSha}:pnpm-lock.yaml`], { cwd, encoding: 'utf8' });
+  const pkgAbs = resolve(cwd, pkgPath);
+  const lockAbs = resolve(cwd, 'pnpm-lock.yaml');
+  const originalPkg = readFileSync(pkgAbs, 'utf8');
+  const originalLock = readFileSync(lockAbs, 'utf8');
+
+  try {
+    writeFileSync(pkgAbs, headPkgText, 'utf8');
+    if (typeof regenerateLockfile === 'function') {
+      regenerateLockfile({ cwd, pkgPath, headPkgText });
+    } else {
+      execFileSync('pnpm', ['install', '--lockfile-only', '--ignore-scripts'], {
+        cwd,
+        stdio: 'pipe',
+      });
+    }
+    const regeneratedLock = readFileSync(lockAbs, 'utf8');
+    if (regeneratedLock !== headLock) {
+      throw new Error('PR pnpm-lock.yaml does not match deterministic regeneration from base main + PR package.json');
+    }
+  } finally {
+    writeFileSync(pkgAbs, originalPkg, 'utf8');
+    writeFileSync(lockAbs, originalLock, 'utf8');
+  }
+
+  return { verified: true };
 }
 
-export function buildBeadPrUpdateOperation({ bead, prNumber, prUrl, branch, note = '' }) {
+export function buildDeterministicBeadPrNote({ prNumber, prUrl, branch, fileCount }) {
+  const fullNote = `Draft PR #${prNumber} opened (${branch}, ${fileCount} file(s)): ${prUrl}`;
+  return fullNote.length <= LIMITS.note ? fullNote : `${fullNote.slice(0, LIMITS.note - 1)}…`;
+}
+
+export function buildBeadPrUpdateOperation({ bead, prNumber, prUrl, branch, fileCount }) {
   if (!Number.isSafeInteger(prNumber) || prNumber <= 0) {
     throw new Error(`Invalid PR number: ${prNumber}`);
   }
-  const cleanNote = typeof note === 'string' ? note.replace(/[\r\n]+/g, ' ').trim() : '';
-  const prefix = `Draft PR #${prNumber} opened (${branch}): ${prUrl}`;
-  const fullNote = cleanNote ? `${prefix} — ${cleanNote}` : prefix;
-  const boundedNote = fullNote.length <= LIMITS.note ? fullNote : `${fullNote.slice(0, LIMITS.note - 1)}…`;
   return {
     op: 'update',
     id: bead.id,
     expectedRevision: bead.revision,
     links: { pr: prNumber },
-    note: boundedNote,
+    note: buildDeterministicBeadPrNote({ prNumber, prUrl, branch, fileCount }),
   };
 }
 
@@ -393,11 +652,13 @@ export function recordVerifiedBeadDraftPr({
   cwd,
   ref = DEFAULT_BEADS_REF,
   remote = 'origin',
-  beadId,
-  app,
+  selection,
+  allowedApps,
   pr,
   prFiles,
-  note = '',
+  prPreviousFiles = [],
+  defaultBranch = 'main',
+  expectedAuthor = 'github-actions[bot]',
   actor = DEFAULT_WORKER_ACTOR,
   dryRun = false,
   skipSync = false,
@@ -409,14 +670,30 @@ export function recordVerifiedBeadDraftPr({
   if (requireCleanDetection) {
     assertCleanThreatDetection({ detectionConclusion, detectionSuccess });
   }
+  if (!selection || selection.selected !== true || !selection.bead?.id || !selection.app) {
+    throw new Error('Refusing to record PR: immutable pre-selection artifact did not select an eligible bead');
+  }
+  const beadId = selection.bead.id;
+  const app = selection.app;
+  if (allowedApps && !allowedApps.has(app)) {
+    throw new Error(`Selected app "${app}" is not a registered first-party non-upstream app`);
+  }
+
   const normalizedPr = normalizePullRequestRecord(pr);
   if (!normalizedPr.draft || normalizedPr.state !== 'open' || !Number.isSafeInteger(normalizedPr.number) || normalizedPr.number <= 0) {
     throw new Error('Refusing to record PR on memory/beads: verified open draft PR is required');
   }
-  if (!matchesWorkerBranchForBead(normalizedPr.headRef, beadId, app)) {
-    throw new Error(`Draft PR #${normalizedPr.number} branch "${normalizedPr.headRef}" does not match bead ${beadId} (${app})`);
+  if (normalizedPr.baseRef !== defaultBranch) {
+    throw new Error(`Draft PR #${normalizedPr.number} base branch "${normalizedPr.baseRef}" must be "${defaultBranch}"`);
   }
-  const diffCheck = validateWorkerChangedFiles(prFiles, { app });
+  if (expectedAuthor && normalizedPr.userLogin !== expectedAuthor) {
+    throw new Error(`Draft PR #${normalizedPr.number} author "${normalizedPr.userLogin}" does not match expected "${expectedAuthor}"`);
+  }
+  if (!matchesWorkerBranchForBead(normalizedPr.headRef, beadId, app)) {
+    throw new Error(`Draft PR #${normalizedPr.number} branch "${normalizedPr.headRef}" does not match selected bead ${beadId} (${app})`);
+  }
+
+  const diffCheck = validateWorkerChangedFiles(prFiles, { app, previousFiles: prPreviousFiles });
   if (!diffCheck.valid) {
     throw new Error(`Draft PR #${normalizedPr.number} violates single-app scope for ${app}: ${diffCheck.violations.join('; ')}`);
   }
@@ -429,8 +706,21 @@ export function recordVerifiedBeadDraftPr({
   if (!bead) {
     throw new Error(`Bead ${beadId} not found on ${ref}`);
   }
-  if (bead.scope?.type !== 'app' || bead.scope.targets?.[0] !== app) {
-    throw new Error(`Bead ${beadId} scope does not match app "${app}"`);
+  const nowMs = now instanceof Date ? now.getTime() : Date.parse(String(now));
+  if (bead.status !== 'open') {
+    throw new Error(`Bead ${beadId} is no longer open (current status: "${bead.status}")`);
+  }
+  if (bead.kind !== 'maintenance') {
+    throw new Error(`Bead ${beadId} has kind "${bead.kind}" (only "maintenance" is allowed)`);
+  }
+  if (isBlockedByDeps(bead, localBeads)) {
+    throw new Error(`Bead ${beadId} is now blocked by unresolved dependencies`);
+  }
+  if (hasActiveLease(bead, nowMs)) {
+    throw new Error(`Bead ${beadId} is currently leased by "${bead.lease.owner}"`);
+  }
+  if (bead.scope?.type !== 'app' || bead.scope.targets?.length !== 1 || bead.scope.targets[0] !== app) {
+    throw new Error(`Bead ${beadId} scope does not match selected app "${app}"`);
   }
 
   const operation = buildBeadPrUpdateOperation({
@@ -438,7 +728,7 @@ export function recordVerifiedBeadDraftPr({
     prNumber: normalizedPr.number,
     prUrl: normalizedPr.url,
     branch: normalizedPr.headRef,
-    note,
+    fileCount: diffCheck.files.length,
   });
 
   const safeOpts = {

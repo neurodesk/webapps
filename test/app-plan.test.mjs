@@ -2768,7 +2768,8 @@ function yamlContainsUnexpectedExemptRef(text, exemptRef) {
           return false;
         }
       }
-      // Allow compiler-generated create_pull_request.protected_files containing "AGENTS.md" inside safe-outputs JSON configs.
+      // Allow compiler-generated create_pull_request.protected_files ("AGENTS.md") and excluded_files
+      // ("apps/**/{AGENTS,AGENT,CLAUDE}.md") inside safe-outputs JSON configs.
       if (
         path.length === 6
         && path[0] === 'jobs'
@@ -2781,15 +2782,16 @@ function yamlContainsUnexpectedExemptRef(text, exemptRef) {
       ) {
         try {
           const parsed = JSON.parse(value);
-          if (Array.isArray(parsed?.create_pull_request?.protected_files)) {
-            const sanitized = {
-              ...parsed,
-              create_pull_request: {
-                ...parsed.create_pull_request,
-                protected_files: parsed.create_pull_request.protected_files.filter((entry) => entry !== 'AGENTS.md'),
-              },
-            };
-            return exemptRef.test(JSON.stringify(sanitized));
+          if (parsed?.create_pull_request && typeof parsed.create_pull_request === 'object') {
+            const allowedExcluded = new Set(['apps/**/AGENTS.md', 'apps/**/AGENT.md', 'apps/**/CLAUDE.md']);
+            const cpr = { ...parsed.create_pull_request };
+            if (Array.isArray(cpr.protected_files)) {
+              cpr.protected_files = cpr.protected_files.filter((entry) => entry !== 'AGENTS.md');
+            }
+            if (Array.isArray(cpr.excluded_files)) {
+              cpr.excluded_files = cpr.excluded_files.filter((entry) => !allowedExcluded.has(entry));
+            }
+            return exemptRef.test(JSON.stringify({ ...parsed, create_pull_request: cpr }));
           }
         } catch {
           return true;

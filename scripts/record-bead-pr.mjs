@@ -1,21 +1,30 @@
 #!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
 import { appendFileSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { DEFAULT_BEADS_REF } from './lib/beads.mjs';
 import {
   DEFAULT_WORKER_ACTOR,
-  findMatchingDraftPr,
-  parseRecordBeadPrItems,
+  closeViolatingPullRequest,
+  fetchPullRequestByNumber,
+  fetchPullRequestFiles,
+  matchesWorkerBranchForBead,
   recordVerifiedBeadDraftPr,
+  validatePackageJsonDiff,
+  validateWorkerChangedFiles,
+  verifyRegeneratedLockfile,
 } from './lib/beads-pr-worker.mjs';
 import { assertCleanThreatDetection, discoverFirstPartyApps } from './lib/beads-safe-outputs.mjs';
 
 function parseArgs(argv) {
   const args = {
-    input: process.env.GH_AW_AGENT_OUTPUT || null,
+    selection: process.env.SELECTION_ARTIFACT || 'quality-artifacts/beads-worker/selected-bead.json',
+    prNumber: process.env.CREATED_PR_NUMBER ? Number(process.env.CREATED_PR_NUMBER) : null,
     ref: DEFAULT_BEADS_REF,
     remote: 'origin',
     actor: DEFAULT_WORKER_ACTOR,
     defaultBranch: process.env.DEFAULT_BRANCH || 'main',
+    githubRef: process.env.GITHUB_REF || '',
     repository: process.env.GITHUB_REPOSITORY || '',
     apiUrl: process.env.GITHUB_API_URL || 'https://api.github.com',
     dryRun: process.env.DRY_RUN === 'true',
@@ -26,7 +35,8 @@ function parseArgs(argv) {
   };
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i];
-    if (token === '--input') args.input = argv[++i];
+    if (token === '--selection') args.selection = argv[++i];
+    else if (token === '--pr-number') args.prNumber = Number(argv[++i]);
     else if (token === '--ref') args.ref = argv[++i];
     else if (token === '--remote') args.remote = argv[++i];
     else if (token === '--actor') args.actor = argv[++i];
@@ -39,91 +49,24 @@ function parseArgs(argv) {
   return args;
 }
 
-async function githubGetJson(url, token) {
-  const response = await fetch(url, {
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${token}`,
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`GitHub API ${url} returned ${response.status}: ${await response.text()}`);
-  }
-  return response.json();
-}
-
-async function fetchOpenPullRequests({ repository, apiUrl, token }) {
-  const base = apiUrl.replace(/\/+$/, '');
-  return githubGetJson(`${base}/repos/${repository}/pulls?state=open&sort=created&direction=desc&per_page=50`, token);
-}
-
-async function fetchPullRequestFiles({ repository, apiUrl, token, prNumber }) {
-  const base = apiUrl.replace(/\/+$/, '');
-  const files = [];
-  for (let page = 1; page <= 5; page++) {
-    const batch = await githubGetJson(
-      `${base}/repos/${repository}/pulls/${prNumber}/files?per_page=100&page=${page}`,
-      token,
-    );
-    if (!Array.isArray(batch) || batch.length === 0) break;
-    for (const entry of batch) {
-      if (typeof entry?.filename === 'string') files.push(entry.filename);
-      if (typeof entry?.previous_filename === 'string') files.push(entry.previous_filename);
-    }
-    if (batch.length < 100) break;
-  }
-  return files;
-}
-
 function writeSummary(lines) {
   const summaryPath = process.env.GITHUB_STEP_SUMMARY;
   if (!summaryPath) return;
   appendFileSync(summaryPath, `${lines.join('\n')}\n\n`, 'utf8');
 }
 
+function fetchCommitObject(cwd, remote, sha) {
+  if (!/^[0-9a-f]{40}$/i.test(sha)) {
+    throw new Error(`Invalid commit SHA "${sha}"`);
+  }
+  execFileSync('git', ['fetch', '--no-tags', '--depth=1', remote, sha], { cwd, stdio: 'pipe' });
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (args.requireCleanDetection) {
-    assertCleanThreatDetection({
-      detectionConclusion: args.detectionConclusion,
-      detectionSuccess: args.detectionSuccess,
-    });
-  }
-  if (!args.input) {
-    throw new Error('Missing --input or GH_AW_AGENT_OUTPUT path');
-  }
-  const raw = JSON.parse(readFileSync(args.input, 'utf8'));
-  const items = parseRecordBeadPrItems(raw);
-  if (items.length === 0) {
-    console.log('No record_bead_pr items emitted; nothing to record.');
-    writeSummary(['## Beads PR worker record', '', '- No draft PR recorded for this run.']);
-    return;
-  }
-  if (items.length > 1) {
-    throw new Error(`Expected at most 1 record_bead_pr item per run (got ${items.length})`);
-  }
-
-  const item = items[0];
-  const beadId = typeof item.bead_id === 'string' ? item.bead_id.trim() : '';
-  const app = typeof item.app === 'string' ? item.app.trim() : '';
-  const note = typeof item.note === 'string' ? item.note.trim() : '';
-
-  const cwd = process.cwd();
-  const allowedApps = await discoverFirstPartyApps(cwd);
-  if (!allowedApps.has(app)) {
-    throw new Error(`App "${app}" is not a registered first-party non-upstream app`);
-  }
-
-  if (args.dryRun) {
-    console.log(`Dry run: skipping remote draft PR recording for ${beadId} (apps/${app}/).`);
-    writeSummary([
-      '## Beads PR worker record',
-      '',
-      `- **Mode:** dry-run (no memory/beads writes)`,
-      `- **Bead:** \`${beadId}\``,
-      `- **App:** \`apps/${app}/\``,
-    ]);
+  if (!Number.isSafeInteger(args.prNumber) || args.prNumber <= 0) {
+    console.log('No created PR number supplied; nothing to verify or record.');
+    writeSummary(['## Beads PR worker verification', '', '- No pull request was created by this run.']);
     return;
   }
 
@@ -132,59 +75,163 @@ async function main() {
     throw new Error('GITHUB_REPOSITORY and GITHUB_TOKEN are required to verify the created draft PR');
   }
 
-  const openPrs = await fetchOpenPullRequests({
-    repository: args.repository,
-    apiUrl: args.apiUrl,
-    token,
-  });
-  const pr = findMatchingDraftPr(openPrs, {
-    beadId,
-    app,
-    defaultBranch: args.defaultBranch,
-    expectedAuthor: args.expectedAuthor,
-  });
-  if (!pr) {
-    throw new Error(
-      `No open draft PR by ${args.expectedAuthor} matching beads/${beadId}-${app} against ${args.defaultBranch} was found; refusing to update memory/beads.`,
+  const cwd = process.cwd();
+  let failureReason = null;
+
+  try {
+    if (args.githubRef && args.githubRef !== `refs/heads/${args.defaultBranch}`) {
+      throw new Error(
+        `PR #${args.prNumber} was opened outside exact default branch refs/heads/${args.defaultBranch} (got ${args.githubRef})`,
+      );
+    }
+    if (args.dryRun) {
+      throw new Error(`PR #${args.prNumber} was unexpectedly created while dry_run=true`);
+    }
+    if (args.requireCleanDetection) {
+      assertCleanThreatDetection({
+        detectionConclusion: args.detectionConclusion,
+        detectionSuccess: args.detectionSuccess,
+      });
+    }
+
+    const selection = JSON.parse(readFileSync(resolve(cwd, args.selection), 'utf8'));
+    if (!selection || selection.selected !== true || !selection.bead?.id || !selection.app) {
+      throw new Error(
+        `PR #${args.prNumber} was opened even though immutable pre-selection chose no bead (${selection?.reason ?? 'missing selection'})`,
+      );
+    }
+
+    const allowedApps = await discoverFirstPartyApps(cwd);
+    const pr = await fetchPullRequestByNumber({
+      repository: args.repository,
+      apiUrl: args.apiUrl,
+      token,
+      prNumber: args.prNumber,
+    });
+    const { filenames: prFiles, previousFilenames: prPreviousFiles } = await fetchPullRequestFiles({
+      repository: args.repository,
+      apiUrl: args.apiUrl,
+      token,
+      prNumber: args.prNumber,
+    });
+
+    const app = selection.app;
+    const beadId = selection.bead.id;
+    if (!allowedApps.has(app)) {
+      throw new Error(`Selected app "${app}" is not a registered first-party non-upstream app`);
+    }
+    if (!pr.draft || String(pr.state).toLowerCase() !== 'open') {
+      throw new Error(`PR #${args.prNumber} must be an open draft PR (state=${pr.state}, draft=${pr.draft})`);
+    }
+    if (pr.base?.ref !== args.defaultBranch) {
+      throw new Error(`PR #${args.prNumber} base branch "${pr.base?.ref}" must be "${args.defaultBranch}"`);
+    }
+    if (args.expectedAuthor && pr.user?.login !== args.expectedAuthor) {
+      throw new Error(`PR #${args.prNumber} author "${pr.user?.login}" does not match expected "${args.expectedAuthor}"`);
+    }
+    if (!matchesWorkerBranchForBead(pr.head?.ref, beadId, app)) {
+      throw new Error(`PR #${args.prNumber} branch "${pr.head?.ref}" does not match selected bead ${beadId} (${app})`);
+    }
+
+    const scopeCheck = validateWorkerChangedFiles(prFiles, { app, previousFiles: prPreviousFiles });
+    if (!scopeCheck.valid) {
+      throw new Error(`PR #${args.prNumber} violates single-app scope for ${app}: ${scopeCheck.violations.join('; ')}`);
+    }
+
+    const appPkg = `apps/${app}/package.json`;
+    const touchesPkg = scopeCheck.files.includes(appPkg);
+    const touchesLock = scopeCheck.files.includes('pnpm-lock.yaml');
+
+    if (touchesPkg || touchesLock) {
+      const baseSha = pr.base?.sha || selection.baseSha;
+      const headSha = pr.head?.sha;
+      if (!baseSha || !headSha) {
+        throw new Error(`PR #${args.prNumber} is missing base or head SHA for manifest verification`);
+      }
+      fetchCommitObject(cwd, args.remote, baseSha);
+      fetchCommitObject(cwd, args.remote, headSha);
+      const currentHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim();
+      if (currentHead !== baseSha) {
+        execFileSync('git', ['checkout', '--detach', baseSha], { cwd, stdio: 'pipe' });
+      }
+
+      if (touchesLock) {
+        // Verifies both apps/<app>/package.json policy AND byte-for-byte pnpm-lock.yaml regeneration.
+        verifyRegeneratedLockfile({ cwd, baseSha, headSha, app });
+      } else if (touchesPkg) {
+        const basePkg = execFileSync('git', ['show', `${baseSha}:${appPkg}`], { cwd, encoding: 'utf8' });
+        const headPkg = execFileSync('git', ['show', `${headSha}:${appPkg}`], { cwd, encoding: 'utf8' });
+        const pkgCheck = validatePackageJsonDiff(basePkg, headPkg);
+        if (!pkgCheck.valid) {
+          throw new Error(`${appPkg} policy violation: ${pkgCheck.violations.join('; ')}`);
+        }
+      }
+    }
+
+    const result = recordVerifiedBeadDraftPr({
+      cwd,
+      ref: args.ref,
+      remote: args.remote,
+      selection,
+      allowedApps,
+      pr,
+      prFiles,
+      prPreviousFiles,
+      defaultBranch: args.defaultBranch,
+      expectedAuthor: args.expectedAuthor,
+      actor: args.actor,
+      dryRun: false,
+      requireCleanDetection: args.requireCleanDetection,
+      detectionConclusion: args.detectionConclusion,
+      detectionSuccess: args.detectionSuccess,
+    });
+
+    console.log(
+      `Verified and recorded draft PR #${result.prNumber} (${result.branch}) on ${args.ref} for ${result.beadId} (${result.files.length} file(s), pushed=${result.pushed}).`,
     );
+    writeSummary([
+      '## Beads PR worker verification & record',
+      '',
+      `- **Status:** verified and recorded`,
+      `- **Bead:** \`${result.beadId}\``,
+      `- **App:** \`apps/${result.app}/\``,
+      `- **Draft PR:** [#${result.prNumber}](${result.prUrl})`,
+      `- **Branch:** \`${result.branch}\``,
+      `- **Verified files:** ${result.files.map((file) => `\`${file}\``).join(', ')}`,
+      `- **Pushed to \`${args.ref}\`:** ${result.pushed ? 'yes' : 'no'}`,
+    ]);
+    return;
+  } catch (error) {
+    failureReason = error.message;
   }
 
-  const prFiles = await fetchPullRequestFiles({
-    repository: args.repository,
-    apiUrl: args.apiUrl,
-    token,
-    prNumber: pr.number,
-  });
-
-  const result = recordVerifiedBeadDraftPr({
-    cwd,
-    ref: args.ref,
-    remote: args.remote,
-    beadId,
-    app,
-    pr,
-    prFiles,
-    note,
-    actor: args.actor,
-    dryRun: false,
-    requireCleanDetection: args.requireCleanDetection,
-    detectionConclusion: args.detectionConclusion,
-    detectionSuccess: args.detectionSuccess,
-  });
-
-  console.log(
-    `Recorded verified draft PR #${result.prNumber} (${result.branch}) on ${args.ref} for ${result.beadId} (${result.files.length} file(s), pushed=${result.pushed}).`,
-  );
-  writeSummary([
-    '## Beads PR worker record',
-    '',
-    `- **Bead:** \`${result.beadId}\``,
-    `- **App:** \`apps/${result.app}/\``,
-    `- **Draft PR:** [#${result.prNumber}](${result.prUrl})`,
-    `- **Branch:** \`${result.branch}\``,
-    `- **Verified files:** ${result.files.map((file) => `\`${file}\``).join(', ')}`,
-    `- **Pushed to \`${args.ref}\`:** ${result.pushed ? 'yes' : 'no'}`,
-  ]);
+  // Fail closed: close any violating PR so it never remains open for merge.
+  console.error(`Verification failed for PR #${args.prNumber}: ${failureReason}`);
+  try {
+    await closeViolatingPullRequest({
+      repository: args.repository,
+      apiUrl: args.apiUrl,
+      token,
+      prNumber: args.prNumber,
+      reason: failureReason,
+    });
+    console.error(`Closed violating PR #${args.prNumber}.`);
+    writeSummary([
+      '## Beads PR worker verification & record',
+      '',
+      `- **Status:** FAILED — closed PR #${args.prNumber}`,
+      `- **Reason:** ${failureReason}`,
+    ]);
+  } catch (closeError) {
+    console.error(`Failed to close violating PR #${args.prNumber}: ${closeError.message}`);
+    writeSummary([
+      '## Beads PR worker verification & record',
+      '',
+      `- **Status:** FAILED (could not auto-close PR #${args.prNumber}: ${closeError.message})`,
+      `- **Reason:** ${failureReason}`,
+    ]);
+  }
+  process.exit(1);
 }
 
 main().catch((error) => {
