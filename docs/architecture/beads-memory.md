@@ -89,3 +89,19 @@ node scripts/beads.mjs apply ops.json \
 ```
 
 In `--safe` mode, `applyOperations` enforces strict schema and string-length bounds, requires `expectedRevision` on updates, enforces `dedupeKey` idempotency, rejects deletes, rejects shared-scope writes when `--single-app` is set, and validates the entire batch atomically before committing.
+
+## Automated draft PR worker (Phase 3 `gh-aw` worker)
+
+The weekly worker ([beads-pr-worker.md](../../.github/workflows/beads-pr-worker.md), compiled to [beads-pr-worker.lock.yml](../../.github/workflows/beads-pr-worker.lock.yml)) turns at most one ready single-app `maintenance` bead per run into a **draft PR** for human review (never auto-merging):
+
+1. **Deterministic pre-selection (`scripts/select-bead-for-pr.mjs`):** Runs inside the read-only `agent` job (`contents: read`, `pull-requests: read`, `copilot-requests: none`, authenticated via `secrets.COPILOT_GITHUB_TOKEN`) before Copilot starts. Pulls `origin/memory/beads` read-only, checks existing `beads/*` PRs (enforcing a default cap of 2 open worker PRs and skipping beads that already have an open or recently closed unmerged PR), selects one registered first-party non-upstream single-app `maintenance` bead, writes `quality-artifacts/beads-worker/selected-bead.json`, and prepares the local `beads/<beadId>-<app>` branch with zero remote push credentials.
+2. **Scoped implementation & local verification:** Copilot verifies the finding is safe inside `apps/<app>/`, applies the minimal fix (refreshing `pnpm-lock.yaml` only when `apps/<app>/package.json` changes), runs the app's own tests/lint/build, commits locally, and verifies strict single-app containment with `node scripts/verify-bead-pr-diff.mjs`.
+3. **Fail-closed threat detection & draft-only `safe_outputs`:** `gh-aw` threat detection runs fail-closed (`continue-on-error: false`). Its built-in `create-pull-request` safe output enforces `draft: true`, `auto-merge: false`, `max: 1`, `base-branch: main`, `allowed-branches: ["beads/*"]`, `allowed-files: ["apps/**", "pnpm-lock.yaml"]`, `excluded-files` for upstream-synced apps (`qsmbly`, `seedseg`, `dicompare`), `protected-files: request-review`, `fallback-as-issue: false`, `signed-commits: true`, and `github-token-for-extra-empty-commit: none` (human review clicks "Ready for review" to trigger full CI).
+4. **Post-PR scope audit & Beads recording (`scripts/record-bead-pr.mjs`):** Runs after both `detection` and `safe_outputs` on `refs/heads/main`, independently fetches the open draft PR and its changed files from the GitHub API, verifies every file stays inside `apps/<app>/` (plus `pnpm-lock.yaml` only alongside `apps/<app>/package.json`), and records `links.pr` + a journal note on `refs/heads/memory/beads` with `--force-with-lease`.
+
+- **Manual dry-run or targeted run:** Dispatch `beads-pr-worker` with `dry_run: true` (and optional `bead_id: bd-xxxxxxxx`) to run full verification without opening a PR or modifying `memory/beads`.
+- **Recompiling after editing `.github/workflows/beads-pr-worker.md`:**
+
+```bash
+gh aw compile --strict --approve beads-pr-worker
+```

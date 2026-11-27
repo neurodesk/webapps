@@ -158,6 +158,7 @@ export const WORKFLOWS = Object.freeze({
   'standalone-catalog': 'deliver',
   'upstream sync': 'deliver',
   'CALMaR knowledge-base sync': 'deliver',
+  'beads-pr-worker': 'deliver',
   'Apple notarization alert': 'report',
   'CI approval report': 'report',
   'ci-usage': 'report',

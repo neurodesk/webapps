@@ -410,6 +410,7 @@ const GH_AW_BOILERPLATE_CJS_MODULES = Object.freeze({
     'check_version_updates.cjs',
     'create_prompt.cjs',
     'interpolate_prompt.cjs',
+    'substitute_placeholders.cjs',
     'skill_inventory.cjs',
   ]),
   conclusion: new Set([
@@ -443,6 +444,7 @@ const GH_AW_LITERAL_TMP_PATH = /^\/tmp\/gh-aw(?:\/[A-Za-z0-9._-]+)*\/?$/;
 const GH_AW_ACTIVATION_SPARSE_CHECKOUT = '.github\n.agents\n.claude\n.codex\n.gemini\n.pi';
 const GH_AW_GITHUB_SCRIPT_DISPATCH = /^const path = require\('path'\);\nconst actionsDir = path\.join\(process\.env\.RUNNER_TEMP, 'gh-aw', 'actions'\);\nconst \{ setupGlobals \} = require\(path\.join\(actionsDir, 'setup_globals\.cjs'\)\);\nsetupGlobals\(core, github, context, exec, io, getOctokit\);\nconst \{ main \} = require\(path\.join\(actionsDir, '([a-z0-9_]+\.cjs)'\)\);\nawait main\((?:core, context|core|)\);$/;
 const GH_AW_GITHUB_SCRIPT_PROMPT = /^const promptEnvironment = new Set\(\[(?:"[A-Z0-9_]+",)*"[A-Z0-9_]+"\]\);\nfor \(const name of Object\.keys\(process\.env\)\) \{\n {2}if \(!promptEnvironment\.has\(name\)\) delete process\.env\[name\];\n\}\nglobal\.core = core;\nglobal\.context = context;\nconst \{ main \} = require\(process\.env\.GH_AW_ACTIONS_DIR \+ '\/((?:create_prompt|interpolate_prompt)\.cjs)'\);\nawait main\((?:core|)\);$/;
+const GH_AW_GITHUB_SCRIPT_SUBSTITUTE = /^const promptEnvironment = new Set\(\[(?:"[A-Z0-9_]+",)*"[A-Z0-9_]+"\]\);\nfor \(const name of Object\.keys\(process\.env\)\) \{\n {2}if \(!promptEnvironment\.has\(name\)\) delete process\.env\[name\];\n\}\nglobal\.core = core;\nglobal\.context = context;\n\nconst substitutePlaceholders = require\(process\.env\.GH_AW_ACTIONS_DIR \+ '\/(substitute_placeholders\.cjs)'\);\n\n\/\/ Call the substitution function\nreturn await substitutePlaceholders\(\{\n {2}file: process\.env\.GH_AW_PROMPT,\n {2}substitutions: \{\n(?: {4}[A-Z0-9_]+: process\.env\.[A-Z0-9_]+,?\n)+ {2}\}\n\}\);$/;
 
 function isSafeTmpGhAwPath(rawPath) {
   if (typeof rawPath !== 'string') return false;
@@ -508,7 +510,9 @@ function isVerifiedBoilerplateActionStep(id, step, allowedActions) {
     const script = typeof withObj.script === 'string'
       ? withObj.script.replace(/\r\n/g, '\n').trim()
       : '';
-    const match = script.match(GH_AW_GITHUB_SCRIPT_DISPATCH) || script.match(GH_AW_GITHUB_SCRIPT_PROMPT);
+    const match = script.match(GH_AW_GITHUB_SCRIPT_DISPATCH)
+      || script.match(GH_AW_GITHUB_SCRIPT_PROMPT)
+      || script.match(GH_AW_GITHUB_SCRIPT_SUBSTITUTE);
     if (!match) return false;
     return GH_AW_BOILERPLATE_CJS_MODULES[id]?.has(match[1]) === true;
   }
