@@ -14,7 +14,7 @@ concurrency:
   job-discriminator: "${{ github.run_id }}"
 permissions:
   contents: read
-  copilot-requests: write
+  copilot-requests: none
 engine:
   id: copilot
   args:

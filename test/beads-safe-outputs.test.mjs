@@ -831,7 +831,8 @@ test('unused-code-triage gh-aw workflow enforces read-only no-shell agent, zero 
 
   // Agent job: read-only checkout pinned to github.sha with .git stripped before credential step, no shell/file built-ins
   assert.equal(flow.jobs.agent.permissions.contents, 'read', 'agent job must keep contents: read');
-  assert.equal(flow.jobs.agent.permissions['copilot-requests'], 'write', 'agent job uses Copilot inference');
+  assert.equal(flow.jobs.agent.permissions['copilot-requests'], 'none', 'agent job authenticates via COPILOT_GITHUB_TOKEN PAT secret rather than org-billed github.token');
+  assert.equal(flow.jobs.detection.permissions?.['copilot-requests'], undefined, 'detection job must not request org-billed copilot-requests: write');
   const agentCheckout = flow.jobs.agent.steps.find((step) => typeof step.uses === 'string' && step.uses.startsWith('actions/checkout@'));
   assert.equal(agentCheckout?.with?.ref, '${{ github.sha }}', 'agent checkout must pin to triggering github.sha');
   assert.equal(agentCheckout?.with?.['persist-credentials'], false, 'agent checkout must disable persist-credentials');
@@ -840,6 +841,7 @@ test('unused-code-triage gh-aw workflow enforces read-only no-shell agent, zero 
   assert.ok(stripIdx >= 0 && credIdx > stripIdx, 'agent must strip .git before configure_git_credentials.sh runs');
   const execStep = flow.jobs.agent.steps.find((step) => step.id === 'agentic_execution');
   assert.ok(execStep?.run, 'agentic_execution step must exist');
+  assert.equal(execStep.env?.COPILOT_GITHUB_TOKEN, '${{ secrets.COPILOT_GITHUB_TOKEN }}', 'agent job must authenticate Copilot CLI with secrets.COPILOT_GITHUB_TOKEN');
   assert.doesNotMatch(execStep.run, /--allow-tool ['"]?shell\(/, 'agent must not be granted any shell tools');
   assert.doesNotMatch(execStep.run, /--allow-tool github\b/, 'agent must not be granted GitHub MCP tools');
   assert.match(execStep.run, /--allow-tool mcpscripts\b/);
