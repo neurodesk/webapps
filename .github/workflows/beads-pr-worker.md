@@ -182,7 +182,7 @@ safe-outputs:
     github-token-for-extra-empty-commit: none
     signed-commits: true
     max-patch-files: 20
-    max-patch-size: 512
+    max-patch-size: 2048
     if-no-changes: "warn"
     title-prefix: "[beads] "
 ---
