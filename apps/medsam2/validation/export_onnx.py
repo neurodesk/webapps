@@ -246,6 +246,18 @@ class MemoryAttentionWrapper(nn.Module):
         return output.permute(0, 2, 1).reshape(1, 256, 32, 32)
 
 
+def fold_basic(raw_path: Path, out_path: Path) -> None:
+    """Run target-independent ORT basic graph optimization (constant folding / redundant node
+    elimination, pure standard ONNX domain) so onnxruntime-web strict shape inference accepts
+    the graph and session creation skips thousands of Constant/Shape/Gather nodes."""
+    opts = ort.SessionOptions()
+    opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
+    opts.optimized_model_filepath = str(out_path)
+    ort.InferenceSession(str(raw_path), sess_options=opts, providers=["CPUExecutionProvider"])
+    onnx.checker.check_model(onnx.load(out_path))
+    raw_path.unlink()
+
+
 def main():
     parser = argparse.ArgumentParser(description="Export MedSAM2 (sam2.1_hiera_t512) to four ONNX graphs.")
     parser.add_argument("--checkpoint", type=Path, default=Path(os.environ.get("MEDSAM2_CHECKPOINT", "MedSAM2_latest.pt")))
@@ -275,16 +287,10 @@ def main():
             output_names=["high_res_0", "high_res_1", "vision_feats", "image_embed_no_mem"],
             opset_version=OPSET, do_constant_folding=True,
         )
-    # Run target-independent basic ORT graph optimization (constant folding / redundant node
-    # elimination, pure standard ONNX domain) so onnxruntime-web strict shape inference accepts it.
-    opts = ort.SessionOptions()
-    opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
-    opts.optimized_model_filepath = str(enc_path)
-    ort.InferenceSession(str(raw_enc_path), sess_options=opts, providers=["CPUExecutionProvider"])
-    raw_enc_path.unlink()
-    onnx.checker.check_model(onnx.load(enc_path))
+    fold_basic(raw_enc_path, enc_path)
 
     dec_path = out / "medsam2-mask-decoder.onnx"
+    raw_dec_path = out / "medsam2-mask-decoder-raw.onnx"
     dummy_pts = torch.tensor([[[100.0, 120.0], [200.0, 220.0]]], dtype=torch.float32)
     dummy_lbl = torch.tensor([[2, 3]], dtype=torch.int32)
     dummy_mask = torch.zeros(1, 1, 128, 128, dtype=torch.float32)
@@ -292,29 +298,31 @@ def main():
     with torch.no_grad():
         dec_out = dec_wrap(iembed, hr0, hr1, dummy_pts, dummy_lbl, dummy_mask, dummy_has_mask)
         torch.onnx.export(
-            dec_wrap, (iembed, hr0, hr1, dummy_pts, dummy_lbl, dummy_mask, dummy_has_mask), dec_path,
+            dec_wrap, (iembed, hr0, hr1, dummy_pts, dummy_lbl, dummy_mask, dummy_has_mask), raw_dec_path,
             input_names=["image_embed", "high_res_0", "high_res_1", "point_coords", "point_labels", "mask_input", "has_mask_input"],
             output_names=["low_res_masks", "iou_predictions", "obj_ptrs", "object_score_logits"],
             dynamic_axes={"point_coords": {1: "num_points"}, "point_labels": {1: "num_points"}},
             opset_version=OPSET, do_constant_folding=True,
         )
-    onnx.checker.check_model(onnx.load(dec_path))
+    fold_basic(raw_dec_path, dec_path)
 
     mem_enc_path = out / "medsam2-memory-encoder.onnx"
+    raw_mem_enc_path = out / "medsam2-memory-encoder-raw.onnx"
     dummy_hrmask = F.interpolate(dec_out[0][:, 0:1], size=(512, 512), mode="bilinear", align_corners=False)
     dummy_obj_score = dec_out[3]
     dummy_from_pts = torch.tensor([1.0], dtype=torch.float32)
     with torch.no_grad():
         mfeat, mpos = mem_enc_wrap(vfeat, dummy_hrmask, dummy_obj_score, dummy_from_pts)
         torch.onnx.export(
-            mem_enc_wrap, (vfeat, dummy_hrmask, dummy_obj_score, dummy_from_pts), mem_enc_path,
+            mem_enc_wrap, (vfeat, dummy_hrmask, dummy_obj_score, dummy_from_pts), raw_mem_enc_path,
             input_names=["pix_feat", "high_res_mask", "object_score_logits", "is_mask_from_pts"],
             output_names=["maskmem_features", "maskmem_pos_enc"],
             opset_version=OPSET, do_constant_folding=True,
         )
-    onnx.checker.check_model(onnx.load(mem_enc_path))
+    fold_basic(raw_mem_enc_path, mem_enc_path)
 
     mem_attn_path = out / "medsam2-memory-attention.onnx"
+    raw_mem_attn_path = out / "medsam2-memory-attention-raw.onnx"
     dummy_mfeats = torch.cat([mfeat, mfeat], dim=0)
     dummy_mpos = torch.cat([mpos, mpos], dim=0)
     dummy_tpos_idx = torch.tensor([6, 0], dtype=torch.int64)
@@ -323,7 +331,7 @@ def main():
     with torch.no_grad():
         pix_mem = mem_attn_wrap(vfeat, dummy_mfeats, dummy_mpos, dummy_tpos_idx, dummy_ptrs, dummy_ppos)
         torch.onnx.export(
-            mem_attn_wrap, (vfeat, dummy_mfeats, dummy_mpos, dummy_tpos_idx, dummy_ptrs, dummy_ppos), mem_attn_path,
+            mem_attn_wrap, (vfeat, dummy_mfeats, dummy_mpos, dummy_tpos_idx, dummy_ptrs, dummy_ppos), raw_mem_attn_path,
             input_names=["vision_feats", "maskmem_feats", "maskmem_pos", "maskmem_tpos_idx", "obj_ptrs", "obj_pos_norm"],
             output_names=["pix_feat_with_mem"],
             dynamic_axes={
@@ -335,7 +343,7 @@ def main():
             },
             opset_version=OPSET, do_constant_folding=True,
         )
-    onnx.checker.check_model(onnx.load(mem_attn_path))
+    fold_basic(raw_mem_attn_path, mem_attn_path)
 
     # Verify ONNX Runtime parity across all 4 models + dynamic shapes!
     s_enc = ort.InferenceSession(str(enc_path), providers=["CPUExecutionProvider"])

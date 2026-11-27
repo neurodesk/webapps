@@ -5624,35 +5624,35 @@
       "kind": "model",
       "license": "CC-BY-4.0"
     },
-    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-image-encoder.onnx": {
-      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-image-encoder.onnx",
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/533874f097991cc1ec3280d36f6112cb97ec4821/medsam2/models/medsam2-image-encoder.onnx": {
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/533874f097991cc1ec3280d36f6112cb97ec4821/medsam2/models/medsam2-image-encoder.onnx",
       "sha256": "5659538a74f53b2ca9a53238b74e90311fd6ec2e51931aae1da78fa539f38b53",
       "bytes": 115353088,
       "path": "assets/56/5659538a74f53b2ca9a53238b74e90311fd6ec2e51931aae1da78fa539f38b53-medsam2-image-encoder.onnx",
       "kind": "model",
       "license": "CC-BY-SA-4.0"
     },
-    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-mask-decoder.onnx": {
-      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-mask-decoder.onnx",
-      "sha256": "28d45bb34153ae8afbf309de685b786edb4b1671586e01e56ec979308e1f5550",
-      "bytes": 18848860,
-      "path": "assets/28/28d45bb34153ae8afbf309de685b786edb4b1671586e01e56ec979308e1f5550-medsam2-mask-decoder.onnx",
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/533874f097991cc1ec3280d36f6112cb97ec4821/medsam2/models/medsam2-mask-decoder.onnx": {
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/533874f097991cc1ec3280d36f6112cb97ec4821/medsam2/models/medsam2-mask-decoder.onnx",
+      "sha256": "8c67eeb202deb907b4ee9e444a93e36122131e9171676881f4e86b379b008a3d",
+      "bytes": 19793433,
+      "path": "assets/8c/8c67eeb202deb907b4ee9e444a93e36122131e9171676881f4e86b379b008a3d-medsam2-mask-decoder.onnx",
       "kind": "model",
       "license": "CC-BY-SA-4.0"
     },
-    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-memory-encoder.onnx": {
-      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-memory-encoder.onnx",
-      "sha256": "b494a85774ccd015ad87b3d8223edf897458573448e836080759f9726c8811e1",
-      "bytes": 5590784,
-      "path": "assets/b4/b494a85774ccd015ad87b3d8223edf897458573448e836080759f9726c8811e1-medsam2-memory-encoder.onnx",
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/533874f097991cc1ec3280d36f6112cb97ec4821/medsam2/models/medsam2-memory-encoder.onnx": {
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/533874f097991cc1ec3280d36f6112cb97ec4821/medsam2/models/medsam2-memory-encoder.onnx",
+      "sha256": "c63b6dc169d13b5ff82afcb14d5876ddbd1149577bfba848ac1337c04b9e6b7c",
+      "bytes": 5831040,
+      "path": "assets/c6/c63b6dc169d13b5ff82afcb14d5876ddbd1149577bfba848ac1337c04b9e6b7c-medsam2-memory-encoder.onnx",
       "kind": "model",
       "license": "CC-BY-SA-4.0"
     },
-    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-memory-attention.onnx": {
-      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-memory-attention.onnx",
-      "sha256": "b3a8add55a5abcc02092293998da156111b3930d745a9b7c0ed59bb1800d2b42",
-      "bytes": 26057593,
-      "path": "assets/b3/b3a8add55a5abcc02092293998da156111b3930d745a9b7c0ed59bb1800d2b42-medsam2-memory-attention.onnx",
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/533874f097991cc1ec3280d36f6112cb97ec4821/medsam2/models/medsam2-memory-attention.onnx": {
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/533874f097991cc1ec3280d36f6112cb97ec4821/medsam2/models/medsam2-memory-attention.onnx",
+      "sha256": "64538939072492dd6f888efb7f68d1c4eacf978bcd7ff58bd3d764f53aad3df5",
+      "bytes": 26993241,
+      "path": "assets/64/64538939072492dd6f888efb7f68d1c4eacf978bcd7ff58bd3d764f53aad3df5-medsam2-memory-attention.onnx",
       "kind": "model",
       "license": "CC-BY-SA-4.0"
     },
@@ -7959,10 +7959,10 @@
     ],
     "medsam2": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-image-encoder.onnx",
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-mask-decoder.onnx",
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-memory-encoder.onnx",
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/626afea1c4e3dc42387dcaff3ab31bef5327e036/medsam2/models/medsam2-memory-attention.onnx"
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/533874f097991cc1ec3280d36f6112cb97ec4821/medsam2/models/medsam2-image-encoder.onnx",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/533874f097991cc1ec3280d36f6112cb97ec4821/medsam2/models/medsam2-mask-decoder.onnx",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/533874f097991cc1ec3280d36f6112cb97ec4821/medsam2/models/medsam2-memory-encoder.onnx",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/533874f097991cc1ec3280d36f6112cb97ec4821/medsam2/models/medsam2-memory-attention.onnx"
     ],
     "brainchomp": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0d854703518ea00290069555664208316e7f80aa/brainchomp/MA_F_15M_20_image.nii.gz",

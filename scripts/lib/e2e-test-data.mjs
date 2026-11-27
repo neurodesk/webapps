@@ -138,6 +138,9 @@ export const provisioners = {
   greedy: flag('GREEDY_LIVE_DATA'),
   // The browser reference fits all 14 cases of packages/lcmodel/validation/reference.mjs, about 5 min.
   lcmodel: { env: ['LCMODEL_E2E_LARGE', 'LCMODEL_BROWSER_REFERENCE'], provision: async () => ({ LCMODEL_E2E_LARGE: '1', LCMODEL_BROWSER_REFERENCE: 'check' }) },
+  // MedSAM2 e2e tests fetch and verify their own pinned example and ONNX models in apps/medsam2/e2e/fixtures.mjs;
+  // the macOS hardware-GPU job runs the PyTorch parity suite on Metal WebGPU (NEURODESK_HARDWARE_GPU=1).
+  medsam2: { env: [], provision: async () => ({}) },
   nesvor: {
     env: ['NESVOR_MASK_FIXTURE_DIR'],
     provision: async (cache) => {

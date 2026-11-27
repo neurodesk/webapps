@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { example, exampleFile, pinned, routeExample, routeModels } from "./fixtures.mjs";
 import { extractLabelSlice, readNifti3D } from "../src/volume.js";
 import { maskIou } from "../src/segmentation.js";
+import { assertHardwareAdapter, hardwareGpu, readAdapterInfo } from "../../../test-utils/hardware-gpu.mjs";
 
 const reference = JSON.parse(readFileSync(new URL("../validation/reference.json", import.meta.url), "utf8"));
 
@@ -31,6 +32,10 @@ test("automation matches PyTorch SAM2VideoPredictor for rolling box and single-p
   await routeModels(page);
   const bytes = await pinned(exampleFile);
   await page.goto("./");
+  if (hardwareGpu) {
+    assertHardwareAdapter(await readAdapterInfo(page));
+  }
+  const parityBackend = hardwareGpu ? "webgpu" : "wasm";
   const [boxCase, pointCase] = reference.cases;
   const runPrompt = async (promptItem) => {
     await page.locator("#neurodesk-input-transfer").setInputFiles({
@@ -38,16 +43,16 @@ test("automation matches PyTorch SAM2VideoPredictor for rolling box and single-p
       mimeType: "application/gzip",
       buffer: bytes,
     });
-    await page.evaluate(async (item) => {
+    await page.evaluate(async ([item, backend]) => {
       await globalThis.neurodeskAutomation.dispatch("adopt", { role: "image" });
       await globalThis.neurodeskAutomation.dispatch("start", {
         parameters: {
           prompts: JSON.stringify([item]),
-          backend: "wasm",
+          backend,
           stopOnEmpty: false,
         },
       });
-    }, promptItem);
+    }, [promptItem, parityBackend]);
     await expect.poll(
       () => page.evaluate(async () => (await globalThis.neurodeskAutomation.dispatch("snapshot")).state),
       { timeout: 300000 },
@@ -61,6 +66,12 @@ test("automation matches PyTorch SAM2VideoPredictor for rolling box and single-p
   const boxSnap = await runPrompt(boxCase.prompt);
   const boxObj = boxSnap.report.provenance.objects[0];
   expect(boxObj.slices).toBe(10);
+  if (hardwareGpu) {
+    const techLog = await page.locator("#technicalLog").textContent();
+    expect(boxObj.backend, techLog ?? "").toBe("webgpu");
+    expect(techLog).toContain("MedSAM2 2D ready on WebGPU");
+    expect(techLog).toContain("memory attention on WebGPU");
+  }
 
   const seg = await download(page, "3D labels");
   expect(seg.name).toBe("T1_head_medsam2_seg.nii");
@@ -176,6 +187,72 @@ test("interactive box prompt, 3D propagation, accept and undo work through the U
   await page.keyboard.press("Control+z");
   await expect(page.locator("#statusText")).toHaveText("Object 1 removed");
   await expect(page.locator("#objectInfo")).toHaveText("0 objects accepted");
+});
+
+test("2D prompting loads only 2D models and cooperative cancel preserves sessions and cache", async ({ page }) => {
+  test.setTimeout(360000);
+  const requested = [];
+  await routeModels(page, {
+    hold: (asset) => {
+      requested.push(asset.filename);
+    },
+  });
+  await routeExample(page);
+  await page.goto("./");
+  await page.getByRole("combobox", { name: "Input", exact: true }).selectOption(example.id);
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 90000 });
+  await expect(page.locator("#fileInfo")).toContainText("T1_head.nii.gz");
+
+  await page.locator("#advancedSettings summary").click();
+  await page.locator("#backend").selectOption("wasm");
+  await page.locator("#maxRange").fill("8");
+
+  const canvas = page.locator("#promptCanvas");
+  const box = await canvas.boundingBox();
+  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  await expect(page.locator("#acceptButton")).toBeEnabled({ timeout: 120000 });
+
+  // Only 2D models were fetched; 3D memory graphs stay lazy until Propagate in 3D.
+  expect(requested).toContain("medsam2-image-encoder.onnx");
+  expect(requested).toContain("medsam2-mask-decoder.onnx");
+  expect(requested).not.toContain("medsam2-memory-encoder.onnx");
+  expect(requested).not.toContain("medsam2-memory-attention.onnx");
+
+  // Start 3D propagation and cooperatively cancel once it is actively propagating slices.
+  await page.locator("#propagateButton").click();
+  await expect(page.locator("#cancelButton")).toBeVisible({ timeout: 30000 });
+  await expect(page.locator("#statusText")).toHaveText(/Propagating · slice \d+/, { timeout: 120000 });
+  await page.locator("#cancelButton").click();
+  await expect(page.locator("#statusText")).toHaveText("Cancelled", { timeout: 30000 });
+  await expect(page.locator("#cancelButton")).toBeHidden({ timeout: 30000 });
+
+  // Confirm 3D models were fetched on demand, and sessions + cache survived cancellation.
+  expect(requested).toContain("medsam2-memory-encoder.onnx");
+  expect(requested).toContain("medsam2-memory-attention.onnx");
+
+  // Wait for the worker to finish draining the cancelled slice before the next prompt.
+  await expect(page.locator("#technicalLog")).toContainText("MedSAM2 3D propagation cancelled (sessions and cache preserved)", { timeout: 30000 });
+
+  // A subsequent click on the same slice hits the preserved embedding cache without recreating 2D sessions.
+  const beforeSecondClick = await page.locator("#technicalLog").textContent();
+  expect((beforeSecondClick.match(/MedSAM2 2D ready/g) || []).length).toBe(1);
+  expect((beforeSecondClick.match(/MedSAM2 3D ready/g) || []).length).toBe(1);
+
+  await page.mouse.click(box.x + box.width * 0.52, box.y + box.height * 0.52);
+  await expect(page.locator("#statusText")).toContainText("Slice 81 preview ready", { timeout: 60000 });
+  await expect(page.locator("#acceptButton")).toBeEnabled();
+  const afterSecondClick = await page.locator("#technicalLog").textContent();
+  const addedDecodeLog = afterSecondClick.slice(beforeSecondClick.length);
+  expect(addedDecodeLog).toMatch(/Slice decoded \(cache hit,/);
+  expect((afterSecondClick.match(/MedSAM2 2D ready/g) || []).length).toBe(1);
+
+  // A follow-up short 3D propagation reuses the existing 3D sessions without recreating them.
+  await page.locator("#maxRange").fill("1");
+  await page.locator("#propagateButton").click();
+  await expect(page.locator("#statusText")).toContainText("Propagated across", { timeout: 120000 });
+  const afterSecondProp = await page.locator("#technicalLog").textContent();
+  expect((afterSecondProp.match(/MedSAM2 2D ready/g) || []).length).toBe(1);
+  expect((afterSecondProp.match(/MedSAM2 3D ready/g) || []).length).toBe(1);
 });
 
 test("a failed example download can be retried", async ({ page }) => {
