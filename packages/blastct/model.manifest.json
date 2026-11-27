@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "app": "blastct",
+  "license": "Apache-2.0",
+  "preprocessing_contract": {
+    "source": "packages/blastct/src/pipeline.js",
+    "input": "Bounded 3D non-contrast head CT volume in Hounsfield Units (NIfTI or DICOM; up to 32 million voxels at 1 mm isotropic and 150 million native voxels)",
+    "geometry": "Upstream BLAST-CT axis reorientation and linear resampling to 1.0 mm isotropic spacing (out-of-bounds fill value set to image minimum intensity), followed by nearest-neighbour resampling of predicted 5-class labels back to native geometry",
+    "normalization": "Hounsfield Unit clamping to [-15, 100] linearly mapped to [-1, 1] (IntensityWindowNormalization)",
+    "prediction": "3D DeepMedic v2 multi-centre model checkpoint 1 (3 multi-scale pathways at factors 5, 3, 1; 8 valid 3x3x3 convs per path; 5 output classes: background, IPH, EAH, oedema, IVH) evaluated with dynamic non-overlapping tile grids ((80 + 15k) input -> 15k output; 125^3 on WebGPU, 155^3 on WASM CPU, shrunk edge tiles) and argmax class assignment"
+  },
+  "assets": [
+    {
+      "id": "deepmedic-m1",
+      "filename": "blastct-deepmedic-m1.onnx",
+      "bytes": 4186794,
+      "sha256": "e7ea71e4a869e484ceaf3d0988e8a1af452791e870a6414751d64265af3e15cd",
+      "network": "DeepMedic",
+      "classes": 5,
+      "spacing_mm": 1.0,
+      "hu_range": [-15, 100],
+      "source_sha256": "f15cb328b1948a3cf47386cf8b5e3fa1f9931d9c69b8d2ad413e853d4bb23d39",
+      "fp32_max_diff": 0.000036,
+      "source_url": "https://raw.githubusercontent.com/biomedia-mira/blast-ct/613acbc1b6be455a44a9e6741eb899fbf082e6fd/blast_ct/data/saved_models/model_1.torch_model"
+    }
+  ],
+  "source_commit": "biomedia-mira/blast-ct v2.1.0 (613acbc1b6be455a44a9e6741eb899fbf082e6fd, Apache-2.0), v2 multi-centre model checkpoint 1 (model_1.torch_model), packaged in NeuroContainers as vnmd/blastct_2.0.0:20260512",
+  "graph_optimization": "3D DeepMedic (scale_factors=(5, 3, 1), 8 valid 3x3x3 convs) exported with dynamic D/H/W axes at opset 17 (Add, BatchNormalization, Concat, Constant, Conv, PRelu, Resize, Slice) in exact float32 precision using static [16:-16]/[32:-32] pathway slicing (0.00e+00 PyTorch diff vs upstream 110^3). Built by packages/blastct/scripts/export_model.py",
+  "repository": "neurodeskorg/webapps",
+  "revision": "825597325b33f0119dc0c61b51ce7667a232b078",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/825597325b33f0119dc0c61b51ce7667a232b078/blastct/models/"
+}

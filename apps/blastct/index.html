@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BLAST-CT — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input scan</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" multiple data-neurodesk-input="image" aria-label="Choose a 3D head CT NIfTI or DICOM scan" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a 3D head CT NIfTI or DICOM scan</span>
+          </label>
+          <p class="nd-hint">3D non-contrast head CT in Hounsfield Units (NIfTI or DICOM).
+            <span class="nd-info-icon" tabindex="0" aria-label="About head CT inputs">i<span class="nd-info-tooltip">BLAST-CT automatically reorients and resamples any 3D non-contrast head CT to 1 mm isotropic, clamps Hounsfield Units to [-15, 100], segments four traumatic brain injury lesion classes (IPH, EAH, oedema, IVH), and maps labels back to native geometry. Volumes exceeding 32 million voxels at 1 mm (or 150 million native voxels) are refused before allocation.</span></span>
+          </p>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Lesion segmentation</summary>
+        <div class="nd-section-content">
+          <p id="modelHint" class="nd-hint">Model: DeepMedic v2 (checkpoint 1, 4 lesion classes).</p>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="backend">Processing</label>
+                <select id="backend">
+                  <option value="auto">Automatic</option>
+                  <option value="wasm">CPU</option>
+                </select>
+                <p class="nd-hint">Automatic uses WebGPU when a hardware GPU is available.</p>
+              </div>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Segment lesions</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="labelLegend" aria-label="Lesion classes and volumes" hidden></div>
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a 3D head CT scan anywhere, or choose an example.</p>
+        <p id="viewerNotice" class="nd-viewer-notice" hidden></p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="privacyContent">
+      <p>Scans are processed locally in this browser and are never uploaded. The BLAST-CT DeepMedic model (4.2 MB) is downloaded from Hugging Face, verified against its pinned SHA-256 checksum, and cached in this browser.</p>
+    </template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

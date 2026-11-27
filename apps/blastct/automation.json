@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 2,
+  "app": "blastct",
+  "title": "BLAST-CT",
+  "description": "Segment traumatic brain injury lesions (IPH, EAH, oedema, IVH) on non-contrast 3D head CT with DeepMedic.",
+  "defaultOperation": "segment",
+  "operations": {
+    "segment": {
+      "title": "Segment TBI lesions",
+      "description": "Run BLAST-CT DeepMedic v2 (biomedia-mira/blast-ct v2.1.0, checkpoint 1) to produce a 4-class native-space TBI lesion label map (1 IPH, 2 EAH, 3 oedema, 4 IVH) and per-class lesion volume table (CSV).",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "space": "native",
+          "description": "3D non-contrast head CT scan in Hounsfield Units (NIfTI .nii/.nii.gz or DICOM series)",
+          "minimum": 1,
+          "maximum": 2000
+        }
+      },
+      "parameters": {
+        "backend": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "wasm"
+          ],
+          "default": "auto",
+          "description": "Requested inference backend; Automatic uses WebGPU (125^3 patches) when a hardware GPU is available and falls back to threaded WASM CPU (155^3 patches)."
+        }
+      },
+      "artifacts": {
+        "segmentation": {
+          "type": "neuro:labelmap",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "maximum": 1,
+          "space": "native"
+        },
+        "volumes": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

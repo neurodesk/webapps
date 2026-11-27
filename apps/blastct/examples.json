@@ -1,0 +1,17 @@
+[
+  {
+    "id": "scan-0-head-ct",
+    "label": "Head CT with TBI lesions (BLAST-CT demo, 7.0 MB)",
+    "description": "Non-contrast head CT with intraparenchymal and extra-axial haemorrhages, perilesional oedema, and intraventricular haemorrhage from the BLAST-CT repository (Apache-2.0).",
+    "expectedResult": "Four-class native-space TBI lesion label map (~48.1 mL IPH, ~23.6 mL EAH, ~62.7 mL perilesional oedema, ~0.3 mL IVH) and per-class lesion volume CSV matching BLAST-CT v2.1.0 (v2 multi-centre model, checkpoint 1).",
+    "files": [
+      {
+        "name": "scan_0_head_ct.nii.gz",
+        "role": "image",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/825597325b33f0119dc0c61b51ce7667a232b078/blastct/examples/scan_0_head_ct.nii.gz",
+        "bytes": 7034963,
+        "sha256": "06d0c21dc68e4b0c7c5fc983dae3428ef6e0330927f69185f5877e07276b5aae"
+      }
+    ]
+  }
+]

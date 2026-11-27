@@ -6538,6 +6538,21 @@
       "kind": "model",
       "license": "Apache-2.0",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/825597325b33f0119dc0c61b51ce7667a232b078/blastct/models/blastct-deepmedic-m1.onnx": {
+      "sha256": "e7ea71e4a869e484ceaf3d0988e8a1af452791e870a6414751d64265af3e15cd",
+      "bytes": 4186794,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "license": "Apache-2.0",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/825597325b33f0119dc0c61b51ce7667a232b078/blastct/examples/scan_0_head_ct.nii.gz": {
+      "sha256": "06d0c21dc68e4b0c7c5fc983dae3428ef6e0330927f69185f5877e07276b5aae",
+      "bytes": 7034963,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
     }
   },
   "apps": {
@@ -8102,6 +8117,10 @@
     "instanseg": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d92e42ac7515e9089de3c4996f61aa05af3cbee0/instanseg/examples/he_brightfield_512.ome.tif",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d92e42ac7515e9089de3c4996f61aa05af3cbee0/instanseg/models/instanseg-brightfield-nuclei.onnx"
+    ],
+    "blastct": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/825597325b33f0119dc0c61b51ce7667a232b078/blastct/examples/scan_0_head_ct.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/825597325b33f0119dc0c61b51ce7667a232b078/blastct/models/blastct-deepmedic-m1.onnx"
     ]
   }
 }

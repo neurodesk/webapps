@@ -3428,6 +3428,22 @@
           "apptainerName": "instanseg_0.1.2_20261125"
         }
       ]
+    },
+    "blastct": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": [
+        {
+          "id": "blastct",
+          "label": "blastct 2.0.0 (20260512)",
+          "url": "https://hub.docker.com/r/vnmd/blastct_2.0.0",
+          "dockerImage": "vnmd/blastct_2.0.0:20260512",
+          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/blastct_2.0.0_20260512.simg",
+          "apptainerName": "blastct_2.0.0_20260512"
+        }
+      ]
     }
   }
 }
