@@ -396,6 +396,7 @@ safe-outputs:
   jobs:
     upsert-unused-code-bead:
       description: "Record or refresh a verified single-app unused-code finding on the CI-silent refs/heads/memory/beads branch"
+      max: 15
       runs-on: ubuntu-latest
       if: "github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && needs.detection.outputs.detection_success == 'true' && needs.detection.outputs.detection_conclusion == 'success'"
       permissions:
