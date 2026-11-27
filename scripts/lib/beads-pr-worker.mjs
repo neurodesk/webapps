@@ -22,12 +22,64 @@ export const DEFAULT_MAX_OPEN_PR_PAGES = 20;
 export const DEFAULT_MAX_CLOSED_PR_PAGES = 20;
 export const DEFAULT_MAX_PR_FILE_PAGES = 5;
 
+export class WorkerPolicyViolationError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'WorkerPolicyViolationError';
+  }
+}
+
 const APP_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
 const WORKER_BRANCH_PATTERN = /^beads\/(bd-[0-9a-f]{8})-([a-z][a-z0-9-]*)(?:-[0-9a-f]{16})?$/;
 const GH_AW_SALT_PATTERN = /^[0-9a-f]{16}$/;
 const FORBIDDEN_AGENT_GUIDE_BASENAME = /^(?:AGENTS|AGENT|CLAUDE)\.md$/i;
 const DEPENDENCY_SECTIONS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
-const NON_REGISTRY_SPEC_PATTERN = /^(?:file:|link:|git(?:\+[a-z0-9.+-]+)?:|https?:|ssh:|github:|gitlab:|bitbucket:|gist:|portal:|patch:)|(?:\.tgz|\.tar\.gz)(?:$|[?#])|^[a-z0-9_.-]+\/[a-z0-9_.-]+(?:#.*)?$/i;
+const SEMVER_CORE_PATTERN = /^v?\d+(?:\.(?:\d+|x|X|\*))?(?:\.(?:\d+|x|X|\*))?(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const SEMVER_COMPARATOR_PATTERN = /^(?:\*|x|X|(?:>=|<=|>|<|=|\^|~)?v?\d+(?:\.(?:\d+|x|X|\*))?(?:\.(?:\d+|x|X|\*))?(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?)$/;
+const NPM_ALIAS_PATTERN = /^npm:((?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*)@(.+)$/;
+const CATALOG_SPEC_PATTERN = /^catalog:(?:[a-z0-9][a-z0-9._-]*)?$/i;
+
+export function isAllowedSemverRange(raw) {
+  if (typeof raw !== 'string') return false;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length > 128 || /[/:\\@]/.test(trimmed)) return false;
+  const clauses = trimmed.split(/\s*\|\|\s*/);
+  if (clauses.some((clause) => clause.length === 0)) return false;
+  for (const clause of clauses) {
+    const hyphenParts = clause.split(/\s+-\s+/);
+    if (hyphenParts.length === 2) {
+      if (!SEMVER_CORE_PATTERN.test(hyphenParts[0]) || !SEMVER_CORE_PATTERN.test(hyphenParts[1])) {
+        return false;
+      }
+      continue;
+    }
+    if (hyphenParts.length > 2) return false;
+    const comparators = clause.split(/\s+/);
+    if (comparators.some((token) => !SEMVER_COMPARATOR_PATTERN.test(token))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function isAllowedDependencySpecifier(spec) {
+  if (typeof spec !== 'string') return false;
+  const trimmed = spec.trim();
+  if (!trimmed || trimmed.length > 256) return false;
+  if (trimmed.startsWith('workspace:')) {
+    const rest = trimmed.slice('workspace:'.length);
+    return rest === '*' || rest === '^' || rest === '~' || isAllowedSemverRange(rest);
+  }
+  if (trimmed.startsWith('catalog:')) {
+    return CATALOG_SPEC_PATTERN.test(trimmed);
+  }
+  if (trimmed.startsWith('npm:')) {
+    const match = trimmed.match(NPM_ALIAS_PATTERN);
+    if (!match || match[1].includes('..')) return false;
+    return isAllowedSemverRange(match[2]);
+  }
+  return isAllowedSemverRange(trimmed);
+}
 
 function isStrictlyContained(parentReal, childReal) {
   const rel = relative(parentReal, childReal);
@@ -240,6 +292,22 @@ export async function fetchPullRequestFiles({
   return { filenames, previousFilenames };
 }
 
+function sanitizeCloseReason(reason, maxChars = 2048) {
+  const normalized = String(reason ?? 'Verification failed').replace(/\r\n?/g, '\n');
+  let out = '';
+  for (const ch of normalized) {
+    const code = ch.codePointAt(0);
+    if ((code < 0x20 && code !== 0x09 && code !== 0x0a) || code === 0x7f) {
+      out += ' ';
+    } else {
+      out += ch;
+    }
+  }
+  const cleaned = out.replace(/```/g, '` ` `').trim();
+  if (cleaned.length <= maxChars) return cleaned;
+  return `${cleaned.slice(0, maxChars - 1)}…`;
+}
+
 export async function closeViolatingPullRequest({
   repository,
   apiUrl = 'https://api.github.com',
@@ -249,23 +317,37 @@ export async function closeViolatingPullRequest({
   fetchImpl = fetch,
 }) {
   const base = apiUrl.replace(/\/+$/, '');
-  const commentBody = [
-    'Closing this automated draft PR because deterministic post-PR verification failed:',
-    '',
-    `> ${String(reason).replace(/[\r\n]+/g, ' ').trim()}`,
-    '',
-    'No update was recorded to `refs/heads/memory/beads`.',
-  ].join('\n');
-  await githubRequestJson(`${base}/repos/${repository}/issues/${prNumber}/comments`, token, {
-    method: 'POST',
-    body: { body: commentBody },
-    fetchImpl,
-  });
+  // Close the violating PR FIRST so a comment failure can never leave it open.
   await githubRequestJson(`${base}/repos/${repository}/pulls/${prNumber}`, token, {
     method: 'PATCH',
     body: { state: 'closed' },
     fetchImpl,
   });
+
+  const sanitizedReason = sanitizeCloseReason(reason, 2048);
+  const commentBody = [
+    'Closed this automated draft PR because deterministic post-PR verification failed:',
+    '',
+    '```text',
+    sanitizedReason,
+    '```',
+    '',
+    'No update was recorded to `refs/heads/memory/beads`.',
+  ].join('\n');
+
+  let commentPosted = false;
+  let commentError = null;
+  try {
+    await githubRequestJson(`${base}/repos/${repository}/issues/${prNumber}/comments`, token, {
+      method: 'POST',
+      body: { body: commentBody },
+      fetchImpl,
+    });
+    commentPosted = true;
+  } catch (error) {
+    commentError = error.message;
+  }
+  return { closed: true, commentPosted, commentError };
 }
 
 function summarizeExistingWorkerPrs(existingPullRequests = [], { nowMs, recentClosedDays }) {
@@ -578,8 +660,8 @@ export function validatePackageJsonDiff(baseJsonText, headJsonText) {
         continue;
       }
       const trimmed = spec.trim();
-      if (NON_REGISTRY_SPEC_PATTERN.test(trimmed)) {
-        violations.push(`${section}.${depName} uses forbidden non-registry specifier "${trimmed}"`);
+      if (!isAllowedDependencySpecifier(trimmed)) {
+        violations.push(`${section}.${depName} uses disallowed dependency specifier "${trimmed}" (only semver ranges, npm:<pkg>@<range>, workspace:, and catalog: are allowed)`);
       }
     }
   }
@@ -599,7 +681,7 @@ export function verifyRegeneratedLockfile({
   const headPkgText = execFileSync('git', ['show', `${headSha}:${pkgPath}`], { cwd, encoding: 'utf8' });
   const pkgCheck = validatePackageJsonDiff(basePkgText, headPkgText);
   if (!pkgCheck.valid) {
-    throw new Error(`${pkgPath} policy violation: ${pkgCheck.violations.join('; ')}`);
+    throw new WorkerPolicyViolationError(`${pkgPath} policy violation: ${pkgCheck.violations.join('; ')}`);
   }
 
   const headLock = execFileSync('git', ['show', `${headSha}:pnpm-lock.yaml`], { cwd, encoding: 'utf8' });
@@ -620,7 +702,7 @@ export function verifyRegeneratedLockfile({
     }
     const regeneratedLock = readFileSync(lockAbs, 'utf8');
     if (regeneratedLock !== headLock) {
-      throw new Error('PR pnpm-lock.yaml does not match deterministic regeneration from base main + PR package.json');
+      throw new WorkerPolicyViolationError('PR pnpm-lock.yaml does not match deterministic regeneration from base parent + PR package.json');
     }
   } finally {
     writeFileSync(pkgAbs, originalPkg, 'utf8');
@@ -668,34 +750,38 @@ export function recordVerifiedBeadDraftPr({
   now = new Date(),
 }) {
   if (requireCleanDetection) {
-    assertCleanThreatDetection({ detectionConclusion, detectionSuccess });
+    try {
+      assertCleanThreatDetection({ detectionConclusion, detectionSuccess });
+    } catch (error) {
+      throw new WorkerPolicyViolationError(error.message);
+    }
   }
   if (!selection || selection.selected !== true || !selection.bead?.id || !selection.app) {
-    throw new Error('Refusing to record PR: immutable pre-selection artifact did not select an eligible bead');
+    throw new WorkerPolicyViolationError('Refusing to record PR: immutable pre-selection artifact did not select an eligible bead');
   }
   const beadId = selection.bead.id;
   const app = selection.app;
   if (allowedApps && !allowedApps.has(app)) {
-    throw new Error(`Selected app "${app}" is not a registered first-party non-upstream app`);
+    throw new WorkerPolicyViolationError(`Selected app "${app}" is not a registered first-party non-upstream app`);
   }
 
   const normalizedPr = normalizePullRequestRecord(pr);
   if (!normalizedPr.draft || normalizedPr.state !== 'open' || !Number.isSafeInteger(normalizedPr.number) || normalizedPr.number <= 0) {
-    throw new Error('Refusing to record PR on memory/beads: verified open draft PR is required');
+    throw new WorkerPolicyViolationError('Refusing to record PR on memory/beads: verified open draft PR is required');
   }
   if (normalizedPr.baseRef !== defaultBranch) {
-    throw new Error(`Draft PR #${normalizedPr.number} base branch "${normalizedPr.baseRef}" must be "${defaultBranch}"`);
+    throw new WorkerPolicyViolationError(`Draft PR #${normalizedPr.number} base branch "${normalizedPr.baseRef}" must be "${defaultBranch}"`);
   }
   if (expectedAuthor && normalizedPr.userLogin !== expectedAuthor) {
-    throw new Error(`Draft PR #${normalizedPr.number} author "${normalizedPr.userLogin}" does not match expected "${expectedAuthor}"`);
+    throw new WorkerPolicyViolationError(`Draft PR #${normalizedPr.number} author "${normalizedPr.userLogin}" does not match expected "${expectedAuthor}"`);
   }
   if (!matchesWorkerBranchForBead(normalizedPr.headRef, beadId, app)) {
-    throw new Error(`Draft PR #${normalizedPr.number} branch "${normalizedPr.headRef}" does not match selected bead ${beadId} (${app})`);
+    throw new WorkerPolicyViolationError(`Draft PR #${normalizedPr.number} branch "${normalizedPr.headRef}" does not match selected bead ${beadId} (${app})`);
   }
 
   const diffCheck = validateWorkerChangedFiles(prFiles, { app, previousFiles: prPreviousFiles });
   if (!diffCheck.valid) {
-    throw new Error(`Draft PR #${normalizedPr.number} violates single-app scope for ${app}: ${diffCheck.violations.join('; ')}`);
+    throw new WorkerPolicyViolationError(`Draft PR #${normalizedPr.number} violates single-app scope for ${app}: ${diffCheck.violations.join('; ')}`);
   }
 
   if (!skipSync) {
@@ -704,23 +790,23 @@ export function recordVerifiedBeadDraftPr({
   const { beads: localBeads } = readBeadsFromRef(cwd, ref);
   const bead = localBeads.get(beadId);
   if (!bead) {
-    throw new Error(`Bead ${beadId} not found on ${ref}`);
+    throw new WorkerPolicyViolationError(`Bead ${beadId} not found on ${ref}`);
   }
   const nowMs = now instanceof Date ? now.getTime() : Date.parse(String(now));
   if (bead.status !== 'open') {
-    throw new Error(`Bead ${beadId} is no longer open (current status: "${bead.status}")`);
+    throw new WorkerPolicyViolationError(`Bead ${beadId} is no longer open (current status: "${bead.status}")`);
   }
   if (bead.kind !== 'maintenance') {
-    throw new Error(`Bead ${beadId} has kind "${bead.kind}" (only "maintenance" is allowed)`);
+    throw new WorkerPolicyViolationError(`Bead ${beadId} has kind "${bead.kind}" (only "maintenance" is allowed)`);
   }
   if (isBlockedByDeps(bead, localBeads)) {
-    throw new Error(`Bead ${beadId} is now blocked by unresolved dependencies`);
+    throw new WorkerPolicyViolationError(`Bead ${beadId} is now blocked by unresolved dependencies`);
   }
   if (hasActiveLease(bead, nowMs)) {
-    throw new Error(`Bead ${beadId} is currently leased by "${bead.lease.owner}"`);
+    throw new WorkerPolicyViolationError(`Bead ${beadId} is currently leased by "${bead.lease.owner}"`);
   }
   if (bead.scope?.type !== 'app' || bead.scope.targets?.length !== 1 || bead.scope.targets[0] !== app) {
-    throw new Error(`Bead ${beadId} scope does not match selected app "${app}"`);
+    throw new WorkerPolicyViolationError(`Bead ${beadId} scope does not match selected app "${app}"`);
   }
 
   const operation = buildBeadPrUpdateOperation({

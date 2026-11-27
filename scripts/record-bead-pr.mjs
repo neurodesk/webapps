@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { DEFAULT_BEADS_REF } from './lib/beads.mjs';
 import {
   DEFAULT_WORKER_ACTOR,
+  WorkerPolicyViolationError,
   closeViolatingPullRequest,
   fetchPullRequestByNumber,
   fetchPullRequestFiles,
@@ -55,11 +56,32 @@ function writeSummary(lines) {
   appendFileSync(summaryPath, `${lines.join('\n')}\n\n`, 'utf8');
 }
 
-function fetchCommitObject(cwd, remote, sha) {
+function fetchCommitObject(cwd, remote, sha, depth = 1) {
   if (!/^[0-9a-f]{40}$/i.test(sha)) {
-    throw new Error(`Invalid commit SHA "${sha}"`);
+    throw new WorkerPolicyViolationError(`Invalid commit SHA "${sha}"`);
   }
-  execFileSync('git', ['fetch', '--no-tags', '--depth=1', remote, sha], { cwd, stdio: 'pipe' });
+  execFileSync('git', ['fetch', '--no-tags', `--depth=${depth}`, remote, sha], { cwd, stdio: 'pipe' });
+}
+
+function resolveComparisonBaseSha(cwd, remote, pr, selection) {
+  const headSha = pr.head?.sha;
+  if (!headSha) {
+    throw new WorkerPolicyViolationError(`PR #${pr.number} is missing head SHA for manifest verification`);
+  }
+  // Prefer the exact parent commit (${headSha}^) on single-commit worker PRs so concurrent
+  // pushes to main during the agent run cannot cause false lockfile mismatches.
+  if (pr.commits === 1) {
+    fetchCommitObject(cwd, remote, headSha, 2);
+    const parentSha = execFileSync('git', ['rev-parse', `${headSha}^`], { cwd, encoding: 'utf8' }).trim();
+    return { baseSha: parentSha, headSha };
+  }
+  const baseSha = pr.base?.sha || selection.baseSha;
+  if (!baseSha) {
+    throw new WorkerPolicyViolationError(`PR #${pr.number} is missing base SHA for manifest verification`);
+  }
+  fetchCommitObject(cwd, remote, baseSha, 1);
+  fetchCommitObject(cwd, remote, headSha, 1);
+  return { baseSha, headSha };
 }
 
 async function main() {
@@ -76,27 +98,30 @@ async function main() {
   }
 
   const cwd = process.cwd();
-  let failureReason = null;
 
   try {
     if (args.githubRef && args.githubRef !== `refs/heads/${args.defaultBranch}`) {
-      throw new Error(
+      throw new WorkerPolicyViolationError(
         `PR #${args.prNumber} was opened outside exact default branch refs/heads/${args.defaultBranch} (got ${args.githubRef})`,
       );
     }
     if (args.dryRun) {
-      throw new Error(`PR #${args.prNumber} was unexpectedly created while dry_run=true`);
+      throw new WorkerPolicyViolationError(`PR #${args.prNumber} was unexpectedly created while dry_run=true`);
     }
     if (args.requireCleanDetection) {
-      assertCleanThreatDetection({
-        detectionConclusion: args.detectionConclusion,
-        detectionSuccess: args.detectionSuccess,
-      });
+      try {
+        assertCleanThreatDetection({
+          detectionConclusion: args.detectionConclusion,
+          detectionSuccess: args.detectionSuccess,
+        });
+      } catch (error) {
+        throw new WorkerPolicyViolationError(error.message);
+      }
     }
 
     const selection = JSON.parse(readFileSync(resolve(cwd, args.selection), 'utf8'));
     if (!selection || selection.selected !== true || !selection.bead?.id || !selection.app) {
-      throw new Error(
+      throw new WorkerPolicyViolationError(
         `PR #${args.prNumber} was opened even though immutable pre-selection chose no bead (${selection?.reason ?? 'missing selection'})`,
       );
     }
@@ -118,24 +143,24 @@ async function main() {
     const app = selection.app;
     const beadId = selection.bead.id;
     if (!allowedApps.has(app)) {
-      throw new Error(`Selected app "${app}" is not a registered first-party non-upstream app`);
+      throw new WorkerPolicyViolationError(`Selected app "${app}" is not a registered first-party non-upstream app`);
     }
     if (!pr.draft || String(pr.state).toLowerCase() !== 'open') {
-      throw new Error(`PR #${args.prNumber} must be an open draft PR (state=${pr.state}, draft=${pr.draft})`);
+      throw new WorkerPolicyViolationError(`PR #${args.prNumber} must be an open draft PR (state=${pr.state}, draft=${pr.draft})`);
     }
     if (pr.base?.ref !== args.defaultBranch) {
-      throw new Error(`PR #${args.prNumber} base branch "${pr.base?.ref}" must be "${args.defaultBranch}"`);
+      throw new WorkerPolicyViolationError(`PR #${args.prNumber} base branch "${pr.base?.ref}" must be "${args.defaultBranch}"`);
     }
     if (args.expectedAuthor && pr.user?.login !== args.expectedAuthor) {
-      throw new Error(`PR #${args.prNumber} author "${pr.user?.login}" does not match expected "${args.expectedAuthor}"`);
+      throw new WorkerPolicyViolationError(`PR #${args.prNumber} author "${pr.user?.login}" does not match expected "${args.expectedAuthor}"`);
     }
     if (!matchesWorkerBranchForBead(pr.head?.ref, beadId, app)) {
-      throw new Error(`PR #${args.prNumber} branch "${pr.head?.ref}" does not match selected bead ${beadId} (${app})`);
+      throw new WorkerPolicyViolationError(`PR #${args.prNumber} branch "${pr.head?.ref}" does not match selected bead ${beadId} (${app})`);
     }
 
     const scopeCheck = validateWorkerChangedFiles(prFiles, { app, previousFiles: prPreviousFiles });
     if (!scopeCheck.valid) {
-      throw new Error(`PR #${args.prNumber} violates single-app scope for ${app}: ${scopeCheck.violations.join('; ')}`);
+      throw new WorkerPolicyViolationError(`PR #${args.prNumber} violates single-app scope for ${app}: ${scopeCheck.violations.join('; ')}`);
     }
 
     const appPkg = `apps/${app}/package.json`;
@@ -143,27 +168,20 @@ async function main() {
     const touchesLock = scopeCheck.files.includes('pnpm-lock.yaml');
 
     if (touchesPkg || touchesLock) {
-      const baseSha = pr.base?.sha || selection.baseSha;
-      const headSha = pr.head?.sha;
-      if (!baseSha || !headSha) {
-        throw new Error(`PR #${args.prNumber} is missing base or head SHA for manifest verification`);
-      }
-      fetchCommitObject(cwd, args.remote, baseSha);
-      fetchCommitObject(cwd, args.remote, headSha);
+      const { baseSha, headSha } = resolveComparisonBaseSha(cwd, args.remote, pr, selection);
       const currentHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim();
       if (currentHead !== baseSha) {
         execFileSync('git', ['checkout', '--detach', baseSha], { cwd, stdio: 'pipe' });
       }
 
       if (touchesLock) {
-        // Verifies both apps/<app>/package.json policy AND byte-for-byte pnpm-lock.yaml regeneration.
         verifyRegeneratedLockfile({ cwd, baseSha, headSha, app });
       } else if (touchesPkg) {
         const basePkg = execFileSync('git', ['show', `${baseSha}:${appPkg}`], { cwd, encoding: 'utf8' });
         const headPkg = execFileSync('git', ['show', `${headSha}:${appPkg}`], { cwd, encoding: 'utf8' });
         const pkgCheck = validatePackageJsonDiff(basePkg, headPkg);
         if (!pkgCheck.valid) {
-          throw new Error(`${appPkg} policy violation: ${pkgCheck.violations.join('; ')}`);
+          throw new WorkerPolicyViolationError(`${appPkg} policy violation: ${pkgCheck.violations.join('; ')}`);
         }
       }
     }
@@ -202,36 +220,47 @@ async function main() {
     ]);
     return;
   } catch (error) {
-    failureReason = error.message;
-  }
+    if (!(error instanceof WorkerPolicyViolationError)) {
+      // Transient infrastructure/API/CAS error: leave the PR open and fail the job visibly.
+      console.error(`Transient verification/recording error for PR #${args.prNumber} (PR left open): ${error.message}`);
+      writeSummary([
+        '## Beads PR worker verification & record',
+        '',
+        `- **Status:** ERROR (transient failure — PR #${args.prNumber} left open)`,
+        `- **Error:** ${error.message}`,
+      ]);
+      process.exit(1);
+    }
 
-  // Fail closed: close any violating PR so it never remains open for merge.
-  console.error(`Verification failed for PR #${args.prNumber}: ${failureReason}`);
-  try {
-    await closeViolatingPullRequest({
-      repository: args.repository,
-      apiUrl: args.apiUrl,
-      token,
-      prNumber: args.prNumber,
-      reason: failureReason,
-    });
-    console.error(`Closed violating PR #${args.prNumber}.`);
-    writeSummary([
-      '## Beads PR worker verification & record',
-      '',
-      `- **Status:** FAILED — closed PR #${args.prNumber}`,
-      `- **Reason:** ${failureReason}`,
-    ]);
-  } catch (closeError) {
-    console.error(`Failed to close violating PR #${args.prNumber}: ${closeError.message}`);
-    writeSummary([
-      '## Beads PR worker verification & record',
-      '',
-      `- **Status:** FAILED (could not auto-close PR #${args.prNumber}: ${closeError.message})`,
-      `- **Reason:** ${failureReason}`,
-    ]);
+    // Policy violation: close the violating PR first, then post a sanitized diagnostic comment.
+    console.error(`Policy violation for PR #${args.prNumber}: ${error.message}`);
+    try {
+      const closed = await closeViolatingPullRequest({
+        repository: args.repository,
+        apiUrl: args.apiUrl,
+        token,
+        prNumber: args.prNumber,
+        reason: error.message,
+      });
+      console.error(
+        `Closed violating PR #${args.prNumber} (commentPosted=${closed.commentPosted}${closed.commentError ? `, commentError=${closed.commentError}` : ''}).`,
+      );
+      writeSummary([
+        '## Beads PR worker verification & record',
+        '',
+        `- **Status:** POLICY VIOLATION — closed PR #${args.prNumber}`,
+        `- **Comment posted:** ${closed.commentPosted ? 'yes' : 'no'}`,
+      ]);
+    } catch (closeError) {
+      console.error(`Failed to close violating PR #${args.prNumber}: ${closeError.message}`);
+      writeSummary([
+        '## Beads PR worker verification & record',
+        '',
+        `- **Status:** POLICY VIOLATION (could not auto-close PR #${args.prNumber}: ${closeError.message})`,
+      ]);
+    }
+    process.exit(1);
   }
-  process.exit(1);
 }
 
 main().catch((error) => {

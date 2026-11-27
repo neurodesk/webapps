@@ -16,11 +16,13 @@ import {
   syncBeadsRef,
 } from '../scripts/lib/beads.mjs';
 import {
+  WorkerPolicyViolationError,
   buildWorkerBranchName,
   closeViolatingPullRequest,
   extractBeadIdFromBranch,
   fetchPullRequestFiles,
   fetchWorkerPullRequests,
+  isAllowedDependencySpecifier,
   matchesWorkerBranchForBead,
   recordVerifiedBeadDraftPr,
   selectBeadForPullRequest,
@@ -380,7 +382,7 @@ test('validateWorkerChangedFiles enforces single-app scope, denies agent guides,
   }
 });
 
-test('validatePackageJsonDiff allows dep cleanup while blocking scripts changes and non-registry dependency specs', () => {
+test('validatePackageJsonDiff enforces strict dependency allowlist and blocks scripts changes', () => {
   const base = JSON.stringify({
     name: 'deconvolution',
     scripts: { test: 'node --test', build: 'vite build' },
@@ -397,6 +399,26 @@ test('validatePackageJsonDiff allows dep cleanup while blocking scripts changes 
   });
   assert.equal(validatePackageJsonDiff(base, cleaned).valid, true);
 
+  // Strict allowlist accepts valid semver ranges, npm aliases, workspace:, and catalog:
+  for (const okSpec of [
+    '24.1.3',
+    '^5.0.0',
+    '~1.2.3',
+    '1.0.0-rc.33',
+    '>=1.0.0 <2.0.0',
+    '1.0.0 - 2.0.0',
+    '1.x || 2.x',
+    'workspace:*',
+    'workspace:^',
+    'workspace:^1.0.0',
+    'catalog:',
+    'catalog:default',
+    'npm:foo@^1.2.3',
+    'npm:@scope/foo@1.2.3-rc.1',
+  ]) {
+    assert.equal(isAllowedDependencySpecifier(okSpec), true, okSpec);
+  }
+
   // Modifying scripts is blocked
   const badScript = JSON.stringify({
     name: 'deconvolution',
@@ -408,8 +430,24 @@ test('validatePackageJsonDiff allows dep cleanup while blocking scripts changes 
   assert.equal(scriptRes.valid, false);
   assert.match(scriptRes.violations.join('\n'), /scripts/);
 
-  // Non-registry specifiers are blocked
-  for (const spec of ['file:../evil', 'link:../evil', 'git+https://evil.example/pkg.git', 'https://evil.example/a.tgz', 'github:evil/pkg', 'evil/pkg']) {
+  // Relative paths, scp-style git URLs, bare repo paths, and all non-registry specifiers are rejected
+  for (const spec of [
+    './sub/evil',
+    '../../packages/x',
+    '/abs/x',
+    '~/x',
+    'a/b/c',
+    'git@github.com:evil/repo.git',
+    'file:../evil',
+    'link:../evil',
+    'git+https://evil.example/pkg.git',
+    'https://evil.example/a.tgz',
+    'github:evil/pkg',
+    'evil/pkg',
+    'npm:foo@file:../evil',
+    'workspace:../evil',
+    'latest',
+  ]) {
     const badSpec = JSON.stringify({
       name: 'deconvolution',
       scripts: { test: 'node --test', build: 'vite build' },
@@ -418,7 +456,7 @@ test('validatePackageJsonDiff allows dep cleanup while blocking scripts changes 
     });
     const res = validatePackageJsonDiff(base, badSpec);
     assert.equal(res.valid, false, spec);
-    assert.match(res.violations.join('\n'), /non-registry specifier/);
+    assert.match(res.violations.join('\n'), /disallowed dependency specifier/);
   }
 });
 
@@ -638,7 +676,7 @@ test('recordVerifiedBeadDraftPr enforces immutable selection, live open status, 
   );
   assert.equal(updated.journal.at(-1).actor, 'gh-aw/beads-pr-worker');
 
-  // If the bead was closed before recording, recordVerifiedBeadDraftPr refuses to update it
+  // If the bead was closed before recording, recordVerifiedBeadDraftPr throws WorkerPolicyViolationError
   mutateBeadsRef(
     work,
     [{ op: 'close', id: beadId, expectedRevision: 2, reason: 'closed manually' }],
@@ -654,28 +692,46 @@ test('recordVerifiedBeadDraftPr enforces immutable selection, live open status, 
         pr: validPr,
         prFiles: ['apps/deconvolution/package.json'],
       }),
-    /is no longer open/,
+    (error) => error instanceof WorkerPolicyViolationError && /is no longer open/.test(error.message),
   );
 
-  // closeViolatingPullRequest posts a comment and PATCHes state=closed
+  // closeViolatingPullRequest PATCHes state=closed FIRST, then posts sanitized code-block comment best-effort
   const calls = [];
-  await closeViolatingPullRequest({
+  const closeOk = await closeViolatingPullRequest({
     repository: 'neurodesk/webapps',
     token: 'tok',
     prNumber: 99,
-    reason: 'violates single-app scope',
+    reason: `violates scope ${'```'}@everyone${'```'} ${'x'.repeat(3000)}`,
     fetchImpl: async (url, init) => {
       calls.push({ url, method: init.method, body: JSON.parse(init.body) });
       return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' };
     },
   });
+  assert.deepEqual(closeOk, { closed: true, commentPosted: true, commentError: null });
   assert.equal(calls.length, 2);
-  assert.equal(calls[0].method, 'POST');
-  assert.match(calls[0].url, /\/issues\/99\/comments$/);
-  assert.match(calls[0].body.body, /violates single-app scope/);
-  assert.equal(calls[1].method, 'PATCH');
-  assert.match(calls[1].url, /\/pulls\/99$/);
-  assert.deepEqual(calls[1].body, { state: 'closed' });
+  assert.equal(calls[0].method, 'PATCH');
+  assert.match(calls[0].url, /\/pulls\/99$/);
+  assert.deepEqual(calls[0].body, { state: 'closed' });
+  assert.equal(calls[1].method, 'POST');
+  assert.match(calls[1].url, /\/issues\/99\/comments$/);
+  assert.match(calls[1].body.body, /^Closed this automated draft PR[\s\S]*```text\n[\s\S]*\n```/m);
+  assert.equal((calls[1].body.body.match(/```/g) ?? []).length, 2, 'injected triple backticks must be neutralized');
+  assert.ok(calls[1].body.body.length < 2300, 'close comment must be truncated');
+
+  // If comment POST fails, PR is STILL closed first and closeViolatingPullRequest returns closed: true
+  const closeCommentFail = await closeViolatingPullRequest({
+    repository: 'neurodesk/webapps',
+    token: 'tok',
+    prNumber: 100,
+    reason: 'bad diff',
+    fetchImpl: async (url, init) => {
+      if (init.method === 'PATCH') return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' };
+      return { ok: false, status: 403, json: async () => ({}), text: async () => 'forbidden' };
+    },
+  });
+  assert.equal(closeCommentFail.closed, true);
+  assert.equal(closeCommentFail.commentPosted, false);
+  assert.match(closeCommentFail.commentError, /403/);
 });
 
 test('beads-pr-worker compiled lockfile enforces concurrency, staged dry_run, draft-only, agent-guide exclusions, and unconditional post-PR audit', () => {
