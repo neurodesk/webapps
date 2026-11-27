@@ -47,6 +47,8 @@ for each app are recorded in `registry/apps.yml`.
 - `apps/instanseg`: Apache-2.0 (`packages/instanseg/LICENSE`), browser interface for `@neurodesk/instanseg`
 - `packages/blastct`: Apache-2.0 (`packages/blastct/LICENSE`, `packages/blastct/NOTICE`), browser geometry resampling, normalization, and DeepMedic tiling pipeline for `biomedia-mira/blast-ct` v2.1.0 (v2 multi-centre model, checkpoint 1, Apache-2.0; `models/blastct.manifest.json`)
 - `apps/blastct`: Apache-2.0 (`packages/blastct/LICENSE`), browser interface for `@neurodesk/blastct`
+- `packages/brkraw`: GPL-3.0-only (`packages/brkraw/LICENSE`, `packages/brkraw/NOTICE`), JavaScript port of Bruker ParaVision JCAMP-DX, `2dseq`, and affine conversion from `BrkRaw/brkraw` v0.5.7 (`5664cef2`, GPL-3.0-only)
+- `apps/brkraw`: GPL-3.0-only (`packages/brkraw/LICENSE`), browser interface for `@neurodesk/brkraw`
 - `apps/stardist`: BSD-3-Clause (`apps/stardist/LICENSE`), as the StarDist 0.9.1 and CSBDeep 0.8.1 code it
   ports and the pretrained `2D_versatile_fluo`, `2D_versatile_he`, `2D_paper_dsb2018` and `3D_demo` models
   it runs; attribution, and the Boost Software License of the bundled `clipper-lib`, in `apps/stardist/NOTICE`.

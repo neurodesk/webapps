@@ -1,0 +1,7 @@
+# BrkRaw webapp instructions
+
+- **License (`GPL-3.0-only`):** `@neurodesk/brkraw` and `apps/brkraw` port core decoding and affine logic from `BrkRaw/brkraw` v0.5.7 (`5664cef2fce186286586119ba55dc92fd3216b3e`, GPL-3.0-only). Keep `GPL-3.0-only` in `package.json`, `registry/apps.yml`, `LICENSES.md`, `packages/brkraw/LICENSE`, and `packages/brkraw/NOTICE`.
+- **Supported ParaVision scope:** Verified bit-for-bit against upstream `brkraw` 0.5.7 on ParaVision **5.1** and **6.0.1** datasets (`BrkRaw/brkraw-dataset`, CC BY 4.0) across 2D multi-slice, 3D isotropic, multi-slicepack localizers, 4D multi-echo FieldMap, `Quadruped` / `Biped` (PV5.1 `None` fallback), and `subject_ras` / `scanner` / `raw` spaces. Do not claim PV7/360 or DWI `.bval`/`.bvec` export until dedicated fixtures pass parity.
+- **Privacy scrubbing:** Exported JSON sidecars (`packages/brkraw/src/sidecar.js`) MUST omit subject name, subject ID, date of birth, sex/weight, operator, study/acquisition dates, and DICOM UIDs.
+- **Selective ZIP extraction & voxel cap:** `loadBrukerStudy` extracts only JCAMP parameter files (`subject`, `acqp`, `method`, `visu_pars`, `reco`) during inspection and decompresses `2dseq` lazily on conversion, enforcing `MAX_CONVERT_VOXELS` (`100_000_000`) before allocating decoded arrays.
+- **Parity validation:** Whenever changing `packages/brkraw` JCAMP parsing, 2dseq decoding, affine math, or NIfTI encoding, re-run `packages/brkraw/validation/generate_oracles.py` and `packages/brkraw/validation/parity.mjs` against upstream `brkraw` 0.5.7.

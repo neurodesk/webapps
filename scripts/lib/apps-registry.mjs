@@ -53,6 +53,7 @@ export const INPUT_FORMATS = new Map([
   ['freesurfer', 'FreeSurfer'],
   ['mesh', 'STL/OBJ/PLY'],
   ['mrs-raw', 'Vendor MRS'],
+  ['paravision', 'ParaVision'],
   ['neuroflow', 'NeuroFlow workflow'],
   ['swc', 'SWC'],
 ]);

@@ -99,6 +99,7 @@ const REQUIRED_METHODS = {
   openads: ['10.1038/s43856-021-00062-8', '10.1038/s41598-023-30242-6', '10.1038/s43856-023-00327-4', '10.1038/s41597-022-01923-0', '10.1038/s41597-023-02457-9', '10.1016/j.neuroimage.2022.119474', '10.1016/j.neuroimage.2010.09.025', '10.1038/s42256-019-0138-9', '10.1016/j.jneumeth.2016.03.001', 'onnxruntime.ai', 'github.com/niivue/niivue'],
   instanseg: ['10.48550/arXiv.2408.15954', 'onnxruntime.ai', 'github.com/niivue/niivue'],
   blastct: ['10.1016/S2589-7500(20)30085-6', '10.1016/j.media.2016.10.004', '10.1016/j.jneumeth.2016.03.001', 'onnxruntime.ai', 'github.com/niivue/niivue'],
+  brkraw: ['10.5281/zenodo.3818614', 'github.com/niivue/niivue'],
 };
 
 test('every registered app has app information with packages and cited methods', () => {

@@ -1,0 +1,19 @@
+Neurodesk BrkRaw (@neurodesk/brkraw)
+Copyright (C) 2026 Neurodesk contributors
+
+This package is a JavaScript/TypeScript port of the Bruker ParaVision JCAMP-DX,
+2dseq decoding, and coordinate-space affine resolution algorithms from BrkRaw:
+
+  BrkRaw v0.5.7 (commit 5664cef2fce186286586119ba55dc92fd3216b3e)
+  https://github.com/BrkRaw/brkraw
+  Copyright (C) Sung-Ho Lee, Yen-Yu Ian Shih, Center for Animal MRI (CAMRI),
+  University of North Carolina at Chapel Hill, and BrkRaw contributors.
+  Licensed under the GNU General Public License v3.0 (GPL-3.0-only).
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, version 3 of the License. See LICENSE for the full GPL-3.0 text.
+
+Example validation datasets from BrkRaw/brkraw-dataset (UNC_PV6.0.1_FLASH_TurboRARE_EPI.zip,
+UNC_PV5.1_BOLD-EPI_TurboRARE.zip) are licensed under CC BY 4.0 by the Center for
+Animal MRI, UNC at Chapel Hill (Sung-Ho Lee and Yen-Yu Ian Shih).

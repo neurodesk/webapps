@@ -2305,3 +2305,29 @@ apps:
       shared_runtime: false
       browser_test: true
       release: true
+  - id: brkraw
+    path: brkraw
+    catalog: preclinical
+    title: BrkRaw
+    description: Convert Bruker ParaVision MRI studies to NIfTI.
+    categories: [conversion]
+    keywords: [Bruker, BioSpin, ParaVision, 2dseq, JCAMP-DX, preclinical, rodent, NIfTI, conversion, BIDS, BrkRaw]
+    anatomy: [any]
+    modalities: [mri]
+    inputs: [paravision]
+    hardware: cpu
+    handoff: none
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: GPL-3.0-only
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: true

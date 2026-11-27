@@ -3444,6 +3444,22 @@
           "apptainerName": "blastct_2.0.0_20260512"
         }
       ]
+    },
+    "brkraw": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": [
+        {
+          "id": "brkraw",
+          "label": "brkraw 0.5.7 (20261012)",
+          "url": "https://hub.docker.com/r/vnmd/brkraw_0.5.7",
+          "dockerImage": "vnmd/brkraw_0.5.7:20261012",
+          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/brkraw_0.5.7_20261012.simg",
+          "apptainerName": "brkraw_0.5.7_20261012"
+        }
+      ]
     }
   }
 }
