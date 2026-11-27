@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 2,
+  "app": "brkraw",
+  "title": "BrkRaw",
+  "description": "Convert Bruker BioSpin ParaVision reconstructed 2dseq scans to NIfTI-1 with scrubbed JSON sidecars.",
+  "defaultOperation": "convert",
+  "operations": {
+    "convert": {
+      "title": "Convert Bruker scan to NIfTI",
+      "description": "Inspect a Bruker ParaVision 5.1 or 6.0.1 study (.zip archive or study folder) and convert one selected scan/reconstruction to NIfTI-1 (.nii.gz) and a privacy-scrubbed BIDS-style JSON sidecar.",
+      "mode": "batch",
+      "inputs": {
+        "study": {
+          "source": "files",
+          "type": "neuro:bruker-study",
+          "formats": [
+            "paravision",
+            "zip"
+          ],
+          "description": "Bruker ParaVision study as a .zip archive or folder files containing acqp, method, visu_pars, and 2dseq",
+          "minimum": 1,
+          "maximum": 5000
+        }
+      },
+      "parameters": {
+        "scanId": {
+          "type": "number",
+          "description": "Bruker scan ID to convert (defaults to the first multi-slice or 3D anatomical scan when omitted)."
+        },
+        "recoId": {
+          "type": "number",
+          "default": 1,
+          "description": "Bruker reconstruction ID under pdata/ (default 1)."
+        },
+        "slicePackIndex": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Zero-based slice pack index for multi-pack acquisitions such as tri-pilot localizers."
+        },
+        "space": {
+          "type": "string",
+          "enum": [
+            "subject_ras",
+            "scanner",
+            "raw"
+          ],
+          "default": "subject_ras",
+          "description": "Output NIfTI coordinate space matching BrkRaw v0.5.7."
+        },
+        "subjectType": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "Quadruped",
+            "Biped"
+          ],
+          "default": "auto",
+          "description": "Optional subject type override (applies only when space is subject_ras)."
+        },
+        "subjectPose": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "Head_Prone",
+            "Head_Supine",
+            "Head_Left",
+            "Head_Right",
+            "Foot_Prone",
+            "Foot_Supine",
+            "Foot_Left",
+            "Foot_Right"
+          ],
+          "default": "auto",
+          "description": "Optional subject position override (applies only when space is subject_ras)."
+        }
+      },
+      "artifacts": {
+        "nifti": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "maximum": 1,
+          "space": "native"
+        },
+        "sidecar": {
+          "type": "neuro:metadata",
+          "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

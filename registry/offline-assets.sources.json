@@ -8828,6 +8828,14 @@
         "kind": "model",
         "license": "Apache-2.0"
       }
+    ],
+    "brkraw": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4ddce56a93ea1e69e9852099934836ad4827159c/brkraw/examples/UNC_PV6.0.1_FLASH_TurboRARE_EPI.zip",
+        "sha256": "f889c7618d7afd5a42ab5302746f17d0bd2fcf44ae77eee1946f18ff9036523d",
+        "bytes": 7344749,
+        "kind": "example"
+      }
     ]
   },
   "exclusions": [],

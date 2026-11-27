@@ -1392,6 +1392,27 @@ try {
     await expect(page.locator('#backend')).toHaveValue('wasm');
     await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
   });
+  await check('brkraw', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await expect(page.locator('#runButton')).toBeDisabled();
+    const advanced = page.locator('#advancedSettings > summary');
+    await expect(page.locator('#space')).toBeHidden();
+    await advanced.tap();
+    await expect(page.locator('#space')).toHaveValue('subject_ras');
+    await page.locator('#space').selectOption('scanner');
+    await expect(page.locator('#subjectType')).toBeDisabled();
+    await page.locator('#space').selectOption('subject_ras');
+    await page.locator('#subjectType').selectOption('Quadruped');
+    await page.locator('#subjectPose').selectOption('Head_Prone');
+    await advanced.tap();
+    await expect(page.locator('#space')).toBeHidden();
+    await advanced.tap();
+    await expect(page.locator('#space')).toHaveValue('subject_ras');
+    await expect(page.locator('#subjectType')).toHaveValue('Quadruped');
+    await expect(page.locator('#subjectPose')).toHaveValue('Head_Prone');
+    await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
+  });
 } finally { await browser.close(); await site.close(); }
 if (failures.length) throw new Error(failures.join('\n'));
 requireChecked(checked, selection, 'Interface workflows');

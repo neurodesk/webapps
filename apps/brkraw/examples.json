@@ -1,0 +1,17 @@
+[
+  {
+    "id": "unc-pv6-phantom",
+    "label": "ParaVision 6.0.1 FLASH / TurboRARE / EPI study (UNC CAMRI, 7.0 MB)",
+    "description": "Bruker BioSpin ParaVision 6.0.1 phantom study containing 2D T2 TurboRARE, 2D FLASH, 3-pack Localizer, 3D FieldMap, and 2D EPI scans from BrkRaw/brkraw-dataset (CC BY 4.0).",
+    "expectedResult": "Inspects all 5 Bruker scans and converts scan 6 (CAMRI_T2_RARE_2D_ax, 384 x 384 x 12, 0.075 x 0.075 x 1.0 mm) to NIfTI-1 (.nii.gz) with exact BrkRaw 0.5.7 subject_ras affine and scrubbed JSON sidecar.",
+    "files": [
+      {
+        "name": "UNC_PV6.0.1_FLASH_TurboRARE_EPI.zip",
+        "role": "study",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4ddce56a93ea1e69e9852099934836ad4827159c/brkraw/examples/UNC_PV6.0.1_FLASH_TurboRARE_EPI.zip",
+        "bytes": 7344749,
+        "sha256": "f889c7618d7afd5a42ab5302746f17d0bd2fcf44ae77eee1946f18ff9036523d"
+      }
+    ]
+  }
+]

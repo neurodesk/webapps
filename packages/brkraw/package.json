@@ -1,0 +1,21 @@
+{
+  "name": "@neurodesk/brkraw",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "GPL-3.0-only",
+  "exports": {
+    ".": "./src/index.js",
+    "./jcamp": "./src/jcamp.js",
+    "./affine": "./src/affine.js",
+    "./nifti": "./src/nifti.js",
+    "./sidecar": "./src/sidecar.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/*.js test/*.test.js"
+  },
+  "dependencies": {
+    "fflate": "0.8.2"
+  }
+}

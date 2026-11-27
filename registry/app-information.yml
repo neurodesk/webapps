@@ -3525,3 +3525,23 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  brkraw:
+    about:
+      - "BrkRaw converts Bruker BioSpin ParaVision (5.1 and 6.0.1) reconstructed 2dseq scans into NIfTI-1 volumes (.nii.gz) with privacy-scrubbed BIDS-style JSON sidecars directly in your browser, porting the JCAMP-DX, 2dseq, and coordinate-space affine engine of BrkRaw v0.5.7 (distributed under GPL-3.0-only)."
+      - "Drop a Bruker study folder or ZIP archive to inspect all available scans and reconstructions without decompressing large 2dseq binaries up front. Select a scan, reconstruction, optional slice pack, and coordinate space (Subject RAS, Scanner XYZ, or Raw Bruker) with optional subject type and position overrides."
+      - "Exported JSON sidecars automatically omit subject name, subject ID, date of birth, operator, study/acquisition dates, and UIDs. For batch BIDS conversion, DWI gradient tables (.bval/.bvec), or ParaVision 7 / 360 studies, use the Neurodesk brkraw 0.5.7 container listed under Standalone."
+    packages:
+      - { name: BrkRaw, url: https://github.com/BrkRaw/brkraw, role: "Bruker ParaVision JCAMP-DX, 2dseq, and affine conversion (v0.5.7 port, GPL-3.0-only)" }
+      - { name: fflate, url: https://github.com/101arrowz/fflate, role: selective in-browser ZIP archive extraction }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: 3D medical image viewer }
+    citations:
+      - group: Bruker conversion
+        title: "BrkRaw: A modular toolkit for Bruker MRI raw-data handling"
+        reference: "Lee S-H, Devenyi GA, Ban W, Shih Y-YI. BrkRaw: A modular toolkit for Bruker MRI raw-data handling (v0.5.7). Zenodo."
+        doi: 10.5281/zenodo.3818614
+        code: https://github.com/BrkRaw/brkraw
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
