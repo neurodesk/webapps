@@ -32,6 +32,9 @@ network:
   allowed:
     - defaults
     - node
+    - github.com
+    - release-assets.githubusercontent.com
+    - objects.githubusercontent.com
 jobs:
   agent:
     timeout-minutes: 30
@@ -206,6 +209,7 @@ Your job is to pick up the ONE pre-selected single-app maintenance bead, verify 
    - If the dependency, file, or symbol is actually still needed (for example, read at build/staging time, referenced dynamically, or required by license/notice staging), do NOT force a removal. Discard any exploratory changes (`git checkout -- .`), call `noop` explaining why the bead was skipped, and stop.
 4. **Apply minimal change and run real verification:**
    - Make the smallest clean change that resolves the bead.
+   - Before invoking `pnpm` in shell commands, ensure the pre-installed workspace `pnpm` binary is on `PATH`: `export PATH="${PNPM_HOME}:${PNPM_HOME}/bin:$PATH"`.
    - If you edited `apps/<app>/package.json`, run `pnpm install --lockfile-only --ignore-scripts` so `pnpm-lock.yaml` stays deterministically synchronized under `--frozen-lockfile`.
    - Run the app's relevant checks (check `apps/<app>/package.json` scripts first):
      - `pnpm --filter <app> test` (when a `test` script exists and does not require unpublished data or browsers)
