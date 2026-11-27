@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "id": "bd-7a37cab9",
-  "revision": 1,
-  "stateRevision": 1,
+  "revision": 2,
+  "stateRevision": 2,
   "title": "Remove unused devDependency jsdom from deconvolution",
   "summary": "jsdom 24.1.3 is declared in apps/deconvolution/package.json devDependencies but a full-app search finds no other reference (no tests, scripts, config or e2e import it). Safe to remove and refresh the lockfile.",
   "kind": "maintenance",
@@ -21,6 +21,7 @@
     "discoveredFrom": null
   },
   "links": {
+    "pr": 982,
     "evidence": [
       "apps/deconvolution/package.json",
       "quality-artifacts/unused-code/knip.json"
@@ -34,11 +35,16 @@
       "at": "2026-11-27T05:28:29.936Z",
       "actor": "gh-aw/unused-code-triage",
       "note": "search_app_files complete:true, one match only (package.json)."
+    },
+    {
+      "at": "2026-11-27T13:45:29.808Z",
+      "actor": "gh-aw/beads-pr-worker",
+      "note": "Draft PR #982 opened (beads/bd-7a37cab9-deconvolution-3fdbc3cc31f8d35c, 2 file(s)): https://api.github.com/repos/neurodesk/webapps/pulls/982"
     }
   ],
   "createdAt": "2026-11-27T05:28:29.936Z",
-  "updatedAt": "2026-11-27T05:28:29.936Z",
-  "stateUpdatedAt": "2026-11-27T05:28:29.936Z",
+  "updatedAt": "2026-11-27T13:45:29.808Z",
+  "stateUpdatedAt": "2026-11-27T13:45:29.808Z",
   "lastSeenAt": "2026-11-27T05:28:29.936Z",
   "closedAt": null,
   "reopenedAt": null,
