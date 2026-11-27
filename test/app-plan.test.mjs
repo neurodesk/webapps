@@ -2768,6 +2768,33 @@ function yamlContainsUnexpectedExemptRef(text, exemptRef) {
           return false;
         }
       }
+      // Allow compiler-generated create_pull_request.protected_files containing "AGENTS.md" inside safe-outputs JSON configs.
+      if (
+        path.length === 6
+        && path[0] === 'jobs'
+        && path[2] === 'steps'
+        && path[4] === 'env'
+        && (
+          (path[1] === 'agent' && path[5] === 'GH_AW_SAFE_OUTPUTS_CONFIG')
+          || (path[1] === 'safe_outputs' && path[5] === 'GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG')
+        )
+      ) {
+        try {
+          const parsed = JSON.parse(value);
+          if (Array.isArray(parsed?.create_pull_request?.protected_files)) {
+            const sanitized = {
+              ...parsed,
+              create_pull_request: {
+                ...parsed.create_pull_request,
+                protected_files: parsed.create_pull_request.protected_files.filter((entry) => entry !== 'AGENTS.md'),
+              },
+            };
+            return exemptRef.test(JSON.stringify(sanitized));
+          }
+        } catch {
+          return true;
+        }
+      }
       return exemptRef.test(value);
     }
     if (Array.isArray(value)) {
@@ -2822,9 +2849,11 @@ test('no app build, package source, root script or workflow reads .github/aw/ or
       ['.github/workflows/bad-header.lock.yml', '# gh-aw-metadata: not-json\njobs:\n  activation:\n    steps:\n      - name: Save agent config folders for base branch restoration\n        env:\n          GH_AW_AGENT_FILES: "AGENTS.md"\n        run: bash "${RUNNER_TEMP}/gh-aw/actions/save_base_github_folders.sh"\n'],
       ['.github/workflows/real.lock.yml', '# gh-aw-metadata: {"strict":true,"compiler_version":"v1.2.2"}\njobs:\n  activation:\n    steps:\n      - name: Save agent config folders for base branch restoration\n        env:\n          GH_AW_AGENT_FILES: "AGENTS.md"\n        run: bash "${RUNNER_TEMP}/gh-aw/actions/save_base_github_folders.sh"\n'],
       ['.github/workflows/real-crlf.lock.yml', '# gh-aw-metadata: {"strict":true,"compiler_version":"v1.2.2"}\r\njobs:\r\n  activation:\r\n    steps:\r\n      - name: Save agent config folders for base branch restoration\r\n        env:\r\n          GH_AW_AGENT_FILES: "AGENTS.md"\r\n        run: bash "${RUNNER_TEMP}/gh-aw/actions/save_base_github_folders.sh"\r\n'],
+      ['.github/workflows/real-pr-protected.lock.yml', '# gh-aw-metadata: {"strict":true,"compiler_version":"v1.2.2"}\njobs:\n  agent:\n    steps:\n      - env:\n          GH_AW_SAFE_OUTPUTS_CONFIG: \'{"create_pull_request":{"protected_files":["package.json","AGENTS.md"]}}\'\n        run: echo ok\n  safe_outputs:\n    steps:\n      - env:\n          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: \'{"create_pull_request":{"protected_files":["package.json","AGENTS.md"]}}\'\n        run: echo ok\n'],
+      ['.github/workflows/bad-pr-allowed.lock.yml', '# gh-aw-metadata: {"strict":true,"compiler_version":"v1.2.2"}\njobs:\n  agent:\n    steps:\n      - env:\n          GH_AW_SAFE_OUTPUTS_CONFIG: \'{"create_pull_request":{"allowed_files":["AGENTS.md"],"protected_files":["AGENTS.md"]}}\'\n        run: echo ok\n'],
       ['.github/workflows/bad-crlf.lock.yml', '# gh-aw-metadata: {"strict":true,"compiler_version":"v1.2.2"}\r\njobs:\r\n  activation:\r\n    steps:\r\n      - run: cat AGENTS.md\r\n'],
     ]),
-    ['apps/bison/scripts/build.mjs', 'apps/elastix/scripts/build.mjs', 'apps/bison/scripts/build.mjs', 'apps/bison/scripts/join-build.mjs', 'apps/bison/scripts/split-build.mjs', '.github/workflows/fake.lock.yml', '.github/workflows/run-block.lock.yml', '.github/workflows/bad-header.lock.yml', '.github/workflows/bad-crlf.lock.yml'],
+    ['apps/bison/scripts/build.mjs', 'apps/elastix/scripts/build.mjs', 'apps/bison/scripts/build.mjs', 'apps/bison/scripts/join-build.mjs', 'apps/bison/scripts/split-build.mjs', '.github/workflows/fake.lock.yml', '.github/workflows/run-block.lock.yml', '.github/workflows/bad-header.lock.yml', '.github/workflows/bad-pr-allowed.lock.yml', '.github/workflows/bad-crlf.lock.yml'],
   );
   const candidates = filesNaming('\\.github/aw\\b|\\.github[\'"],[[:space:]]*[\'"]aw[\'"]|\\b(AGENTS|AGENT|CLAUDE)\\.md\\b');
   const entries = await Promise.all(candidates.map(async (file) => [file, await readFile(join(repoRoot, file), 'utf8')]));
