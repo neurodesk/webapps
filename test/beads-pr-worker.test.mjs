@@ -785,6 +785,7 @@ test('beads-pr-worker compiled lockfile enforces concurrency, staged dry_run, dr
       assert.ok(cfg.create_pull_request.excluded_files.includes(excluded), `${label}: excluded_files must include ${excluded}`);
     }
     assert.equal(cfg.create_pull_request.signed_commits, true, `${label}: signed_commits`);
+    assert.ok(cfg.create_pull_request.max_patch_size >= 2048, `${label}: max_patch_size must fit full pnpm-lock.yaml signed-commit payload`);
     assert.equal(cfg.create_pull_request.protected_files_policy, 'request-review', `${label}: protected_files_policy`);
   }
   assert.equal(handlerCfg.create_pull_request.staged, '${{ inputs.dry_run }}', 'dry_run must be enforced via create-pull-request staged');
