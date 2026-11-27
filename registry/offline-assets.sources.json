@@ -8116,6 +8116,12 @@
         "sha256": "6502ec4c92e57bc98fda8d2c33f6cbd305d147a6d12b9982cf0932a2e37a3a1d",
         "bytes": 13930,
         "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0b9ec01a73ad07fe6f169786f1466672947f7dc1/examples/vesselcharter/bollmann-elife-7t/bollmann-elife-7t-pial-arteries-sub02-crop-256x256x140.nii.gz",
+        "sha256": "ccf68861e3337f31fc4aaa21702b3cc5386744ed9b8a3a37a0192dd48328482c",
+        "bytes": 49167,
+        "kind": "example"
       }
     ],
     "laynii": [

@@ -13,5 +13,20 @@
         "bytes": 13930
       }
     ]
+  },
+  {
+    "id": "bollmann-elife-7t-pial-arteries",
+    "label": "Bollmann et al. 7T 140 µm pial arteries (eLife)",
+    "description": "Native 140 µm isotropic 7T TOF-MRA human pial artery segmentation crop (256 x 256 x 140, Subject 02, 49 KB) from Bollmann et al. (2022, eLife).",
+    "expectedResult": "High-resolution 3D diameter-coloured pial arterial tree, per-segment and per-junction CSV tables, diameter map NIfTI, and global morphometry report (~1110 mm total length, ~622 segments, ~0.27 mm median diameter).",
+    "files": [
+      {
+        "role": "vessels",
+        "name": "bollmann-elife-7t-pial-arteries-sub02-crop-256x256x140.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0b9ec01a73ad07fe6f169786f1466672947f7dc1/examples/vesselcharter/bollmann-elife-7t/bollmann-elife-7t-pial-arteries-sub02-crop-256x256x140.nii.gz",
+        "sha256": "ccf68861e3337f31fc4aaa21702b3cc5386744ed9b8a3a37a0192dd48328482c",
+        "bytes": 49167
+      }
+    ]
   }
 ]

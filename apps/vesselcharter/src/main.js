@@ -99,6 +99,7 @@ let viewerExtension = null;
 let viewerReady = false;
 let viewerInitPromise = null;
 let hasVesselMesh = false;
+let viewIntentGeneration = 0;
 let viewerOpQueue = Promise.resolve();
 
 // Serialize NiiVue scene mutations (loadVolumes, setVolume, loadMeshes, addMeshLayer)
@@ -355,6 +356,7 @@ function applyParametersToUi(params = {}) {
 }
 
 function setView(viewId) {
+  viewIntentGeneration += 1;
   activeView = viewId;
   toolbar.setActive(viewId);
   const reportEl = $('resultsReport');
@@ -524,9 +526,11 @@ function showVolumeInViewer(
         viewer.volumeIsAlphaClipDark = Boolean(alphaClipDark && !overlayFile);
       }
       await viewer.loadVolumes(volumes);
-      $('emptyState').hidden = true;
       lastViewerLabel = label || primaryFile.name;
-      $('imageLabel').textContent = lastViewerLabel;
+      if (activeView !== 'report') {
+        $('emptyState').hidden = true;
+        $('imageLabel').textContent = lastViewerLabel;
+      }
       updateLegendAndToolbar();
     } catch (err) {
       log.log(`Viewer load warning: ${err instanceof Error ? err.message : String(err)}`, 'warning');
@@ -553,6 +557,7 @@ async function showDiameterMapInViewer(diameterFile) {
 }
 
 function showVesselTreeMesh(meshFile) {
+  const loadViewGen = viewIntentGeneration;
   updateLegendAndToolbar();
   return queueViewerOp(async () => {
     const viewer = await ensureViewer();
@@ -580,9 +585,13 @@ function showVesselTreeMesh(meshFile) {
       }
       hasVesselMesh = true;
       lastViewerLabel = '3D Vessel Tree (coloured by diameter)';
-      setView('3d');
-      $('emptyState').hidden = true;
-      $('imageLabel').textContent = lastViewerLabel;
+      if (viewIntentGeneration === loadViewGen) {
+        setView('3d');
+      }
+      if (activeView !== 'report') {
+        $('emptyState').hidden = true;
+        $('imageLabel').textContent = lastViewerLabel;
+      }
       updateLegendAndToolbar();
     } catch (err) {
       log.log(`3D mesh display warning: ${err instanceof Error ? err.message : String(err)}`, 'warning');
@@ -604,12 +613,13 @@ const results = createResultList({
     }
     if (stage === 'diameterMap') {
       activeDisplay = 'diameterMap';
-      await showDiameterMapInViewer(entry.file);
       setView('multiplanar');
+      await showDiameterMapInViewer(entry.file);
       return;
     }
     if (stage === 'skeletonLabels') {
       activeDisplay = 'skeletonLabels';
+      setView('multiplanar');
       const base = referenceFile || vesselFile;
       await showVolumeInViewer(base, entry.file, {
         colormap: SKELETON_COLORMAP_NAME,
@@ -620,7 +630,6 @@ const results = createResultList({
         isNearestInterpolation: true,
         label: 'Skeleton topology',
       });
-      setView('multiplanar');
     }
   },
   onDownload: (_stage, entry) => {
@@ -1051,8 +1060,8 @@ function runCharacterisation(parametersOverride = null, signal = null) {
               await showVesselTreeMesh(fileMap.vesselMesh.file);
             } else if (fileMap.diameterMap) {
               activeDisplay = 'diameterMap';
-              await showDiameterMapInViewer(fileMap.diameterMap.file);
               setView('multiplanar');
+              await showDiameterMapInViewer(fileMap.diameterMap.file);
             }
           }
 

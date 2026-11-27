@@ -3331,6 +3331,10 @@ apps:
         reference: "Xu M, Ribeiro FL, Barth M, Bernier M, Bollmann S, Chatterjee S, et al. VesselBoost: A Python Toolbox for Small Blood Vessel Segmentation in Human Magnetic Resonance Angiography Data. Aperture Neuro. 2024;4."
         doi: 10.52294/001c.123217
       - group: Validation & upstream data
+        title: Bollmann et al. (2022) 7T Human Pial Arterial Vasculature
+        reference: "Bollmann S, Mattern H, Bernier M, Robinson SD, Park D, Speck O, Polimeni JR. Imaging of the pial arterial vasculature of the human brain in vivo using high-resolution 7T time-of-flight angiography. eLife. 2022;11:e71186."
+        doi: 10.7554/eLife.71186
+      - group: Validation & upstream data
         title: VesselVio (external validation reference)
         reference: "Bumgarner JR, Nelson RJ. Open-source analysis and visualization of segmented vasculature datasets with VesselVio. Cell Reports Methods. 2022;2(4):100189."
         doi: 10.1016/j.crmeth.2022.100189
