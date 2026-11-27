@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "bd-7a37cab9",
+  "revision": 1,
+  "stateRevision": 1,
+  "title": "Remove unused devDependency jsdom from deconvolution",
+  "summary": "jsdom 24.1.3 is declared in apps/deconvolution/package.json devDependencies but a full-app search finds no other reference (no tests, scripts, config or e2e import it). Safe to remove and refresh the lockfile.",
+  "kind": "maintenance",
+  "status": "open",
+  "priority": 3,
+  "scope": {
+    "type": "app",
+    "targets": [
+      "deconvolution"
+    ]
+  },
+  "dedupeKey": "knip:apps/deconvolution/package.json:jsdom",
+  "deps": {
+    "blockedBy": [],
+    "parent": null,
+    "discoveredFrom": null
+  },
+  "links": {
+    "evidence": [
+      "apps/deconvolution/package.json",
+      "quality-artifacts/unused-code/knip.json"
+    ]
+  },
+  "lease": null,
+  "releasedLeases": [],
+  "leaseFloorAt": null,
+  "journal": [
+    {
+      "at": "2026-11-27T05:28:29.936Z",
+      "actor": "gh-aw/unused-code-triage",
+      "note": "search_app_files complete:true, one match only (package.json)."
+    }
+  ],
+  "createdAt": "2026-11-27T05:28:29.936Z",
+  "updatedAt": "2026-11-27T05:28:29.936Z",
+  "stateUpdatedAt": "2026-11-27T05:28:29.936Z",
+  "lastSeenAt": "2026-11-27T05:28:29.936Z",
+  "closedAt": null,
+  "reopenedAt": null,
+  "closeReason": null
+}

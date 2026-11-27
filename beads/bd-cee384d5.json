@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "id": "bd-cee384d5",
+  "revision": 1,
+  "stateRevision": 1,
+  "title": "Unused dependency clipper-lib in stardist",
+  "summary": "clipper-lib 6.4.2 is listed in apps/stardist dependencies but no source imports it; matches are only in NOTICE, README and a vite comment. Docs say the bundled clipper-lib is shipped, so confirm the notice staging doesn't need the package before removing it (or move it to a devDependency).",
+  "kind": "maintenance",
+  "status": "open",
+  "priority": 3,
+  "scope": {
+    "type": "app",
+    "targets": [
+      "stardist"
+    ]
+  },
+  "dedupeKey": "knip:apps/stardist/package.json:clipper-lib",
+  "deps": {
+    "blockedBy": [],
+    "parent": null,
+    "discoveredFrom": null
+  },
+  "links": {
+    "evidence": [
+      "apps/stardist/NOTICE",
+      "apps/stardist/README.md",
+      "apps/stardist/package.json",
+      "apps/stardist/vite.config.js"
+    ]
+  },
+  "lease": null,
+  "releasedLeases": [],
+  "leaseFloorAt": null,
+  "journal": [
+    {
+      "at": "2026-11-27T05:28:29.937Z",
+      "actor": "gh-aw/unused-code-triage",
+      "note": "Search complete:true; only docs/notice/package mentions. Check whether the notice staging script reads node_modules/clipper-lib before removal."
+    }
+  ],
+  "createdAt": "2026-11-27T05:28:29.937Z",
+  "updatedAt": "2026-11-27T05:28:29.937Z",
+  "stateUpdatedAt": "2026-11-27T05:28:29.937Z",
+  "lastSeenAt": "2026-11-27T05:28:29.937Z",
+  "closedAt": null,
+  "reopenedAt": null,
+  "closeReason": null
+}
