@@ -342,13 +342,28 @@ const PINNED_ACTION = /^[^@\s]+@[0-9a-f]{40}$/i;
 const GH_AW_SETUP_ACTION = /^github\/gh-aw-actions\/setup@[0-9a-f]{40}$/i;
 const GH_AW_DOWNLOAD_ARTIFACT = /^actions\/download-artifact@[0-9a-f]{40}$/i;
 // Exact compiler-emitted shell commands in gh-aw v1.2.2 boilerplate jobs (no chaining or extra commands).
-const GH_AW_BOILERPLATE_ACTION_SCRIPT = /^bash "\$\{RUNNER_TEMP\}\/gh-aw\/actions\/[a-z0-9_]+\.sh"$/;
+const GH_AW_BOILERPLATE_ACTION_SCRIPT = /^bash "\$\{RUNNER_TEMP\}\/gh-aw\/actions\/([a-z0-9_]+\.sh)"$/;
+const GH_AW_BOILERPLATE_SH_SCRIPTS = Object.freeze({
+  activation: new Set([
+    'mask_otlp_headers.sh',
+    'check_oauth_tokens.sh',
+    'save_base_github_folders.sh',
+    'log_runtime_features_summary.sh',
+    'validate_prompt_placeholders.sh',
+    'print_prompt_summary.sh',
+  ]),
+  conclusion: new Set(['collect_usage_artifact_files.sh']),
+  pre_activation: new Set(),
+  unlock: new Set(),
+});
+const GH_AW_VALIDATE_COPILOT_SECRET_RUN = 'bash "${RUNNER_TEMP}/gh-aw/actions/validate_multi_secret.sh" COPILOT_GITHUB_TOKEN \'GitHub Copilot CLI\' https://github.github.com/gh-aw/reference/engines/#github-copilot-default';
 const GH_AW_BOILERPLATE_EXACT_RUNS = new Set([
   'sleep 10',
   'mkdir -p /tmp/gh-aw/aw-prompts\ncp -a "${RUNNER_TEMP}/gh-aw/aw-prompts/." /tmp/gh-aw/aw-prompts/',
   'if [ -f /tmp/gh-aw/runtime/aw_info.json ]; then cp /tmp/gh-aw/runtime/aw_info.json /tmp/gh-aw/aw_info.json; fi',
   'echo "::warning::Threat detection produced no security verdict. Review the detection job logs before trusting the agent outputs."',
   'mkdir -p /tmp/gh-aw/\nfind "/tmp/gh-aw/" -type f -print\nif [ -f "/tmp/gh-aw/agent_output.json" ]; then\n  echo "GH_AW_AGENT_OUTPUT=/tmp/gh-aw/agent_output.json" >> "$GITHUB_OUTPUT"\nfi',
+  GH_AW_VALIDATE_COPILOT_SECRET_RUN,
 ]);
 
 function hasValidTimeout(timeout) {
@@ -562,10 +577,13 @@ function hasOnlyAllowedKeys(obj, allowedKeys) {
   return Object.keys(obj).every((key) => allowedKeys.has(key));
 }
 
-function hasSafeBoilerplateEnv(env) {
+function hasSafeBoilerplateEnv(env, { allowCopilotTokenSecret = false } = {}) {
   if (env === undefined) return true;
   if (!env || typeof env !== 'object' || Array.isArray(env)) return false;
   for (const [key, value] of Object.entries(env)) {
+    if (allowCopilotTokenSecret && key === 'COPILOT_GITHUB_TOKEN' && value === '${{ secrets.COPILOT_GITHUB_TOKEN }}') {
+      continue;
+    }
     if (!GH_AW_BOILERPLATE_ENV_KEY.test(key)) return false;
     if (key === 'GH_AW_ACTIONS_DIR' && value !== '${{ runner.temp }}/gh-aw/actions') return false;
   }
@@ -596,15 +614,20 @@ function isVerifiedBoilerplateJob(id, job, frontmatter) {
     return false;
   }
   return steps.every((step) => {
-    if (!hasSafeBoilerplateEnv(step?.env)) return false;
+    const normalizedRun = typeof step?.run === 'string' ? step.run.replace(/\r\n/g, '\n').trim() : '';
+    const allowCopilotTokenSecret = id === 'activation'
+      && (normalizedRun === GH_AW_VALIDATE_COPILOT_SECRET_RUN
+        || normalizedRun === 'bash "${RUNNER_TEMP}/gh-aw/actions/check_oauth_tokens.sh"');
+    if (!hasSafeBoilerplateEnv(step?.env, { allowCopilotTokenSecret })) return false;
     if (typeof step?.uses === 'string') {
       return hasOnlyAllowedKeys(step, GH_AW_BOILERPLATE_USES_STEP_KEYS)
         && isVerifiedBoilerplateActionStep(id, step, allowedActions);
     }
     if (typeof step?.run !== 'string') return false;
     if (!hasOnlyAllowedKeys(step, GH_AW_BOILERPLATE_RUN_STEP_KEYS)) return false;
-    const normalizedRun = step.run.replace(/\r\n/g, '\n').trim();
-    return GH_AW_BOILERPLATE_ACTION_SCRIPT.test(normalizedRun) || GH_AW_BOILERPLATE_EXACT_RUNS.has(normalizedRun);
+    const scriptMatch = normalizedRun.match(GH_AW_BOILERPLATE_ACTION_SCRIPT);
+    if (scriptMatch) return GH_AW_BOILERPLATE_SH_SCRIPTS[id]?.has(scriptMatch[1]) === true;
+    return GH_AW_BOILERPLATE_EXACT_RUNS.has(normalizedRun);
   });
 }
 
