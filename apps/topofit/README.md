@@ -63,16 +63,11 @@ complete arrows. Display settings do not change the exported normals or STL.
 
 **Save printable STL…** in Output converts surfaces for 3D printing: FreeSurfer
 surface files are not a printing format. niimath simplifies each mesh to a
-chosen fraction of its triangles (10 to 100%, default 25) and optionally
-smooths it (0 to 20 Humphrey iterations, default 0); TopoFit writes a binary
-STL in millimetres per white or pial surface. Ticked white and pial surfaces are
-exported, or all four when none of those is ticked. A 245,762-vertex hemisphere reduces in under a second.
-
-Because the published `@niivue/niimath` WebAssembly build compiles mesh support
-without `HAVE_FORMATS`, it can only write mz3, and its fluent JavaScript API
-appends `-odt` where niimath's mesh mode expects the output name. The app
-therefore drives the same WebAssembly module directly and writes the STL
-itself; both limits are fixed upstream for the release after 1.4.20260909.
+chosen fraction of its triangles (10 to 100%, default 25), optionally smooths
+it (0 to 20 Humphrey iterations, default 0), and writes a binary STL in
+millimetres per white or pial surface. Ticked white and pial surfaces are
+exported, or all four when none of those is ticked. A 245,762-vertex hemisphere
+reduces in under a second.
 
 Use **Surface analysis** before reconstruction to export mid-surface normals
 or find flat cortical patches. Patch radius, count and hemisphere are available
