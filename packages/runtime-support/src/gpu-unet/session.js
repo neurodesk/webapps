@@ -96,7 +96,7 @@ export function planGpuGraph(dims, graph, { outputChannels = 1, label = 'U-Net' 
       if(!left)free.add(assigned.get(name));
     }
   }
-  return {nodes,slots,inputSlot:0,outputSlot:assigned.get(output),outputShape:tensors.get(output)};
+  return {nodes,slots,inputSlot:0,outputSlot:assigned.get(output),outputName:output,outputShape:tensors.get(output)};
 }
 
 // Exported for the WGSL sanity tests; the session builds every shader itself.
@@ -191,7 +191,8 @@ export async function createGpuSession(bytes, dims, {
   maxValidatedBufferSize = 2 ** 31 - 1,
   bufferLimitHelp,
 } = {}) {
-  const raw=bytes instanceof ArrayBuffer?new Uint8Array(bytes):new Uint8Array(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+  let raw=bytes instanceof ArrayBuffer?new Uint8Array(bytes):new Uint8Array(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+  bytes = null;
   const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',raw)),v=>v.toString(16).padStart(2,'0')).join('');
   if(raw.byteLength!==graph.bytes || hash!==graph.sha256)throw new Error(`GPU executor requires the validated ${label} model.`);
   const plan=planGpuGraph(dims,graph,{outputChannels,label}), adapter=await gpu?.requestAdapter({powerPreference:'high-performance'});
@@ -202,7 +203,7 @@ export async function createGpuSession(bytes, dims, {
   const device=await adapter.requestDevice({requiredFeatures:timestamps?['timestamp-query']:[],requiredLimits:{
     maxBufferSize:adapter.limits.maxBufferSize,maxStorageBufferBindingSize:adapter.limits.maxStorageBufferBindingSize,
   }});
-  let failure, released=false, running=false, mappedOutput=null;
+  let failure, released=false, running=false, mappedOutput=null, read=null;
   const gpuErrorText=(err,isOom=err?.constructor?.name==='GPUOutOfMemoryError')=>isOom
     ?`GPU out of memory${err?.message?`: ${err.message}`:''}`:(err?.message||'GPU error');
   device.lost.then(info=>{if(!released && info?.reason!=='destroyed')failure=new Error(`${label} GPU device lost${info?.message?`: ${info.message}`:''}`);});
@@ -212,12 +213,20 @@ export async function createGpuSession(bytes, dims, {
     const buffer=createBuffer(values.byteLength,GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST,label);
     device.queue.writeBuffer(buffer,0,values);return buffer;
   };
-  const values=(name)=>{const t=graph.tensors[name];return new Float32Array(raw.slice(t.offset,t.offset+t.bytes).buffer);};
+  const unmapRead = () => {
+    const current = read;
+    read = null;
+    if (mappedOutput) {
+      mappedOutput = null;
+      current?.unmap();
+    }
+    current?.destroy();
+  };
   let setupScopesOpen = false;
   try {
     device.pushErrorScope('out-of-memory');device.pushErrorScope('validation');
     setupScopesOpen = true;
-    const buffers=plan.slots.map((s,i)=>createBuffer(s.bytes,GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST|GPUBufferUsage.COPY_SRC,`${label} activation ${i}`));
+    const values=(name)=>{const t=graph.tensors[name];return new Float32Array(raw.slice(t.offset,t.offset+t.bytes).buffer);};
     const dummy=upload(new Float32Array(4),'unused'), constants=new Map();
     const constant=(name,padded=0)=>{
       if(!constants.has(name))constants.set(name,upload(padded?packConvWeights(values(name),graph.tensors[name].dims,padded):values(name),name));
@@ -238,7 +247,6 @@ export async function createGpuSession(bytes, dims, {
         // ONNX Resize takes optional roi/scales inputs; the scales tensor is the named constant.
         if(node.op==='Resize' && !same([...values(node.inputs.find(name=>graph.tensors[name]))],[1,1,2,2,2]))throw new Error('Unsupported GPU resize scales.');
         shader=elementShader(node);
-        if(['Add','Concat'].includes(node.op))other=buffers[node.inputSlots[1]];
         if(node.op==='BatchNormalization') {
           const data=new Float32Array(node.shape.channels*4);
           for(let i=0;i<4;i++)data.set(values(node.inputs[i+1]),i*node.shape.channels);
@@ -249,12 +257,31 @@ export async function createGpuSession(bytes, dims, {
       const layout=device.createBindGroupLayout({entries:[0,1,2,3].map(binding=>({binding,visibility:GPUShaderStage.COMPUTE,buffer:{type:binding===3?'storage':'read-only-storage'}}))});
       const module=device.createShaderModule({label:node.name,code:shader.code});
       const pipeline=await device.createComputePipelineAsync({label:node.name,layout:device.createPipelineLayout({bindGroupLayouts:[layout]}),compute:{module,entryPoint:'main'}});
-      const bind=device.createBindGroup({layout,entries:[buffers[node.inputSlots[0]],other,params,buffers[node.slot]].map((buffer,binding)=>({binding,resource:{buffer}}))});
-      steps.push({name:node.name,op:node.op,pipeline,bind,dispatch:shader.dispatch});
+      steps.push({
+        name:node.name,
+        op:node.op,
+        output:node.output,
+        bytes:product(node.shape.dims)*node.shape.channels*4,
+        input:node.inputs[0],
+        otherInput:['Add','Concat'].includes(node.op)?node.inputs[1]:null,
+        other,
+        params,
+        layout,
+        pipeline,
+        dispatch:shader.dispatch,
+      });
+    }
+    raw = null;
+    const activationNames = new Set([graph.input, ...steps.map((step) => step.output)]);
+    const consumerCounts = new Map([[plan.outputName, 1]]);
+    for (const step of steps) {
+      for (const name of [step.input, step.otherInput]) {
+        if (name && activationNames.has(name)) {
+          consumerCounts.set(name, (consumerCounts.get(name) || 0) + 1);
+        }
+      }
     }
     const outputBytes=product(dims)*outputChannels*4;
-    const read=createBuffer(outputBytes,GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ,`${label} output readback`);
-    const unmapRead=()=>{if(mappedOutput){mappedOutput=null;read.unmap();}};
     const query=timestamps?device.createQuerySet({type:'timestamp',count:steps.length*2}):null;
     const querySize=steps.length*16;
     const resolve=timestamps?createBuffer(querySize,GPUBufferUsage.QUERY_RESOLVE|GPUBufferUsage.COPY_SRC,'timings'):null;
@@ -280,26 +307,64 @@ export async function createGpuSession(bytes, dims, {
         let operationError;
         let failed = false;
         let inputRead = false;
+        const live = new Map();
+        const destroyLive = () => {
+          for (const buffer of live.values()) buffer.destroy();
+          live.clear();
+        };
         try {
           const data=await tensor.getData();
           if(data.length!==product(dims))throw new Error('GPU input size mismatch.');
           inputRead = true;
-          device.queue.writeBuffer(buffers[plan.inputSlot],0,data);
+          const remaining = new Map(consumerCounts);
+          const activationUsage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
+          const inputBuffer = createBuffer(product(dims) * 4, activationUsage, `${label} activation ${graph.input}`);
+          live.set(graph.input, inputBuffer);
+          device.queue.writeBuffer(inputBuffer,0,data);
           // A full-volume U-Net can occupy a Metal command buffer for tens of seconds.
           // Complete each layer separately, preserving all shaders, bindings and graph order.
+          // Allocate each activation at its exact size and destroy it once its last consumer
+          // finishes, so inactive full-resolution buffers do not stay resident across passes.
           for(let i=0;i<steps.length;i++) {
+            const step=steps[i];
+            const outputBuffer = createBuffer(step.bytes, activationUsage, `${label} activation ${step.name}`);
+            live.set(step.output, outputBuffer);
+            const bind = device.createBindGroup({
+              layout: step.layout,
+              entries: [
+                live.get(step.input),
+                step.otherInput ? live.get(step.otherInput) : step.other,
+                step.params,
+                outputBuffer,
+              ].map((buffer, binding) => ({ binding, resource: { buffer } })),
+            });
             const encoder=device.createCommandEncoder();
-            const step=steps[i],pass=encoder.beginComputePass({label:step.name,...query?{timestampWrites:{querySet:query,beginningOfPassWriteIndex:i*2,endOfPassWriteIndex:i*2+1}}:{}});
-            pass.setPipeline(step.pipeline);pass.setBindGroup(0,step.bind);pass.dispatchWorkgroups(...step.dispatch);pass.end();
+            const pass=encoder.beginComputePass({label:step.name,...query?{timestampWrites:{querySet:query,beginningOfPassWriteIndex:i*2,endOfPassWriteIndex:i*2+1}}:{}});
+            pass.setPipeline(step.pipeline);pass.setBindGroup(0,bind);pass.dispatchWorkgroups(...step.dispatch);pass.end();
             device.queue.submit([encoder.finish()]);
             await device.queue.onSubmittedWorkDone();
             if(failure)throw failure;
+            for (const name of [step.input, step.otherInput]) {
+              if (!name || !remaining.has(name)) continue;
+              const left = remaining.get(name) - 1;
+              remaining.set(name, left);
+              if (!left) {
+                live.get(name)?.destroy();
+                live.delete(name);
+              }
+            }
+            if (!remaining.get(step.output)) {
+              outputBuffer.destroy();
+              live.delete(step.output);
+            }
           }
+          read = createBuffer(outputBytes, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ, `${label} output readback`);
           const encoder=device.createCommandEncoder();
-          encoder.copyBufferToBuffer(buffers[plan.outputSlot],0,read,0,outputBytes);
+          encoder.copyBufferToBuffer(live.get(plan.outputName),0,read,0,outputBytes);
           if(query){encoder.resolveQuerySet(query,0,steps.length*2,resolve,0);encoder.copyBufferToBuffer(resolve,0,queryRead,0,querySize);}
           device.queue.submit([encoder.finish()]);
           await read.mapAsync(GPUMapMode.READ);
+          destroyLive();
           const mapping={};
           mappedOutput=mapping;
           // The output is a view over the mapped readback, not a copy: a full-volume
@@ -322,6 +387,7 @@ export async function createGpuSession(bytes, dims, {
         } catch (error) {
           failed = true;
           operationError = error;
+          destroyLive();
           unmapRead();
         }
         // Drain both scopes even if a driver throws synchronously while popping one.

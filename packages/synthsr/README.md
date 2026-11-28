@@ -106,11 +106,12 @@ checksum-pinned `synthsr-blocked-fp32-v1` executor from upstream commit `eeb9863
 with blocked FP32 Conv3D, fused activations and graph-lifetime buffer reuse. It does
 not fall back to ONNX Runtime GPU or CPU when the GPU cannot run the volume.
 
-A WebGPU output's `getData()` borrows the mapped readback. Copy it before calling
-`dispose()`, starting the next `run()`, or releasing the session; those operations
-detach the view. The shared pipeline copies the result before disposal. Native
-Metal keeps an owned `Vec<f32>` because its output has no WebGPU mapping lifetime.
-Both native planners use the same free-slot growth policy as the browser.
+A WebGPU session allocates each activation buffer at its exact tensor size and destroys it
+once its last consumer finishes, then lends the mapped readback view from `getData()`. Copy
+it before calling `dispose()`, starting the next `run()`, or releasing the session; those
+operations detach and destroy the readback buffer. The shared pipeline copies the result
+before disposal. Native Metal keeps an owned `Vec<f32>` because its output has no WebGPU
+mapping lifetime. Both native planners use `planGpuGraph`'s free-slot growth policy.
 
 Pass the pipeline's session arguments through unchanged so GPU allocation uses the
 prepared/padded dimensions. Supply the app's own ONNX Runtime instance and WASM URLs;
