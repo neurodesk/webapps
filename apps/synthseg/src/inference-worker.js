@@ -42,7 +42,7 @@ self.onmessage = async ({ data: job }) => {
     const adapter = await navigator.gpu?.requestAdapter({ powerPreference: 'high-performance' });
     if (!adapter) throw new Error('WebGPU is unavailable in this browser.');
     const maxBufferBytes = Math.min(MAX_BUFFER_BYTES, adapter.limits.maxBufferSize, adapter.limits.maxStorageBufferBindingSize);
-    const { buffer: input, preparation } = await prepareBrowserInput({
+    let { buffer: input, preparation } = await prepareBrowserInput({
       file: job.file,
       robustFov: job.options.robustFov,
       voxelSizeMm: job.options.voxelSizeMm,
@@ -51,7 +51,7 @@ self.onmessage = async ({ data: job }) => {
       onProgress: progress,
     });
     const wasm = await loadSynthseg(fetch(wasmUrl));
-    const { buffer, provenance, volumes, tissues } = await runSynthseg({
+    const pending = runSynthseg({
       buffer: input,
       options: job.options,
       wasm,
@@ -60,6 +60,8 @@ self.onmessage = async ({ data: job }) => {
       onProgress: progress,
       runtime: { app: 'SynthSeg web 0.11.20261124', ...browserRuntime(), preparation },
     });
+    input = null;
+    const { buffer, provenance, volumes, tissues } = await pending;
     self.postMessage({ type: 'result', buffer, provenance, volumes, tissues }, [buffer, ...Object.values(tissues)]);
   } catch (error) {
     self.postMessage({ type: 'error', message: error.message || String(error),

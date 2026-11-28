@@ -23,12 +23,15 @@ export async function runSynthseg({ buffer, options = {}, loadModel, createSessi
   try {
     onProgress(0.01, `Reading NIfTI and resampling to ${settings.voxelSizeMm ?? 1} mm…`);
     seg = new wasm.Segmenter(new Uint8Array(buffer), settings);
+    buffer = null;
     mark('preprocess');
     onProgress(0.12, `Prepared ${seg.padded.join(' × ')} voxels`);
-    const model = await loadModel();
+    let model = await loadModel();
+    const modelSha256 = model.hash;
     mark('model');
     onProgress(0.26, 'Initializing inference…');
     session = await createSession(model.bytes, seg.padded);
+    model = null;
     mark('initialize');
     onProgress(0.32, 'Segmenting… this can take several minutes');
     await infer(seg.input(), false);
@@ -43,7 +46,7 @@ export async function runSynthseg({ buffer, options = {}, loadModel, createSessi
     const { buffer: labels, volumes, tissues, geometry } = seg.labels(settings);
     mark('postprocess');
     const provenance = {
-      package: '@neurodesk/synthseg', version: VERSION, model: 'synthseg_2.0', modelSha256: model.hash,
+      package: '@neurodesk/synthseg', version: VERSION, model: 'synthseg_2.0', modelSha256,
       citation: CITATION, ...runtime, ...settings, flip: !settings.fast, ...geometry,
       seconds: (performance.now() - started) / 1000, timings,
     };

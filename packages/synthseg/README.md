@@ -193,8 +193,10 @@ WASM postprocessing 3.0 s, so postprocessing is not the bottleneck. Planned GPU 
 4 GB `maxBufferSize` is about 256×256×224. Engineering parity on named hardware, not a
 performance claim.
 
-The browser session lends mapped posterior data until output `dispose()`, the next
-`run()`, or session `release()`. Copy anything retained across those calls. The
+The browser session allocates each WebGPU activation buffer at its exact tensor size and
+destroys it once its last consumer completes (so inactive buffers and the output readback
+are not held across passes), then lends the mapped readback view until output `dispose()`,
+the next `run()`, or session `release()`. Copy anything retained across those calls. The
 shared pipeline copies posteriors into WASM before disposal. Native Metal keeps
-an owned, transposed `Vec<f32>`; both native planners follow the browser's free-slot
-growth policy, while the mapped readback lifetime applies only to WebGPU.
+an owned, transposed `Vec<f32>`; both native planners follow `planGpuGraph`'s free-slot
+growth policy, while dynamic per-tensor destruction and mapped readback lifetime apply only to WebGPU.
